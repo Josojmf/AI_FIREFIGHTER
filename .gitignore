@@ -24,4 +24,6 @@ htmlcov/
 .coverage
 .cache
 .pyre/
+/node_modules/
+node_modules/*
 .mypy_cache/
