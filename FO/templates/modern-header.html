@@ -1,0 +1,245 @@
+<header class="navbar" id="navbar">
+    <div class="navbar-container">
+        <!-- Logo -->
+        <a href="/" class="logo" aria-label="FirefighterAI Home">
+            <div class="logo-icon">🔥</div>
+            <div class="logo-text">
+                <span class="logo-primary">Firefighter</span>
+                <span class="logo-secondary">AI</span>
+            </div>
+        </a>
+
+        <!-- Desktop Navigation -->
+        <nav class="nav-desktop" aria-label="Main navigation">
+            <ul class="nav-links">
+                <li>
+                    <a href="/" class="nav-link {% if request.endpoint == 'home_view' %}active{% endif %}" data-page="home">
+                        <span class="nav-icon">🏠</span>
+                        <span class="nav-text">Inicio</span>
+                        <div class="nav-indicator"></div>
+                    </a>
+                </li>
+                <li>
+                    <a href="/study" class="nav-link {% if request.endpoint == 'study' %}active{% endif %}" data-page="study">
+                        <span class="nav-icon">📚</span>
+                        <span class="nav-text">Estudio</span>
+                        <div class="nav-indicator"></div>
+                    </a>
+                </li>
+                <li>
+                    <a href="/chat" class="nav-link {% if request.endpoint == 'chat' %}active{% endif %}" data-page="chat">
+                        <span class="nav-icon">🤖</span>
+                        <span class="nav-text">Chat IA</span>
+                        <div class="nav-indicator"></div>
+                    </a>
+                </li>
+                <li>
+                    <a href="/embed/onfire/proxy" class="nav-link {% if request.endpoint == 'certificacion' %}active{% endif %}" data-page="certification">
+                        <span class="nav-icon">🎓</span>
+                        <span class="nav-text">Certificaciones</span>
+                        <div class="nav-indicator"></div>
+                    </a>
+                </li>
+                <!-- Chat AI-->
+                 <a href="/chat" class="nav-link {% if request.endpoint == 'chat' %}active{% endif %}" data-page="chat">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-text">Chat IA</span>
+                    <div class="nav-indicator"></div>
+                </a>
+                </li>
+                <li>
+                    <a href="/embed/onfire/proxy" class="nav-link {% if request.endpoint == 'certificacion' %}active{% endif %}" data-page="certification">
+                        <span class="nav-icon">🎓</span>
+                        <span class="nav-text">Certificaciones</span>
+                        <div class="nav-indicator"></div>
+                    </a>
+                </li>
+                <!-- Chat AI-->
+                 <a href="/chat" class="nav-link {% if request.endpoint == 'chat' %}active{% endif %}" data-page="chat">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-text">Chat IA</span>
+                    <div class="nav-indicator"></div>
+                </a>
+                <!-- Logout / Clear Cookies -->
+                <li>
+                    <a href="/logout" class="nav-link" data-page="logout">
+                        <span class="nav-icon">🚪</span>
+                        <span class="nav-text">Cerrar Sesión</span>
+                        <div class="nav-indicator"></div>
+                    </a> 
+                </li>
+            </ul>
+        </nav>
+
+        <!-- User Menu / Auth -->
+        <div class="navbar-actions">
+            {% if session.user %}
+                <!-- User Dropdown -->
+                <div class="user-dropdown" id="user-dropdown">
+                    <button class="user-button" aria-expanded="false" aria-haspopup="true">
+                        <div class="user-avatar">
+                            <span>{{ session.user[0].upper() }}</span>
+                        </div>
+                        <span class="user-name">{{ session.user }}</span>
+                        <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6,9 12,15 18,9"></polyline>
+                        </svg>
+                    </button>
+                    
+                    <div class="dropdown-menu" id="dropdown-menu">
+                        <div class="dropdown-header">
+                            <div class="user-info">
+                                <div class="user-avatar-large">
+                                    <span>{{ session.user[0].upper() }}</span>
+                                </div>
+                                <div>
+                                    <p class="user-name-large">{{ session.user }}</p>
+                                    <p class="user-status">Bombero en entrenamiento</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="dropdown-body">
+                            <a href="#" class="dropdown-item">
+                                <span class="item-icon">👤</span>
+                                <span>Mi Perfil</span>
+                            </a>
+                            <a href="#" class="dropdown-item">
+                                <span class="item-icon">📊</span>
+                                <span>Estadísticas</span>
+                            </a>
+                            <a href="#" class="dropdown-item">
+                                <span class="item-icon">⚙️</span>
+                                <span>Configuración</span>
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/logout" class="dropdown-item logout">
+                                <span class="item-icon">🚪</span>
+                                <span>Cerrar Sesión</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <!-- Auth Buttons -->
+                <div class="auth-buttons">
+                    <a href="/login" class="btn btn-ghost">
+                        <span>Entrar</span>
+                    </a>
+                    <a href="/register" class="btn btn-primary">
+                        <span>Registrarse</span>
+                        <div class="btn-glow"></div>
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Mobile Menu Toggle -->
+        <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle mobile menu">
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </button>
+    </div>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay" id="mobile-menu-overlay">
+        <div class="mobile-menu">
+            <div class="mobile-header">
+                <div class="mobile-logo">
+                    <div class="logo-icon">🔥</div>
+                    <div class="logo-text">
+                        <span class="logo-primary">Firefighter</span>
+                        <span class="logo-secondary">AI</span>
+                    </div>
+                </div>
+                <button class="mobile-close" id="mobile-close">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <nav class="mobile-nav">
+                <ul class="mobile-nav-links">
+                    <li>
+                        <a href="/" class="mobile-nav-link {% if request.endpoint == 'home_view' %}active{% endif %}">
+                            <span class="nav-icon">🏠</span>
+                            <span class="nav-text">Inicio</span>
+                            <span class="nav-arrow">→</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/study" class="mobile-nav-link {% if request.endpoint == 'study' %}active{% endif %}">
+                            <span class="nav-icon">📚</span>
+                            <span class="nav-text">Estudio</span>
+                            <span class="nav-arrow">→</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/chat" class="mobile-nav-link {% if request.endpoint == 'chat' %}active{% endif %}">
+                            <span class="nav-icon">🤖</span>
+                            <span class="nav-text">Chat IA</span>
+                            <span class="nav-arrow">→</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/certificacion" class="mobile-nav-link {% if request.endpoint == 'certificacion' %}active{% endif %}">
+                            <span class="nav-icon">🎓</span>
+                            <span class="nav-text">Certificaciones</span>
+                            <span class="nav-arrow">→</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            {% if session.user %}
+                <div class="mobile-user-section">
+                    <div class="mobile-user-info">
+                        <div class="user-avatar-large">
+                            <span>{{ session.user[0].upper() }}</span>
+                        </div>
+                        <div>
+                            <p class="user-name-large">{{ session.user }}</p>
+                            <p class="user-status">Bombero en entrenamiento</p>
+                        </div>
+                    </div>
+                    <div class="mobile-user-actions">
+                        <a href="#" class="mobile-action-btn">
+                            <span class="item-icon">👤</span>
+                            <span>Mi Perfil</span>
+                        </a>
+                        <a href="#" class="mobile-action-btn">
+                            <span class="item-icon">📊</span>
+                            <span>Estadísticas</span>
+                        </a>
+                        <a href="/logout" class="mobile-action-btn logout">
+                            <span class="item-icon">🚪</span>
+                            <span>Cerrar Sesión</span>
+                        </a>
+                    </div>
+                </div>
+            {% else %}
+                <div class="mobile-auth-section">
+                    <a href="/login" class="btn btn-ghost mobile-auth-btn">
+                        <span>Iniciar Sesión</span>
+                    </a>
+                    <a href="/register" class="btn btn-primary mobile-auth-btn">
+                        <span>Registrarse</span>
+                        <div class="btn-glow"></div>
+                    </a>
+                </div>
+            {% endif %}
+
+            <div class="mobile-footer">
+                <p>🚒 Entrena como un profesional</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress bar for page transitions -->
+    <div class="page-progress" id="page-progress"></div>
+</header>

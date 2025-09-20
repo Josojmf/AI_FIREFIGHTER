@@ -1,0 +1,139 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 3 * * *' # Daily at 3 AM
+
+jobs:
+  sast:
+    name: SAST Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Semgrep SAST
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: p/ci
+
+    - name: Run Gitleaks
+      uses: gitleaks/gitleaks-action@v2
+      with:
+        config-path: .gitleaks.toml
+
+    - name: TruffleHog secrets scan
+      uses: trufflesecurity/trufflehog@main
+      with:
+        args: --no-verification --regex --entropy=False github://${{ github.repository }}
+
+  dast:
+    name: DAST Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'schedule'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.10.0
+      with:
+        target: 'https://example.com'
+        rules_file_name: '.zap_rules.tsv'
+        cmd_options: '-a'
+
+    - name: Nuclei vulnerability scan
+      uses: projectdiscovery/nuclei-action@main
+      with:
+        target: https://example.com
+        templates: vulnerabilities,exposures
+
+  container-security:
+    name: Container Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: docker build -t firefighter-app .
+
+    - name: Trivy vulnerability scan
+      uses: aquasecurity/trivy-action@0.15.0
+      with:
+        image-ref: 'firefighter-app'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'HIGH,CRITICAL'
+
+    - name: Upload Trivy results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: trivy-results.sarif
+
+    - name: Docker Scout analysis
+      uses: docker/scout-action@v1
+      with:
+        image: firefighter-app
+        output: summary
+        criticals: true
+
+  dependency-scanning:
+    name: Dependency Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Run Safety check
+      run: |
+        pip install safety
+        safety check --full-report --output safety-report.json
+
+    - name: Run npm audit
+      run: |
+        npm audit --json > npm-audit.json
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: |
+          safety-report.json
+          npm-audit.json
+
+  sbom-generation:
+    name: SBOM Generation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate SBOM with Syft
+      uses: anchore/sbom-action@v0
+      with:
+        image: firefighter-app
+        format: spdx-json
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: bom.spdx.json

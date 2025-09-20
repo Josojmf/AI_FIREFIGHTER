@@ -1,0 +1,96 @@
+name: Quality Gates
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline", "Security Scanning"]
+    types: [completed]
+
+jobs:
+  quality-assessment:
+    name: Quality Assessment
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: coverage-report
+        path: artifacts/
+
+    - name: Analyze code coverage
+      run: |
+        pip install coverage
+        coverage xml -i
+        coverage report --fail-under=80
+
+    - name: Run SonarQube analysis
+      uses: SonarSource/sonarqube-scan-action@v4
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    - name: Check technical debt
+      run: |
+        # Custom quality metrics
+        python scripts/quality_metrics.py
+
+    - name: Generate quality report
+      run: |
+        echo "# Quality Report" > quality-report.md
+        echo "## Coverage: $(coverage report | grep TOTAL | awk '{print $4}')" >> quality-report.md
+        echo "## Lint Issues: $(flake8 . --count | tail -1)" >> quality-report.md
+        echo "## Security Issues: $(grep -c 'HIGH\|CRITICAL' security-report.json || echo 0)" >> quality-report.md
+
+    - name: Upload quality report
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-report
+        path: quality-report.md
+
+  performance-benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - name: Run benchmark tests
+      run: |
+        pip install locust
+        locust -f tests/benchmark.py --headless -u 100 -r 10 -t 5m \
+          --csv=benchmark-results
+
+    - name: Compare with baseline
+      run: |
+        python scripts/compare_benchmarks.py current previous
+
+    - name: Check performance regression
+      run: |
+        if [ "$PERFORMANCE_DEGRADATION" -gt "10" ]; then
+          echo "Performance regression detected: $PERFORMANCE_DEGRADATION%"
+          exit 1
+        fi
+
+  documentation-check:
+    name: Documentation Quality
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check documentation coverage
+      run: |
+        pip install interrogate
+        interrogate --ignore-nested-functions --ignore-private --fail-under=70 .
+
+    - name: Check docstring quality
+      run: |
+        python scripts/check_docstrings.py
+
+    - name: Generate documentation
+      run: |
+        mkdocs build --site-dir public
+
+    - name: Deploy documentation
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./public
