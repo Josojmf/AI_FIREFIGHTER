@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="main-section">
+  <div class="container-index">
+    <h1 class="title">🧠 AI FirefighterTest 1</h1>
+    <form id="test-form">
+      <div id="questions-carousel">
+        {% for q in questions %}
+        <div class="question-block" data-slide="{{ loop.index }}">
+          <p><strong>{{ loop.index }}.</strong> {{ q.question }}</p>
+          {% for option in q.options %}
+          <label>
+            <input type="radio" name="q{{ q.id }}" value="{{ option }}" required />
+            {{ option }}
+          </label><br/>
+          {% endfor %}
+          <input type="hidden" name="correct_{{ q.id }}" value="{{ q.correct }}">
+          <input type="hidden" name="q{{ q.id }}_text" value="{{ q.question }}">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="nav-buttons">
+        <button type="button" id="prev-btn">← Anterior</button>
+        <button type="button" id="next-btn">Siguiente →</button>
+        <button type="submit" class="send-btn">🧪 Enviar</button>
+      </div>
+    </form>
+    <div id="response-box" class="chat-box"></div>
+  </div>
+</section>
+<script src="/static/app.js"></script>
+{% endblock %}

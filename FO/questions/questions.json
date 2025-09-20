@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "question": "¿Cuál es la presión mínima en cuerpo de bomba durante una estrategia ofensiva?",
+    "options": ["15 bar", "19 bar", "12 bar"],
+    "correct": "15 bar"
+  },
+  {
+    "id": 2,
+    "question": "¿Cuál es el protocolo correcto ante un MAYDAY?",
+    "options": [
+      "Informar solo a la central de comunicaciones",
+      "Contestar al MAYDAY e informar al equipo, central y coordinar rescate",
+      "Esperar órdenes del jefe de sector"
+    ],
+    "correct": "Contestar al MAYDAY e informar al equipo, central y coordinar rescate"
+  }
+]

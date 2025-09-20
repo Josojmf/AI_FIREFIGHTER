@@ -1,0 +1,27 @@
+<!-- header.html -->
+<header>
+  <div class="navbar">
+   <a href="/"> <div class="logo">AI FirefighterTests</div></a>
+    <button class="menu-toggle" id="menu-toggle">☰</button>
+    <nav class="nav-links" id="nav-links">
+      <a href="/" class="{% if request.path == '/' %}active{% endif %}">Home</a>
+      <a href="/study" class="{% if request.path.startswith('/study') %}active{% endif %}">Study</a>
+      <a href="/chat" class="{% if request.path.startswith('/chat') %}active{% endif %}">Chat</a>
+      <a class="nav-link" href="{{ url_for('certificacion') }}">Certificaciones</a>
+
+      {% if session.user %}
+      <div class="dropdown">
+        <a href="#" class="profile-icon">👤 {{ session.user }}</a>
+        <div class="dropdown-content">
+          <a href="#">Mi cuenta</a>
+          <a href="#">Ajustes</a>
+          <a href="/logout">Cerrar sesión</a>
+        </div>
+      </div>
+      {% else %}
+      <a href="/login" class="{% if request.path.startswith('/login') %}active{% endif %}">Login</a>
+      <a href="/register" class="{% if request.path.startswith('/register') %}active{% endif %}">Register</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>

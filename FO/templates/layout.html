@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI FirefighterTests</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Get the menu toggle button and navigation menu
+            const menuToggle = document.getElementById('menu-toggle');
+            const navLinks = document.getElementById('nav-links');
+
+            if (menuToggle && navLinks) {
+                // Toggle the navigation menu when the hamburger icon is clicked
+                menuToggle.addEventListener('click', function () {
+                    navLinks.classList.toggle('active');
+
+                    // Change hamburger icon to X when menu is open
+                    if (navLinks.classList.contains('active')) {
+                        menuToggle.innerHTML = '✕';
+                    } else {
+                        menuToggle.innerHTML = '☰';
+                    }
+                });
+
+                // Close the navigation menu when a link is clicked
+                const navItems = navLinks.querySelectorAll('a');
+                navItems.forEach(item => {
+                    item.addEventListener('click', function () {
+                        navLinks.classList.remove('active');
+                        menuToggle.innerHTML = '☰';
+                    });
+                });
+            }
+
+            // Close the menu when clicking outside of it (optional)
+            document.addEventListener('click', function (event) {
+                if (!event.target.closest('.navbar') && navLinks.classList.contains('active')) {
+                    navLinks.classList.remove('active');
+                    menuToggle.innerHTML = '☰';
+                }
+            });
+        });
+    </script>
+</head>
+
+<body>
+    {% include 'header.html' %}
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    {% include 'footer.html' %}
+</body>
+
+</html>

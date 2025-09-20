@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="auth-container">
+  <h2>🔐 Iniciar sesión</h2>
+  <form method="POST">
+    <input name="username" placeholder="Usuario" required>
+    <input name="password" type="password" placeholder="Contraseña" required>
+    <button type="submit">Entrar</button>
+  </form>
+  <p>¿No tienes cuenta? <a href="{{ url_for('register') }}">Regístrate</a></p>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="auth-messages">
+      {% for msg in messages %}
+        <p>{{ msg }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+</div>
+{% endblock %}

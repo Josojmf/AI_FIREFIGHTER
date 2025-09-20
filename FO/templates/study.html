@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container scrollable">
+  <h1 class="title">🧠 Sistema de Estudio Leitner</h1>
+  <div class="leitner-grid">
+    {% for box_id, box in leitner.items() %}
+      <div class="leitner-box">
+        <h2>{{ box.title }}</h2>
+        <p class="leitner-desc">{{ box.description }}</p>
+        <ul class="card-list">
+          {% for card in box.cards %}
+            <li class="card-item">✅ {{ card }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
