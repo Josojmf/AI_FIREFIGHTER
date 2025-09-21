@@ -1,8 +1,4 @@
-﻿Flask==2.3.3
-flask-cors==4.0.0
-requests==2.32.0
-transformers==4.35.0
-torch==2.1.0
-python-dotenv==1.0.1
-gunicorn==21.2.0
-pymongo==4.7.2
+flask
+flask-cors
+requests
+python-dotenv

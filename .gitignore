@@ -1,29 +1,69 @@
+# Python
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
 venv/
-.env*/
-.DS_Store
-.idea/
-.vscode/
+env/
+ENV/
+*.egg-info/
 dist/
 build/
-.venv/
-__pypackages__/
-instance/
-*.sqlite3
+*.egg
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
 *.log
+logs/
+
+# Databases
+*.sqlite3
 *.db
-*.pot
-*.mo
-*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
 coverage/
 htmlcov/
 .tox/
 .pytest_cache/
 .coverage
 .cache
-.pyre/
-/node_modules/
-node_modules/*
 .mypy_cache/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+
+# Backup files
+*.backup
+backups/
