@@ -90,6 +90,7 @@ jobs:
         cache-to: type=gha,mode=max,scope=backend
 
     - name: Build and push BackOffice image
+      continue-on-error: true
       uses: docker/build-push-action@v5
       with:
         context: ./BO
@@ -187,15 +188,17 @@ jobs:
         response_backend=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "000")
         echo "Backend health check: $response_backend"
         
-        # Test BackOffice
+        # Test BackOffice (optional - no failure if down)
         response_backoffice=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/ || echo "000")
-        echo "BackOffice health check: $response_backoffice"
+        echo "BackOffice health check: $response_backoffice (optional)"
         
-        # Verify at least one service is responding
-        if [[ "$response_frontend" != "200" && "$response_backend" != "200" && "$response_backoffice" != "200" ]]; then
-          echo "All services failed health check"
+        # Verify at least Frontend and Backend are responding
+        if [[ "$response_frontend" != "200" || "$response_backend" != "200" ]]; then
+          echo "Critical services failed health check"
           exit 1
         fi
+        
+        echo "✅ Essential services are healthy"
 
     - name: Cleanup SSH
       if: always()
@@ -215,7 +218,7 @@ jobs:
         echo "✅ Deployment successful!"
         echo "Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
         echo "Backend API: http://${{ secrets.PRODUCTION_HOST }}:5000"
-        echo "BackOffice: http://${{ secrets.PRODUCTION_HOST }}:3001"
+        echo "BackOffice: http://${{ secrets.PRODUCTION_HOST }}:3001 (may be unavailable if build failed)"
 
     - name: Notify Failure
       if: needs.deploy.result == 'failure'

@@ -1,0 +1,14 @@
+﻿{
+  "name": "ai-firefighter",
+  "version": "1.0.0",
+  "description": "AI Firefighter Training Platform",
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Josojmf/AI_FIREFIGHTER.git"
+  },
+  "author": "AI_Firefighter Team",
+  "license": "MIT"
+}

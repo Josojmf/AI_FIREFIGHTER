@@ -26,7 +26,7 @@ services:
       - MONGO_USER=${DB_USERNAME}
       - MONGO_PASS=${DB_PASSWORD}
       - MONGO_CLUSTER=${DB_CLUSTER}
-      - NODE_ENV=production
+      - SECRET_KEY=production-secret-key-change-me
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
@@ -36,22 +36,22 @@ services:
     networks:
       - firefighter-network
 
-  backoffice:
-    image: ${BACKOFFICE_IMAGE:-ghcr.io/your-username/your-repo/backoffice:latest}
-    container_name: firefighter-backoffice
-    ports:
-      - "3001:3001"
-    environment:
-      - REACT_APP_API_URL=http://167.71.42.17:5000/api
-      - NODE_ENV=production
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - firefighter-network
+  # backoffice:
+  #   image: ${BACKOFFICE_IMAGE:-ghcr.io/your-username/your-repo/backoffice:latest}
+  #   container_name: firefighter-backoffice
+  #   ports:
+  #     - "3001:3001"
+  #   environment:
+  #     - REACT_APP_API_URL=http://167.71.42.17:5000/api
+  #     - NODE_ENV=production
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   networks:
+  #     - firefighter-network
 
   nginx:
     image: nginx:alpine
