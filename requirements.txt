@@ -1,0 +1,28 @@
+# Combined requirements for CI/CD
+# Frontend (Flask app) requirements
+flask==2.3.3
+flask-cors==4.0.0
+transformers==4.35.0
+torch==2.1.0
+accelerate==0.24.0
+gunicorn==21.2.0
+pymongo==4.5.0
+python-dotenv==1.0.0
+requests==2.31.0
+fitz==0.0.1.dev2
+fpdf2==2.7.6
+
+# Backend API requirements
+bcrypt==4.0.1
+werkzeug==2.3.7
+
+# Development and testing
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+flake8==6.1.0
+black==23.11.0
+isort==5.12.0
+mypy==1.7.0
+bandit==1.7.5
+safety==2.3.5

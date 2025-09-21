@@ -2,27 +2,51 @@
 
 services:
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/frontend:main}
-    container_name: firefighter-frontend
+    image: ${FRONTEND_IMAGE}
     ports:
       - "8000:8000"
     environment:
-      - API_BASE_URL=http://167.71.42.17:5000/api
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_CLUSTER=${DB_CLUSTER}
+      - NODE_ENV=production
+      - API_BASE_URL=http://backend:5000/api
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - firefighter-network
 
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/backend:main}
-    container_name: firefighter-backend
+    image: ${BACKEND_IMAGE}
     ports:
       - "5000:5000"
     environment:
-      - MONGO_USER=${DB_USERNAME}
-      - MONGO_PASS=${DB_PASSWORD}
-      - MONGO_CLUSTER=${DB_CLUSTER}
-      - SECRET_KEY=production-secret-key-change-me
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_CLUSTER=${DB_CLUSTER}
+      - NODE_ENV=production
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - firefighter-network
+
+  backoffice:
+    image: ${BACKOFFICE_IMAGE}
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://${{ secrets.PRODUCTION_HOST }}:5000/api
+    restart: unless-stopped
+    depends_on:
+      - backend
     networks:
       - firefighter-network
 

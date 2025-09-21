@@ -1,0 +1,63 @@
+services:
+  # Frontend (Flask app en puerto 8000)
+  frontend:
+    build: 
+      context: ./FO
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./FO:/app
+      - /app/__pycache__
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - FLASK_DEBUG=${FLASK_DEBUG:-1}
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:5000/api}
+      - PYTHONUNBUFFERED=1
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_CLUSTER=${DB_CLUSTER}
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Backend API (puerto 5000)
+  backend:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_CLUSTER=${DB_CLUSTER}
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # BackOffice React (puerto 3001) - CORREGIDO para tu estructura
+  backoffice:
+    build: 
+      context: ./BO
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./BO:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:5000/api}
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
