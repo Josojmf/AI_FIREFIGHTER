@@ -1,4 +1,4 @@
-FROM node:18-alpine as builder
+﻿FROM node:18-alpine as builder
 
 WORKDIR /app
 
@@ -11,7 +11,16 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Crear configuración nginx directamente en el contenedor
+RUN echo 'server { \
+    listen 3001; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html index.htm; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 3001
 
