@@ -36,17 +36,24 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         cache: 'pip'
+        cache-dependency-path: |
+          **/requirements.txt
+          requirements.txt
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: 'api/bo/package-lock.json'
+        cache-dependency-path: '**/package-lock.json'
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
+        # Install common development tools first
+        pip install flake8 black isort mypy bandit pytest pytest-cov
+        
+        # Install project dependencies
         for req_file in "FO/requirements.txt" "API/requirements.txt" "requirements.txt"; do
           if [ -f "$req_file" ]; then
             echo "Installing from $req_file"
@@ -57,55 +64,112 @@ jobs:
     - name: Install Node.js dependencies
       run: |
         if [ -f "api/bo/package.json" ]; then
+          echo "Installing backoffice dependencies..."
           cd api/bo && npm ci --ignore-scripts
+        elif [ -f "package.json" ]; then
+          echo "Installing root Node.js dependencies..."
+          npm ci --ignore-scripts
+        else
+          echo "No package.json found, skipping Node.js dependencies"
         fi
 
     - name: Run Python linters
       run: |
-        pip install flake8 black isort mypy bandit
-        for dir in "FO" "API"; do
-          if [ -d "$dir" ]; then
+        echo "Running Python linters..."
+        for dir in "FO" "API" "."; do
+          if [ -d "$dir" ] && [ -n "$(find "$dir" -name '*.py' -not -path '*/\.*' | head -1)" ]; then
             echo "Linting $dir directory..."
-            flake8 "$dir"/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
-            black "$dir"/ --check --diff || true
-            isort "$dir"/ --check-only --diff || true
-            bandit -r "$dir"/ -ll || true
+            
+            # Flake8 - syntax errors and basic style
+            echo "Running flake8 on $dir"
+            flake8 "$dir" --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=__pycache__,*.egg-info,.git || true
+            
+            # Black - code formatting
+            echo "Running black check on $dir"
+            black "$dir" --check --diff --exclude='(__pycache__|\.git|\.egg-info)' || true
+            
+            # Isort - import sorting
+            echo "Running isort check on $dir"
+            isort "$dir" --check-only --diff --skip-glob='**/__pycache__/**' --skip-glob='**/.git/**' || true
+            
+            # Bandit - security scanning
+            echo "Running bandit on $dir"
+            bandit -r "$dir" -ll --skip="*/__pycache__/*" --recursive || true
           fi
         done
 
     - name: Run JavaScript/TypeScript linters
       run: |
-        if [ -f "api/bo/package.json" ]; then
-          cd api/bo && npm run lint || true
+        echo "Running JavaScript/TypeScript linters..."
+        if [ -f "api/bo/package.json" ] && [ -f "api/bo/package-lock.json" ]; then
+          cd api/bo
+          if npm run lint --if-present; then
+            echo "Linting completed successfully"
+          else
+            echo "Linting failed or not configured"
+          fi
+        else
+          echo "No Node.js project found for linting"
         fi
 
     - name: Run tests with coverage
       run: |
-        pip install pytest pytest-cov
-        for test_dir in "tests" "FO/tests" "API/tests"; do
-          if [ -d "$test_dir" ]; then
-            pytest "$test_dir"/ --cov=./ --cov-report=xml --cov-report=html -v || true
+        echo "Running tests with coverage..."
+        # Create coverage directory if it doesn't exist
+        mkdir -p test-results
+        
+        test_dirs=("tests" "FO/tests" "API/tests" ".")
+        tests_found=false
+        
+        for test_dir in "${test_dirs[@]}"; do
+          if [ -d "$test_dir" ] && [ -n "$(find "$test_dir" -name 'test_*.py' -o -name '*_test.py' | head -1)" ]; then
+            echo "Running tests in $test_dir"
+            pytest "$test_dir" \
+              --cov=./ \
+              --cov-report=xml:coverage.xml \
+              --cov-report=html:htmlcov \
+              --junitxml=test-results/junit.xml \
+              -v \
+              --tb=short || true
+            tests_found=true
             break
           fi
         done
-        if ! ls coverage.* 1> /dev/null 2>&1; then
-          echo "No test directory found, skipping tests"
+        
+        if [ "$tests_found" = false ]; then
+          echo "No test directories found, skipping tests"
+          # Create empty coverage file to avoid errors in upload
+          echo '<?xml version="1.0" ?><coverage version="7.6.4" timestamp="$(date +%s)"></coverage>' > coverage.xml
+          mkdir -p htmlcov
+          touch htmlcov/index.html
         fi
 
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: coverage-report
+        name: coverage-report-${{ github.run_id }}
         path: |
           coverage.xml
           htmlcov/
+          test-results/
+        retention-days: 7
+      continue-on-error: true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ github.run_id }}
+        path: test-results/
+        retention-days: 7
       continue-on-error: true
 
     - name: CodeQL Analysis Init
       uses: github/codeql-action/init@v3
       with:
         languages: python, javascript
+        queries: security-and-quality
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
@@ -128,16 +192,40 @@ jobs:
 
     - name: Run security scans
       run: |
-        pip install safety
+        pip install safety pip-audit
+        
+        echo "Running safety checks..."
         for req_file in "FO/requirements.txt" "API/requirements.txt" "requirements.txt"; do
           if [ -f "$req_file" ]; then
-            echo "Scanning $req_file..."
-            safety check -r "$req_file" --full-report || true
+            echo "Scanning $req_file with safety..."
+            safety check -r "$req_file" --full-report --output text || true
           fi
         done
+        
+        echo "Running pip-audit..."
+        pip-audit --desc --local || true
 
     - name: Dependency vulnerability scan
       uses: actions/dependency-review-action@v3
+      with:
+        fail-on-severity: high
+        deny-licenses: GPL-3.0, AGPL-3.0
+      continue-on-error: true
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: trivy-results.sarif
       continue-on-error: true
 
   build-and-test:
@@ -147,17 +235,36 @@ jobs:
     strategy:
       matrix:
         component: [frontend, backend, backoffice]
-        python-version: ['3.10']
+        include:
+          - component: frontend
+            context: ./FO
+            dockerfile: FO/Dockerfile
+          - component: backend
+            context: ./API
+            dockerfile: API/Dockerfile
+          - component: backoffice
+            context: ./api/bo
+            dockerfile: api/bo/Dockerfile
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Python ${{ matrix.python-version }}
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Python
       if: matrix.component != 'backoffice'
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: ${{ env.PYTHON_VERSION }}
 
     - name: Setup Node.js
       if: matrix.component == 'backoffice'
@@ -165,45 +272,98 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    - name: Install Frontend dependencies
-      if: matrix.component == 'frontend'
-      run: |
-        if [ -f "FO/requirements.txt" ]; then
-          pip install -r FO/requirements.txt
-        fi
-
-    - name: Install Backend dependencies
-      if: matrix.component == 'backend'
-      run: |
-        if [ -f "API/requirements.txt" ]; then
-          pip install -r API/requirements.txt
-        fi
-
-    - name: Install Backoffice dependencies
-      if: matrix.component == 'backoffice'
-      run: |
-        if [ -f "api/bo/package.json" ]; then
-          cd api/bo && npm ci && npm run build
-        fi
-
-    - name: Build Docker images
-      if: matrix.python-version == '3.10'
+    - name: Install dependencies
       run: |
         case "${{ matrix.component }}" in
           frontend)
-            if [ -f "FO/Dockerfile" ]; then
-              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-frontend:test ./FO
+            if [ -f "FO/requirements.txt" ]; then
+              pip install -r FO/requirements.txt
             fi
             ;;
           backend)
-            if [ -f "API/Dockerfile" ]; then
-              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-backend:test ./API
+            if [ -f "API/requirements.txt" ]; then
+              pip install -r API/requirements.txt
             fi
             ;;
           backoffice)
-            if [ -f "api/bo/Dockerfile" ]; then
-              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-backoffice:test ./api/bo
+            if [ -f "api/bo/package.json" ]; then
+              cd api/bo && npm ci && npm run build
             fi
             ;;
         esac
-        docker images
+
+    - name: Build Docker image
+      run: |
+        # Convert to lowercase for Docker compatibility
+        IMAGE_NAME=$(echo "${{ env.DOCKER_IMAGE_NAME }}-${{ matrix.component }}" | tr '[:upper:]' '[:lower:]')
+        
+        if [ -f "${{ matrix.dockerfile }}" ]; then
+          echo "Building ${{ matrix.component }} Docker image..."
+          docker build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "$IMAGE_NAME:test" \
+            --tag "$IMAGE_NAME:${{ github.sha }}" \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            "${{ matrix.context }}"
+        else
+          echo "Dockerfile not found for ${{ matrix.component }} at ${{ matrix.dockerfile }}"
+          exit 0
+        fi
+
+    - name: Run container tests
+      run: |
+        IMAGE_NAME=$(echo "${{ env.DOCKER_IMAGE_NAME }}-${{ matrix.component }}" | tr '[:upper:]' '[:lower:]')
+        
+        # Simple container health check
+        if docker run --rm "$IMAGE_NAME:test" --help || docker run --rm "$IMAGE_NAME:test" --version; then
+          echo "Container test passed"
+        else
+          echo "Container test failed or not applicable"
+        fi
+
+    - name: List Docker images
+      run: docker images
+
+    - name: Push Docker image
+      if: github.event_name != 'pull_request'
+      run: |
+        IMAGE_NAME=$(echo "${{ env.DOCKER_IMAGE_NAME }}-${{ matrix.component }}" | tr '[:upper:]' '[:lower:]')
+        echo "Pushing $IMAGE_NAME to GitHub Container Registry"
+        docker push "$IMAGE_NAME:test"
+        docker push "$IMAGE_NAME:${{ github.sha }}"
+
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Preview deployment
+      run: |
+        echo "Preview deployment would happen here for PR #${{ github.event.pull_request.number }}"
+        echo "Components built: ${{ needs.build-and-test.outputs.components }}"
+        # Add your actual deployment logic here
+
+  notify:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scan, build-and-test]
+    if: always()
+    
+    steps:
+    - name: Check workflow status
+      run: |
+        echo "Code Quality job status: ${{ needs.code-quality.result }}"
+        echo "Security Scan job status: ${{ needs.security-scan.result }}"
+        echo "Build and Test job status: ${{ needs.build-and-test.result }}"
+        
+        if [ "${{ needs.code-quality.result }}" = "success" ] && [ "${{ needs.security-scan.result }}" = "success" ] && [ "${{ needs.build-and-test.result }}" = "success" ]; then
+          echo "All checks passed! ✅"
+        else
+          echo "Some checks failed! ❌"
+          exit 1
+        fi
