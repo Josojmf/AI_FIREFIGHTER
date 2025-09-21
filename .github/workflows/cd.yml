@@ -57,6 +57,16 @@ jobs:
           type=ref,event=branch
           type=raw,value=latest
 
+    - name: Extract metadata for BackOffice
+      id: meta-backoffice
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}/backoffice
+        tags: |
+          type=sha,prefix={{sha}}-
+          type=ref,event=branch
+          type=raw,value=latest
+
     - name: Build and push Frontend image
       uses: docker/build-push-action@v5
       with:
@@ -79,9 +89,22 @@ jobs:
         cache-from: type=gha,scope=backend
         cache-to: type=gha,mode=max,scope=backend
 
+    - name: Build and push BackOffice image
+      continue-on-error: true
+      uses: docker/build-push-action@v5
+      with:
+        context: ./BO
+        file: ./BO/Dockerfile
+        push: true
+        tags: ${{ steps.meta-backoffice.outputs.tags }}
+        labels: ${{ steps.meta-backoffice.outputs.labels }}
+        cache-from: type=gha,scope=backoffice
+        cache-to: type=gha,mode=max,scope=backoffice
+
     outputs:
       frontend-image: ${{ steps.meta-frontend.outputs.tags }}
       backend-image: ${{ steps.meta-backend.outputs.tags }}
+      backoffice-image: ${{ steps.meta-backoffice.outputs.tags }}
 
   deploy:
     name: Deploy to Digital Ocean
@@ -135,6 +158,7 @@ jobs:
           # Set environment variables for docker-compose
           export FRONTEND_IMAGE='${{ needs.build.outputs.frontend-image }}'
           export BACKEND_IMAGE='${{ needs.build.outputs.backend-image }}'
+          export BACKOFFICE_IMAGE='${{ needs.build.outputs.backoffice-image }}'
           
           # Pull latest images
           docker-compose pull
@@ -164,13 +188,17 @@ jobs:
         response_backend=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "000")
         echo "Backend health check: $response_backend"
         
-        # Verify essential services are responding
+        # Test BackOffice (optional - no failure if down)
+        response_backoffice=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/ || echo "000")
+        echo "BackOffice health check: $response_backoffice (optional)"
+        
+        # Verify at least Frontend and Backend are responding
         if [[ "$response_frontend" != "200" || "$response_backend" != "200" ]]; then
           echo "Critical services failed health check"
           exit 1
         fi
         
-        echo " Essential services are healthy"
+        echo "✅ Essential services are healthy"
 
     - name: Cleanup SSH
       if: always()
@@ -187,12 +215,13 @@ jobs:
     - name: Notify Success
       if: needs.deploy.result == 'success'
       run: |
-        echo " Deployment successful!"
+        echo "✅ Deployment successful!"
         echo "Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
         echo "Backend API: http://${{ secrets.PRODUCTION_HOST }}:5000"
+        echo "BackOffice: http://${{ secrets.PRODUCTION_HOST }}:3001 (may be unavailable if build failed)"
 
     - name: Notify Failure
       if: needs.deploy.result == 'failure'
       run: |
-        echo " Deployment failed!"
+        echo "❌ Deployment failed!"
         exit 1

@@ -2,7 +2,7 @@
 
 services:
   frontend:
-    image: \
+    image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/frontend:main}
     container_name: firefighter-frontend
     ports:
       - "8000:8000"
@@ -13,14 +13,14 @@ services:
       - firefighter-network
 
   backend:
-    image: \
+    image: ${BACKEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/backend:main}
     container_name: firefighter-backend
     ports:
       - "5000:5000"
     environment:
-      - MONGO_USER=\
-      - MONGO_PASS=\
-      - MONGO_CLUSTER=\
+      - MONGO_USER=${DB_USERNAME}
+      - MONGO_PASS=${DB_PASSWORD}
+      - MONGO_CLUSTER=${DB_CLUSTER}
       - SECRET_KEY=production-secret-key-change-me
     restart: unless-stopped
     networks:
