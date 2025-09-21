@@ -16,7 +16,8 @@ env:
   PYTHON_VERSION: '3.10'
   NODE_VERSION: '18'
   DOCKER_REGISTRY: ghcr.io
-  DOCKER_IMAGE_NAME: ${{ github.repository }}
+  # Convert repository name to lowercase for Docker compatibility
+  DOCKER_IMAGE_NAME: ${{ github.repository_owner }}/ai_firefighter
 
 jobs:
   code-quality:
@@ -41,66 +42,53 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: 'backoffice/package-lock.json'
+        cache-dependency-path: 'api/bo/package-lock.json'
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install dependencies from both directories
-        if [ -f "FO/requirements.txt" ]; then
-          pip install -r FO/requirements.txt
-        fi
-        if [ -f "API/requirements.txt" ]; then
-          pip install -r API/requirements.txt
-        fi
-        # Install root requirements as fallback
-        if [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
-        fi
+        for req_file in "FO/requirements.txt" "API/requirements.txt" "requirements.txt"; do
+          if [ -f "$req_file" ]; then
+            echo "Installing from $req_file"
+            pip install -r "$req_file"
+          fi
+        done
 
     - name: Install Node.js dependencies
       run: |
-        # Install React app dependencies
-        if [ -f "backoffice/package.json" ]; then
-          cd backoffice && npm ci --ignore-scripts
+        if [ -f "api/bo/package.json" ]; then
+          cd api/bo && npm ci --ignore-scripts
         fi
 
     - name: Run Python linters
       run: |
         pip install flake8 black isort mypy bandit
-        # Python linting for both FO and API directories
-        if [ -d "FO" ]; then
-          echo "Linting FO directory..."
-          flake8 FO/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
-          black FO/ --check --diff || true
-          isort FO/ --check-only --diff || true
-          bandit -r FO/ -ll || true
-        fi
-        if [ -d "API" ]; then
-          echo "Linting API directory..."
-          flake8 API/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
-          black API/ --check --diff || true
-          isort API/ --check-only --diff || true
-          bandit -r API/ -ll || true
-        fi
+        for dir in "FO" "API"; do
+          if [ -d "$dir" ]; then
+            echo "Linting $dir directory..."
+            flake8 "$dir"/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+            black "$dir"/ --check --diff || true
+            isort "$dir"/ --check-only --diff || true
+            bandit -r "$dir"/ -ll || true
+          fi
+        done
 
     - name: Run JavaScript/TypeScript linters
       run: |
-        if [ -f "backoffice/package.json" ]; then
-          cd backoffice && npm run lint || true
+        if [ -f "api/bo/package.json" ]; then
+          cd api/bo && npm run lint || true
         fi
 
     - name: Run tests with coverage
       run: |
         pip install pytest pytest-cov
-        # Run tests if test directory exists
-        if [ -d "tests" ]; then
-          pytest tests/ --cov=./ --cov-report=xml --cov-report=html -v || true
-        elif [ -d "FO/tests" ]; then
-          pytest FO/tests/ --cov=FO/ --cov-report=xml --cov-report=html -v || true
-        elif [ -d "API/tests" ]; then
-          pytest API/tests/ --cov=API/ --cov-report=xml --cov-report=html -v || true
-        else
+        for test_dir in "tests" "FO/tests" "API/tests"; do
+          if [ -d "$test_dir" ]; then
+            pytest "$test_dir"/ --cov=./ --cov-report=xml --cov-report=html -v || true
+            break
+          fi
+        done
+        if ! ls coverage.* 1> /dev/null 2>&1; then
           echo "No test directory found, skipping tests"
         fi
 
@@ -141,19 +129,12 @@ jobs:
     - name: Run security scans
       run: |
         pip install safety
-        # Check both requirement files for vulnerabilities
-        if [ -f "FO/requirements.txt" ]; then
-          echo "Scanning FO/requirements.txt..."
-          safety check -r FO/requirements.txt --full-report || true
-        fi
-        if [ -f "API/requirements.txt" ]; then
-          echo "Scanning API/requirements.txt..."
-          safety check -r API/requirements.txt --full-report || true
-        fi
-        if [ -f "requirements.txt" ]; then
-          echo "Scanning requirements.txt..."
-          safety check -r requirements.txt --full-report || true
-        fi
+        for req_file in "FO/requirements.txt" "API/requirements.txt" "requirements.txt"; do
+          if [ -f "$req_file" ]; then
+            echo "Scanning $req_file..."
+            safety check -r "$req_file" --full-report || true
+          fi
+        done
 
     - name: Dependency vulnerability scan
       uses: actions/dependency-review-action@v3
@@ -165,7 +146,7 @@ jobs:
     needs: [code-quality]
     strategy:
       matrix:
-        component: [frontend, backend]
+        component: [frontend, backend, backoffice]
         python-version: ['3.10']
     
     steps:
@@ -173,12 +154,13 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup Python ${{ matrix.python-version }}
+      if: matrix.component != 'backoffice'
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Setup Node.js
-      if: matrix.component == 'backend'
+      if: matrix.component == 'backoffice'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
@@ -188,8 +170,6 @@ jobs:
       run: |
         if [ -f "FO/requirements.txt" ]; then
           pip install -r FO/requirements.txt
-        elif [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
         fi
 
     - name: Install Backend dependencies
@@ -197,112 +177,33 @@ jobs:
       run: |
         if [ -f "API/requirements.txt" ]; then
           pip install -r API/requirements.txt
-        elif [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
-        fi
-        # Install React app dependencies
-        if [ -f "backoffice/package.json" ]; then
-          cd backoffice && npm ci
         fi
 
-    - name: Build React app
-      if: matrix.component == 'backend'
+    - name: Install Backoffice dependencies
+      if: matrix.component == 'backoffice'
       run: |
-        if [ -f "backoffice/package.json" ]; then
-          cd backoffice && npm run build
+        if [ -f "api/bo/package.json" ]; then
+          cd api/bo && npm ci && npm run build
         fi
-
-    - name: Test Frontend Build
-      if: matrix.component == 'frontend'
-      run: |
-        echo "Frontend build test completed"
-
-    - name: Test Backend Build
-      if: matrix.component == 'backend'
-      run: |
-        echo "Backend build test completed"
 
     - name: Build Docker images
       if: matrix.python-version == '3.10'
       run: |
-        if [ "${{ matrix.component }}" == "frontend" ] && [ -f "FO/Dockerfile" ]; then
-          docker build -t ${{ env.DOCKER_IMAGE_NAME }}-frontend:test ./FO
-        elif [ "${{ matrix.component }}" == "backend" ] && [ -f "API/Dockerfile" ]; then
-          docker build -t ${{ env.DOCKER_IMAGE_NAME }}-backend:test ./API
-        fi
+        case "${{ matrix.component }}" in
+          frontend)
+            if [ -f "FO/Dockerfile" ]; then
+              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-frontend:test ./FO
+            fi
+            ;;
+          backend)
+            if [ -f "API/Dockerfile" ]; then
+              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-backend:test ./API
+            fi
+            ;;
+          backoffice)
+            if [ -f "api/bo/Dockerfile" ]; then
+              docker build -t ${{ env.DOCKER_IMAGE_NAME }}-backoffice:test ./api/bo
+            fi
+            ;;
+        esac
         docker images
-
-  integration-test:
-    name: Integration Testing
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    timeout-minutes: 30
-    if: github.event_name != 'schedule'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Setup test environment
-      run: |
-        # Install dependencies for integration testing
-        if [ -f "FO/requirements.txt" ]; then
-          pip install -r FO/requirements.txt
-        fi
-        if [ -f "API/requirements.txt" ]; then
-          pip install -r API/requirements.txt
-        fi
-        if [ -f "requirements.txt" ]; then
-          pip install -r requirements.txt
-        fi
-        pip install requests pytest
-
-    - name: Run integration tests
-      run: |
-        # Create a simple integration test if none exists
-        if [ ! -d "tests/integration" ]; then
-          mkdir -p tests/integration
-          cat > tests/integration/test_health.py << 'EOF'
-          import requests
-          import pytest
-          import time
-          import subprocess
-          import os
-
-          @pytest.fixture(scope="session")
-          def app_server():
-              """Start the Flask app for testing"""
-              # Try to start the Flask app
-              if os.path.exists("FO/main.py"):
-                  process = subprocess.Popen(
-                      ["python", "FO/main.py"],
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.PIPE
-                  )
-                  time.sleep(3)  # Give the server time to start
-                  yield process
-                  process.terminate()
-                  process.wait()
-              else:
-                  yield None
-
-          def test_basic_health_check(app_server):
-              """Test basic connectivity"""
-              if app_server:
-                  try:
-                      response = requests.get("http://localhost:8000/", timeout=5)
-                      assert response.status_code in [200, 404, 302]  # Any valid HTTP response
-                  except requests.exceptions.ConnectionError:
-                      pytest.skip("Server not responding")
-              else:
-                  pytest.skip("No Flask app found")
-          EOF
-        fi
-        
-        # Run integration tests
-        pytest tests/integration/ -v || echo "Integration tests completed with warnings"

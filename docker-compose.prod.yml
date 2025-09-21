@@ -2,7 +2,7 @@
 
 services:
   frontend:
-    image: ${FRONTEND_IMAGE}
+    image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/frontend:latest}
     ports:
       - "8000:8000"
     environment:
@@ -19,7 +19,7 @@ services:
       - firefighter-network
 
   backend:
-    image: ${BACKEND_IMAGE}
+    image: ${BACKEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/backend:latest}
     ports:
       - "5000:5000"
     environment:
@@ -27,6 +27,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_CLUSTER=${DB_CLUSTER}
       - NODE_ENV=production
+      - FLASK_ENV=production
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
@@ -34,19 +35,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    networks:
-      - firefighter-network
-
-  backoffice:
-    image: ${BACKOFFICE_IMAGE}
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - REACT_APP_API_URL=http://${{ secrets.PRODUCTION_HOST }}:5000/api
-    restart: unless-stopped
-    depends_on:
-      - backend
     networks:
       - firefighter-network
 
