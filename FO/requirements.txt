@@ -1,14 +1,32 @@
+# FO/requirements.txt - Frontend Flask application dependencies
+
+# Core Flask stack
 Flask==2.3.3
 Flask-Login==0.6.2
 Flask-WTF==1.1.1
 WTForms==3.0.1
+Werkzeug>=2.3.7
+
+# HTTP requests
 requests==2.31.0
+
+# Configuration
 python-dotenv==1.0.0
+
+# Security
 bcrypt==4.0.1
+
+# AI/ML for question processing
 transformers==4.35.0
 torch==2.1.0
 accelerate==0.24.0
-gunicorn==21.2.0
+
+# Database
 pymongo==4.5.0
+
+# PDF processing
 fitz==0.0.1.dev2
 fpdf2==2.7.6
+
+# Production server
+gunicorn==21.2.0

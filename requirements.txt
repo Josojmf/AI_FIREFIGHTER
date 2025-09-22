@@ -1,28 +1,46 @@
-# Combined requirements for CI/CD
-# Frontend (Flask app) requirements
+# Root requirements.txt - Main project dependencies
+# Compatible versions to avoid conflicts
+
+# Core web framework
 flask==2.3.3
 flask-cors==4.0.0
-transformers==4.35.0
-torch==2.1.0
-accelerate==0.24.0
-gunicorn==21.2.0
+werkzeug==2.3.7
+
+# Database
 pymongo==4.5.0
+
+# Security & Authentication  
+bcrypt==4.0.1
 python-dotenv==1.0.0
+
+# HTTP & API
 requests==2.31.0
+gunicorn==21.2.0
+
+# AI/ML Dependencies (optional - comment out if not needed)
+transformers==4.35.0
+torch==2.1.0  
+accelerate==0.24.0
+
+# PDF & Document processing
 fitz==0.0.1.dev2
 fpdf2==2.7.6
 
-# Backend API requirements
-bcrypt==4.0.1
-werkzeug==2.3.7
+# Development & Testing dependencies
+pytest>=7.4.0,<8.0.0
+pytest-cov>=4.1.0,<5.0.0
+pytest-asyncio>=0.21.0,<0.22.0
 
-# Development and testing
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-asyncio==0.21.1
-flake8==6.1.0
-black==23.11.0
-isort==5.12.0
-mypy==1.7.0
-bandit==1.7.5
-safety==2.3.5
+# Code quality tools - UPDATED VERSIONS to resolve conflicts
+black>=24.8.0,<25.0.0
+isort>=5.13.0,<6.0.0  
+flake8>=7.1.0,<8.0.0
+mypy>=1.11.0,<2.0.0
+bandit[toml]>=1.7.9,<2.0.0
+
+# Security scanning - UPDATED VERSION
+safety>=3.2.7,<4.0.0
+
+# Documentation
+mkdocs>=1.5.0,<2.0.0
+mkdocs-material>=9.0.0,<10.0.0
