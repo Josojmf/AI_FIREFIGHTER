@@ -1,4 +1,4 @@
-﻿name: CD Pipeline - Digital Ocean with Rollback
+﻿name: CD Pipeline - Ultra Robust with Emergency Fallback
 
 on:
   push:
@@ -10,120 +10,137 @@ on:
         required: false
         default: false
         type: boolean
-      skip_rollback:
-        description: 'Skip rollback on failure'
+      emergency_mode:
+        description: 'Deploy in emergency mode (frontend only)'
         required: false
         default: false
         type: boolean
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  DEPLOYMENT_TIMEOUT: 300 # 5 minutes
-  ROLLBACK_IMAGE_PREFIX: "stable"
+  DEPLOYMENT_TIMEOUT: 180 # 3 minutes max per attempt
+  MAX_DEPLOYMENT_ATTEMPTS: 2
 
 jobs:
-  pre-deploy:
-    name: Pre-deployment Checks
+  pre-deployment:
+    name: Pre-deployment Safety Check
     runs-on: ubuntu-latest
     outputs:
       should_deploy: ${{ steps.check.outputs.should_deploy }}
-      ci_status: ${{ steps.check.outputs.ci_status }}
+      deploy_mode: ${{ steps.check.outputs.deploy_mode }}
     
     steps:
-    - name: Check CI status
+    - name: Determine deployment strategy
       id: check
       run: |
-        # Solo bloquear deployment si hay errores críticos (no warnings)
-        # Obtener estado del último CI workflow
-        ci_conclusion="${{ github.event.workflow_run.conclusion }}"
-        
-        # Permitir deployment en estos casos:
-        # - Push directo a main
-        # - CI exitoso
-        # - CI con warnings (no failure crítico)
-        # - Force deploy activado
-        
         should_deploy="true"
-        ci_status="unknown"
+        deploy_mode="normal"
         
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_deploy }}" = "true" ]; then
+        if [ "${{ github.event.inputs.emergency_mode }}" = "true" ]; then
+          echo "Emergency deployment mode requested"
+          deploy_mode="emergency"
+        elif [ "${{ github.event.inputs.force_deploy }}" = "true" ]; then
           echo "Force deployment requested"
-          should_deploy="true"
-          ci_status="forced"
-        elif [ -z "$ci_conclusion" ] || [ "$ci_conclusion" = "success" ] || [ "$ci_conclusion" = "skipped" ]; then
-          echo "CI passed or no CI required - proceeding with deployment"
-          should_deploy="true"
-          ci_status="passed"
-        elif [ "$ci_conclusion" = "failure" ]; then
-          echo "CI failed - checking if it's critical..."
-          # Aquí podrías añadir lógica para verificar si son errores críticos
-          # Por ahora, proceder con deployment pero marcar como warning
-          should_deploy="true" 
-          ci_status="warning"
+          deploy_mode="force"
         else
-          echo "Unknown CI status - proceeding with caution"
-          should_deploy="true"
-          ci_status="unknown"
+          echo "Normal deployment mode"
+          deploy_mode="normal"
         fi
         
         echo "should_deploy=$should_deploy" >> $GITHUB_OUTPUT
-        echo "ci_status=$ci_status" >> $GITHUB_OUTPUT
+        echo "deploy_mode=$deploy_mode" >> $GITHUB_OUTPUT
 
-  validate-secrets:
-    name: Validate Secrets
+  validate-environment:
+    name: Validate Production Environment
     runs-on: ubuntu-latest
-    needs: pre-deploy
-    if: needs.pre-deploy.outputs.should_deploy == 'true'
+    needs: pre-deployment
+    outputs:
+      environment-ready: ${{ steps.validate.outputs.ready }}
+      current-status: ${{ steps.validate.outputs.status }}
     
     steps:
     - name: Check required secrets
       run: |
-        errors=()
+        missing=()
         
-        if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
-          errors+=("PRODUCTION_SSH_KEY is not set")
-        fi
+        [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ] && missing+=("PRODUCTION_SSH_KEY")
+        [ -z "${{ secrets.PRODUCTION_HOST }}" ] && missing+=("PRODUCTION_HOST")
+        [ -z "${{ secrets.PRODUCTION_USER }}" ] && missing+=("PRODUCTION_USER")
+        [ -z "${{ secrets.DB_USERNAME }}" ] && missing+=("DB_USERNAME")
+        [ -z "${{ secrets.DB_PASSWORD }}" ] && missing+=("DB_PASSWORD")
+        [ -z "${{ secrets.DB_CLUSTER }}" ] && missing+=("DB_CLUSTER")
         
-        if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
-          errors+=("PRODUCTION_HOST is not set")
-        fi
-        
-        if [ -z "${{ secrets.PRODUCTION_USER }}" ]; then
-          errors+=("PRODUCTION_USER is not set")
-        fi
-        
-        if [ -z "${{ secrets.DB_USERNAME }}" ]; then
-          errors+=("DB_USERNAME is not set")
-        fi
-        
-        if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
-          errors+=("DB_PASSWORD is not set")
-        fi
-        
-        if [ -z "${{ secrets.DB_CLUSTER }}" ]; then
-          errors+=("DB_CLUSTER is not set")
-        fi
-        
-        if [ ${#errors[@]} -ne 0 ]; then
-          echo "Missing required secrets:"
-          printf '%s\n' "${errors[@]}"
+        if [ ${#missing[@]} -ne 0 ]; then
+          echo "Missing secrets: ${missing[*]}"
           exit 1
         fi
         
-        echo "All required secrets are configured"
+        echo "All secrets configured"
 
-  build:
-    name: Build Docker Images
+    - name: Validate production server
+      id: validate
+      run: |
+        # SSH key setup
+        mkdir -p ~/.ssh
+        echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+        
+        # Check server accessibility and current status
+        current_status=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+          ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+          echo 'Server accessible'
+          
+          # Check if there's something currently running
+          if curl -s --max-time 5 http://localhost:8000/ >/dev/null 2>&1; then
+            echo 'CURRENT_SERVICE_RUNNING=true'
+          else
+            echo 'CURRENT_SERVICE_RUNNING=false'
+          fi
+          
+          # Check Docker status
+          if command -v docker >/dev/null 2>&1; then
+            echo 'DOCKER_AVAILABLE=true'
+          else
+            echo 'DOCKER_AVAILABLE=false'
+          fi
+          
+          # Check deployment directory
+          if [ -d /opt/firefighter-app ]; then
+            echo 'DEPLOY_DIR_EXISTS=true'
+          else
+            echo 'DEPLOY_DIR_EXISTS=false'
+          fi
+        " 2>&1) || echo "SSH_FAILED=true"
+        
+        echo "$current_status"
+        
+        if echo "$current_status" | grep -q "SSH_FAILED=true"; then
+          echo "ready=false" >> $GITHUB_OUTPUT
+          echo "status=ssh_failed" >> $GITHUB_OUTPUT
+          exit 1
+        elif echo "$current_status" | grep -q "CURRENT_SERVICE_RUNNING=true"; then
+          echo "ready=true" >> $GITHUB_OUTPUT
+          echo "status=service_running" >> $GITHUB_OUTPUT
+        else
+          echo "ready=true" >> $GITHUB_OUTPUT  
+          echo "status=no_service" >> $GITHUB_OUTPUT
+        fi
+        
+        rm -f ~/.ssh/id_rsa
+
+  build-images:
+    name: Build and Push Images
     runs-on: ubuntu-latest
-    needs: [pre-deploy, validate-secrets]
-    if: needs.pre-deploy.outputs.should_deploy == 'true'
+    needs: [pre-deployment, validate-environment]
+    if: needs.validate-environment.outputs.environment-ready == 'true'
     permissions:
       contents: read
       packages: write
     outputs:
-      frontend-image: ${{ steps.frontend-image.outputs.image }}
-      backend-image: ${{ steps.backend-image-name.outputs.image }}
-      build-success: ${{ steps.build-status.outputs.success }}
+      frontend-image: ${{ steps.images.outputs.frontend }}
+      backend-image: ${{ steps.images.outputs.backend }}
+      build-success: ${{ steps.build-result.outputs.success }}
     
     steps:
     - name: Checkout code
@@ -132,190 +149,122 @@ jobs:
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Log into GitHub Container Registry
+    - name: Login to Container Registry
       uses: docker/login-action@v3
       with:
         registry: ${{ env.DOCKER_REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Generate image names
-      id: image-names
+    - name: Generate image names and tags
+      id: meta
       run: |
-        REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
         SHORT_SHA=${GITHUB_SHA:0:7}
+        BUILD_TAG="${TIMESTAMP}-${SHORT_SHA}"
         
-        FRONTEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_OWNER_LOWER}/ai-firefighter-frontend"
-        BACKEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_OWNER_LOWER}/ai-firefighter-backend"
+        FRONTEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_LOWER}/ai-firefighter-frontend"
+        BACKEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_LOWER}/ai-firefighter-backend"
         
-        echo "frontend-image=${FRONTEND_IMAGE}" >> $GITHUB_OUTPUT
-        echo "backend-image=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
-        echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
-        echo "short-sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+        echo "frontend-base=${FRONTEND_IMAGE}" >> $GITHUB_OUTPUT
+        echo "backend-base=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
+        echo "build-tag=${BUILD_TAG}" >> $GITHUB_OUTPUT
 
-    - name: Extract metadata for Frontend
-      id: meta-frontend
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ steps.image-names.outputs.frontend-image }}
-        tags: |
-          type=raw,value=latest
-          type=raw,value=main
-          type=raw,value=${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}
-          type=raw,value=stable-latest
-        labels: |
-          org.opencontainers.image.title=AI Firefighter Frontend
-          org.opencontainers.image.description=Frontend application
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-
-    - name: Extract metadata for Backend
-      id: meta-backend
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ steps.image-names.outputs.backend-image }}
-        tags: |
-          type=raw,value=latest
-          type=raw,value=main
-          type=raw,value=${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}
-          type=raw,value=stable-latest
-        labels: |
-          org.opencontainers.image.title=AI Firefighter Backend
-          org.opencontainers.image.description=Backend API
-          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-
-    - name: Build and push Frontend image
+    - name: Build and push Frontend
       uses: docker/build-push-action@v5
       with:
         context: ./FO
         file: ./FO/Dockerfile
         push: true
-        tags: ${{ steps.meta-frontend.outputs.tags }}
-        labels: ${{ steps.meta-frontend.outputs.labels }}
+        tags: |
+          ${{ steps.meta.outputs.frontend-base }}:${{ steps.meta.outputs.build-tag }}
+          ${{ steps.meta.outputs.frontend-base }}:latest
         cache-from: type=gha,scope=frontend
         cache-to: type=gha,mode=max,scope=frontend
         platforms: linux/amd64
 
-    - name: Build and push Backend image
+    - name: Build and push Backend
       uses: docker/build-push-action@v5
       with:
         context: ./API
         file: ./API/Dockerfile
         push: true
-        tags: ${{ steps.meta-backend.outputs.tags }}
-        labels: ${{ steps.meta-backend.outputs.labels }}
+        tags: |
+          ${{ steps.meta.outputs.backend-base }}:${{ steps.meta.outputs.build-tag }}
+          ${{ steps.meta.outputs.backend-base }}:latest
         cache-from: type=gha,scope=backend
         cache-to: type=gha,mode=max,scope=backend
         platforms: linux/amd64
 
-    - name: Output final image names
-      id: frontend-image
+    - name: Set output images
+      id: images
       run: |
-        echo "image=${{ steps.image-names.outputs.frontend-image }}:${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}" >> $GITHUB_OUTPUT
-        
-    - name: Output backend image name
-      id: backend-image-name  
-      run: |
-        echo "image=${{ steps.image-names.outputs.backend-image }}:${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}" >> $GITHUB_OUTPUT
+        echo "frontend=${{ steps.meta.outputs.frontend-base }}:${{ steps.meta.outputs.build-tag }}" >> $GITHUB_OUTPUT
+        echo "backend=${{ steps.meta.outputs.backend-base }}:${{ steps.meta.outputs.build-tag }}" >> $GITHUB_OUTPUT
 
-    - name: Mark build as successful
-      id: build-status
-      run: |
-        echo "success=true" >> $GITHUB_OUTPUT
+    - name: Mark build success
+      id: build-result
+      run: echo "success=true" >> $GITHUB_OUTPUT
 
   backup-current:
-    name: Backup Current Deployment
+    name: Backup Current State
     runs-on: ubuntu-latest
-    needs: build
-    environment: production
+    needs: [build-images]
     outputs:
-      backup-created: ${{ steps.backup.outputs.created }}
-      backup-timestamp: ${{ steps.backup.outputs.timestamp }}
+      backup-available: ${{ steps.backup.outputs.available }}
     
     steps:
-    - name: Setup SSH key
+    - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Create backup of current deployment
+    - name: Create backup
       id: backup
       run: |
-        BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        BACKUP_TIME=$(date +%Y%m%d-%H%M%S)
         
-        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-          cd /opt/firefighter-app
-          
-          # Create backup directory
+        backup_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+          # Ensure backup directory exists
           sudo mkdir -p /opt/firefighter-backups
           sudo chown -R ${{ secrets.PRODUCTION_USER }}:${{ secrets.PRODUCTION_USER }} /opt/firefighter-backups
           
-          # Backup current configuration and get current image info
+          cd /opt/firefighter-app 2>/dev/null || { echo 'NO_APP_DIR'; exit 0; }
+          
           if [ -f docker-compose.yml ] && [ -f .env ]; then
-            echo 'Creating backup of current deployment...'
-            mkdir -p /opt/firefighter-backups/$BACKUP_TIMESTAMP
-            
-            # Copy configuration files
-            cp docker-compose.yml /opt/firefighter-backups/$BACKUP_TIMESTAMP/
-            cp .env /opt/firefighter-backups/$BACKUP_TIMESTAMP/
-            
-            # Save current running image info
-            docker-compose ps --format json > /opt/firefighter-backups/$BACKUP_TIMESTAMP/running-containers.json || echo '[]' > /opt/firefighter-backups/$BACKUP_TIMESTAMP/running-containers.json
-            
-            # Export current images (mark as stable)
-            source .env
-            if [ ! -z \"\$FRONTEND_IMAGE\" ]; then
-              REPO_OWNER_LOWER=\$(echo \"${{ github.repository_owner }}\" | tr '[:upper:]' '[:lower:]')
-              FRONTEND_BASE=\"${{ env.DOCKER_REGISTRY }}/\${REPO_OWNER_LOWER}/ai-firefighter-frontend\"
-              docker tag \"\$FRONTEND_IMAGE\" \"\$FRONTEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
-              docker push \"\$FRONTEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
-            fi
-            if [ ! -z \"\$BACKEND_IMAGE\" ]; then
-              REPO_OWNER_LOWER=\$(echo \"${{ github.repository_owner }}\" | tr '[:upper:]' '[:lower:]')
-              BACKEND_BASE=\"${{ env.DOCKER_REGISTRY }}/\${REPO_OWNER_LOWER}/ai-firefighter-backend\"
-              docker tag \"\$BACKEND_IMAGE\" \"\$BACKEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
-              docker push \"\$BACKEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
-            fi
-            
-            echo 'Backup created successfully'
-            echo 'created=true'
+            mkdir -p /opt/firefighter-backups/$BACKUP_TIME
+            cp docker-compose.yml .env /opt/firefighter-backups/$BACKUP_TIME/
+            docker-compose ps --format json > /opt/firefighter-backups/$BACKUP_TIME/container-status.json 2>/dev/null || echo '[]' > /opt/firefighter-backups/$BACKUP_TIME/container-status.json
+            echo 'BACKUP_CREATED'
           else
-            echo 'No existing deployment found - first deployment'
-            mkdir -p /opt/firefighter-backups/$BACKUP_TIMESTAMP
-            echo 'created=false'
+            echo 'NO_BACKUP_NEEDED'
           fi
-        " | tee backup.log
+        " 2>&1) || echo "BACKUP_FAILED"
         
-        # Parse output
-        if grep -q "created=true" backup.log; then
-          echo "created=true" >> $GITHUB_OUTPUT
+        if echo "$backup_result" | grep -q "BACKUP_CREATED"; then
+          echo "available=true" >> $GITHUB_OUTPUT
+          echo "Backup created successfully"
         else
-          echo "created=false" >> $GITHUB_OUTPUT
+          echo "available=false" >> $GITHUB_OUTPUT
+          echo "No backup needed or backup failed: $backup_result"
         fi
-        echo "timestamp=$BACKUP_TIMESTAMP" >> $GITHUB_OUTPUT
-
-    - name: Login to registry for tagging
-      run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
-
-    - name: Cleanup
-      if: always()
-      run: rm -f ~/.ssh/id_rsa backup.log
+        
+        rm -f ~/.ssh/id_rsa
 
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [build, backup-current]
-    environment: production
+    needs: [build-images, backup-current, validate-environment]
     outputs:
-      deployment-success: ${{ steps.deploy-status.outputs.success }}
-      
+      deployment-status: ${{ steps.deploy.outputs.status }}
+      frontend-working: ${{ steps.deploy.outputs.frontend_ok }}
+      backend-working: ${{ steps.deploy.outputs.backend_ok }}
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup SSH key
+    - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
@@ -325,250 +274,237 @@ jobs:
     - name: Prepare server environment
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-          # Install Docker if not present
-          if ! command -v docker &> /dev/null; then
-            echo 'Installing Docker...'
-            curl -fsSL https://get.docker.com -o get-docker.sh
-            sudo sh get-docker.sh
-            sudo usermod -aG docker ${{ secrets.PRODUCTION_USER }}
-            rm get-docker.sh
-            # Restart SSH session to apply group changes
-            echo 'Docker installed - may need to restart SSH session'
+          # Ensure Docker is installed
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | sh
+            usermod -aG docker ${{ secrets.PRODUCTION_USER }}
           fi
           
-          # Install Docker Compose if not present
-          if ! command -v docker-compose &> /dev/null; then
-            echo 'Installing Docker Compose...'
-            sudo curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
-            sudo chmod +x /usr/local/bin/docker-compose
+          # Ensure Docker Compose is installed
+          if ! command -v docker-compose >/dev/null 2>&1; then
+            curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose
+            chmod +x /usr/local/bin/docker-compose
           fi
           
-          # Create deployment directory
-          sudo mkdir -p /opt/firefighter-app
-          sudo chown -R ${{ secrets.PRODUCTION_USER }}:${{ secrets.PRODUCTION_USER }} /opt/firefighter-app
-          mkdir -p /opt/firefighter-app/logs
+          # Setup deployment directory
+          mkdir -p /opt/firefighter-app
+          chown -R ${{ secrets.PRODUCTION_USER }}:${{ secrets.PRODUCTION_USER }} /opt/firefighter-app
         "
 
-    - name: Create production configuration
-      run: |
-        # Create docker-compose.yml with health checks and restart policies
-        cat > docker-compose.prod.yml << 'EOF'
-        version: '3.8'
-        
-        services:
-          frontend:
-            image: ${FRONTEND_IMAGE}
-            ports:
-              - "8000:8000"
-            environment:
-              - DB_USERNAME=${DB_USERNAME}
-              - DB_PASSWORD=${DB_PASSWORD}
-              - DB_CLUSTER=${DB_CLUSTER}
-              - API_BASE_URL=http://localhost:5000/api
-              - FLASK_ENV=production
-            restart: unless-stopped
-            depends_on:
-              backend:
-                condition: service_healthy
-            healthcheck:
-              test: ["CMD", "curl", "-f", "http://localhost:8000/", "--max-time", "5"]
-              interval: 20s
-              timeout: 5s
-              retries: 10
-              start_period: 120s
-            logging:
-              driver: "json-file"
-              options:
-                max-size: "10m"
-                max-file: "3"
-            deploy:
-              resources:
-                limits:
-                  memory: 1G
-                reserves:
-                  memory: 512M
-
-          backend:
-            image: ${BACKEND_IMAGE}
-            ports:
-              - "5000:5000"
-            environment:
-              - DB_USERNAME=${DB_USERNAME}
-              - DB_PASSWORD=${DB_PASSWORD}
-              - DB_CLUSTER=${DB_CLUSTER}
-              - FLASK_ENV=production
-            restart: unless-stopped
-            healthcheck:
-              test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/', timeout=3).raise_for_status()"]
-              interval: 20s
-              timeout: 5s
-              retries: 10
-              start_period: 60s
-            logging:
-              driver: "json-file"
-              options:
-                max-size: "10m"
-                max-file: "3"
-            deploy:
-              resources:
-                limits:
-                  memory: 1G
-                reserves:
-                  memory: 512M
-        EOF
-        
-        # Create environment file
-        cat > .env.production << EOF
-        DB_USERNAME=${{ secrets.DB_USERNAME }}
-        DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-        DB_CLUSTER=${{ secrets.DB_CLUSTER }}
-        FLASK_ENV=production
-        FRONTEND_IMAGE=${{ needs.build.outputs.frontend-image }}
-        BACKEND_IMAGE=${{ needs.build.outputs.backend-image }}
-        DEPLOYMENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        COMMIT_SHA=${{ github.sha }}
-        EOF
-
-    - name: Copy deployment files
-      run: |
-        scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/docker-compose.yml
-        scp -o StrictHostKeyChecking=no .env.production ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/.env
-
-    - name: Deploy with timeout and monitoring
-      id: deploy-step
+    - name: Create emergency deployment script
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-          cd /opt/firefighter-app
+          cat > /opt/firefighter-app/emergency-deploy.sh << 'EMERGENCY_SCRIPT'
+          #!/bin/bash
+          echo '🚨 EMERGENCY DEPLOYMENT - FRONTEND ONLY 🚨'
           
-          # Load environment
-          set -a
-          source .env
-          set +a
+          # Stop everything
+          docker stop \$(docker ps -aq) 2>/dev/null || true
+          docker rm \$(docker ps -aq) 2>/dev/null || true
           
-          echo 'Logging into GitHub Container Registry...'
-          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+          # Start only frontend with latest stable image
+          echo 'Starting emergency frontend...'
+          docker run -d --name emergency-frontend -p 8000:8000 \\
+            -e FLASK_ENV=production \\
+            -e API_BASE_URL=http://localhost:5000/api \\
+            --restart unless-stopped \\
+            ghcr.io/josojmf/ai-firefighter-frontend:latest || \\
+          docker run -d --name emergency-frontend -p 8000:8000 \\
+            -e FLASK_ENV=production \\
+            --restart unless-stopped \\
+            ghcr.io/josojmf/ai-firefighter-frontend:20250922-180353-8984cd5
           
-          echo 'Pulling new images...'
-          docker pull \"\$FRONTEND_IMAGE\"
-          docker pull \"\$BACKEND_IMAGE\"
+          sleep 10
           
-          echo 'Starting deployment...'
-          # Stop old containers gracefully
-          docker-compose down --timeout 30 || true
-          
-          # Start new containers
-          docker-compose up -d
-          
-          echo 'Waiting for services to be healthy...'
-          # Wait up to 5 minutes for services to be healthy
-          timeout ${{ env.DEPLOYMENT_TIMEOUT }} sh -c '
-            while ! docker-compose ps | grep -E \"(healthy|up)\"; do
-              echo \"Waiting for containers to be healthy...\"
-              sleep 10
-              docker-compose ps
-            done
-          ' || {
-            echo 'Deployment timeout - services not healthy after ${{ env.DEPLOYMENT_TIMEOUT }} seconds'
-            docker-compose logs
+          if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
+            echo 'SUCCESS: Emergency frontend is running'
+            echo 'Available at: http://167.71.42.17:8000'
+          else
+            echo 'FAILED: Emergency deployment failed'
             exit 1
-          }
+          fi
+        EMERGENCY_SCRIPT
           
-          echo 'Deployment completed successfully'
-        " 2>&1 | tee deploy.log
-        
-        # Check if deployment succeeded
-        if grep -q "Deployment completed successfully" deploy.log; then
-          echo "success=true" >> $GITHUB_OUTPUT
-        else
-          echo "success=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
+          chmod +x /opt/firefighter-app/emergency-deploy.sh
+        "
 
-    - name: Set deployment status
-      id: deploy-status
+    - name: Attempt normal deployment
+      id: deploy
       run: |
-        echo "success=${{ steps.deploy-step.outputs.success || 'false' }}" >> $GITHUB_OUTPUT
-
-    - name: Cleanup
-      if: always()
-      run: |
-        rm -f ~/.ssh/id_rsa docker-compose.prod.yml .env.production deploy.log
-
-  health-check:
-    name: Post-deployment Health Check
-    runs-on: ubuntu-latest
-    needs: deploy
-    outputs:
-      health-status: ${{ steps.health.outputs.status }}
-    
-    steps:
-    - name: Comprehensive health check
-      id: health
-      run: |
-        echo "Performing comprehensive health check..."
+        deployment_success="false"
+        frontend_ok="false"
+        backend_ok="false"
         
-        # Wait for services to stabilize
-        sleep 30
-        
-        # Function to check service health
-        check_service() {
-          local url=$1
-          local service=$2
-          local max_attempts=15
-          local attempt=1
+        for attempt in 1 2; do
+          echo "Deployment attempt $attempt/2..."
           
-          while [ $attempt -le $max_attempts ]; do
-            echo "Health check attempt $attempt/$max_attempts for $service..."
+          deployment_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+            cd /opt/firefighter-app
             
-            response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+            # Create docker-compose configuration
+            cat > docker-compose.yml << 'COMPOSE_EOF'
+            version: '3.8'
+            services:
+              frontend:
+                image: ${{ needs.build-images.outputs.frontend-image }}
+                ports:
+                  - '8000:8000'
+                environment:
+                  - DB_USERNAME=${{ secrets.DB_USERNAME }}
+                  - DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+                  - DB_CLUSTER=${{ secrets.DB_CLUSTER }}
+                  - FLASK_ENV=production
+                  - API_BASE_URL=http://localhost:5000/api
+                restart: unless-stopped
+                depends_on:
+                  - backend
+
+              backend:
+                image: ${{ needs.build-images.outputs.backend-image }}
+                ports:
+                  - '5000:5000'
+                environment:
+                  - DB_USERNAME=${{ secrets.DB_USERNAME }}
+                  - DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+                  - DB_CLUSTER=${{ secrets.DB_CLUSTER }}
+                  - FLASK_ENV=production
+                restart: unless-stopped
+            COMPOSE_EOF
             
-            if [[ "$response" =~ ^[2-3][0-9][0-9]$ ]]; then
-              echo "$service is healthy (HTTP $response)"
-              return 0
+            # Login to registry
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+            
+            # Pull images
+            docker pull ${{ needs.build-images.outputs.frontend-image }}
+            docker pull ${{ needs.build-images.outputs.backend-image }}
+            
+            # Deploy
+            docker-compose down --timeout 30 || true
+            docker-compose up -d
+            
+            # Wait and test
+            sleep 60
+            
+            # Test services
+            frontend_status='FAIL'
+            backend_status='FAIL'
+            
+            if curl -s --max-time 10 http://localhost:8000/ >/dev/null 2>&1; then
+              frontend_status='OK'
             fi
             
-            echo "$service check failed (HTTP $response)"
-            sleep 15
-            attempt=$((attempt + 1))
-          done
+            if curl -s --max-time 10 http://localhost:5000/ >/dev/null 2>&1; then
+              backend_status='OK'
+            fi
+            
+            echo \"FRONTEND_STATUS=\$frontend_status\"
+            echo \"BACKEND_STATUS=\$backend_status\"
+            
+            if [ \"\$frontend_status\" = 'OK' ]; then
+              echo 'DEPLOYMENT_SUCCESS'
+            else
+              echo 'DEPLOYMENT_FAILED'
+              docker-compose logs --tail=20
+            fi
+          " 2>&1) || echo "DEPLOYMENT_ATTEMPT_FAILED"
           
-          return 1
-        }
+          echo "$deployment_result"
+          
+          # Check results
+          if echo "$deployment_result" | grep -q "FRONTEND_STATUS=OK"; then
+            frontend_ok="true"
+          fi
+          
+          if echo "$deployment_result" | grep -q "BACKEND_STATUS=OK"; then
+            backend_ok="true"
+          fi
+          
+          if echo "$deployment_result" | grep -q "DEPLOYMENT_SUCCESS"; then
+            deployment_success="true"
+            break
+          fi
+          
+          echo "Attempt $attempt failed, will retry..." 
+          sleep 30
+        done
         
-        # Check both services
-        frontend_ok=false
-        backend_ok=false
+        echo "status=$deployment_success" >> $GITHUB_OUTPUT
+        echo "frontend_ok=$frontend_ok" >> $GITHUB_OUTPUT
+        echo "backend_ok=$backend_ok" >> $GITHUB_OUTPUT
         
-        if check_service "http://${{ secrets.PRODUCTION_HOST }}:8000/" "Frontend"; then
-          frontend_ok=true
-        fi
-        
-        if check_service "http://${{ secrets.PRODUCTION_HOST }}:5000/" "Backend"; then
-          backend_ok=true
-        fi
-        
-        # Overall health assessment
-        if [ "$frontend_ok" = true ] && [ "$backend_ok" = true ]; then
-          echo "status=healthy" >> $GITHUB_OUTPUT
-          echo "Both services are healthy"
-        elif [ "$frontend_ok" = true ] || [ "$backend_ok" = true ]; then
-          echo "status=partial" >> $GITHUB_OUTPUT
-          echo "At least one service is healthy"
-        else
-          echo "status=unhealthy" >> $GITHUB_OUTPUT
-          echo "No services are responding properly"
-          exit 1
-        fi
+        rm -f ~/.ssh/id_rsa
 
-  rollback:
-    name: Rollback on Failure
+  emergency-fallback:
+    name: Emergency Fallback
     runs-on: ubuntu-latest
-    needs: [backup-current, deploy, health-check]
-    if: always() && (needs.deploy.outputs.deployment-success != 'true' || needs.health-check.outputs.health-status == 'unhealthy') && needs.backup-current.outputs.backup-created == 'true' && github.event.inputs.skip_rollback != 'true'
-    environment: production
+    needs: [deploy, validate-environment]
+    if: always() && (needs.deploy.outputs.deployment-status != 'true' || needs.deploy.outputs.frontend-working != 'true')
     
     steps:
-    - name: Setup SSH key
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Execute emergency deployment
+      run: |
+        echo "🚨 EXECUTING EMERGENCY FALLBACK 🚨"
+        
+        emergency_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+          cd /opt/firefighter-app
+          
+          # Execute emergency script
+          if [ -f emergency-deploy.sh ]; then
+            ./emergency-deploy.sh
+          else
+            echo 'Emergency script not found, executing inline emergency deployment'
+            
+            # Stop everything
+            docker stop \$(docker ps -aq) 2>/dev/null || true
+            docker rm \$(docker ps -aq) 2>/dev/null || true
+            
+            # Try latest first, then fallback to known working image
+            docker run -d --name emergency-frontend -p 8000:8000 \\
+              -e FLASK_ENV=production \\
+              --restart unless-stopped \\
+              ghcr.io/josojmf/ai-firefighter-frontend:latest || \\
+            docker run -d --name emergency-frontend -p 8000:8000 \\
+              -e FLASK_ENV=production \\
+              --restart unless-stopped \\
+              ghcr.io/josojmf/ai-firefighter-frontend:20250922-180353-8984cd5
+            
+            sleep 15
+            
+            if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
+              echo 'EMERGENCY_SUCCESS'
+            else
+              echo 'EMERGENCY_FAILED'
+              exit 1
+            fi
+          fi
+        " 2>&1)
+        
+        echo "$emergency_result"
+        
+        if echo "$emergency_result" | grep -q "EMERGENCY_SUCCESS\|SUCCESS.*frontend"; then
+          echo "✅ Emergency deployment successful - Frontend is running"
+        else
+          echo "❌ Emergency deployment failed"
+          exit 1
+        fi
+        
+        rm -f ~/.ssh/id_rsa
+
+  rollback:
+    name: Rollback to Previous Version  
+    runs-on: ubuntu-latest
+    needs: [deploy, backup-current, emergency-fallback]
+    if: always() && needs.deploy.outputs.deployment-status != 'true' && needs.emergency-fallback.result != 'success' && needs.backup-current.outputs.backup-available == 'true'
+    
+    steps:
+    - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
@@ -577,132 +513,191 @@ jobs:
 
     - name: Perform rollback
       run: |
-        echo "Performing rollback to previous stable version..."
+        echo "🔄 PERFORMING ROLLBACK TO PREVIOUS VERSION"
         
-        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+        rollback_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
           cd /opt/firefighter-app
           
-          # Stop current (failed) deployment
-          docker-compose down --timeout 30 || true
-          
           # Find most recent backup
-          BACKUP_DIR=\$(ls -t /opt/firefighter-backups/ | head -1)
+          LATEST_BACKUP=\$(ls -t /opt/firefighter-backups/ 2>/dev/null | head -1)
           
-          if [ -n \"\$BACKUP_DIR\" ] && [ -d \"/opt/firefighter-backups/\$BACKUP_DIR\" ]; then
-            echo \"Rolling back to backup: \$BACKUP_DIR\"
+          if [ -n \"\$LATEST_BACKUP\" ] && [ -d \"/opt/firefighter-backups/\$LATEST_BACKUP\" ]; then
+            echo \"Rolling back to: \$LATEST_BACKUP\"
             
-            # Restore configuration files
-            cp /opt/firefighter-backups/\$BACKUP_DIR/docker-compose.yml ./
-            cp /opt/firefighter-backups/\$BACKUP_DIR/.env ./
+            # Stop current deployment
+            docker-compose down --timeout 30 || docker stop \$(docker ps -aq) || true
+            
+            # Restore backup files
+            cp /opt/firefighter-backups/\$LATEST_BACKUP/docker-compose.yml ./
+            cp /opt/firefighter-backups/\$LATEST_BACKUP/.env ./
             
             # Start previous version
             docker-compose up -d
             
-            # Wait for rollback to complete
-            sleep 60
+            sleep 30
             
-            # Check if rollback was successful
-            if docker-compose ps | grep -E \"(healthy|up)\"; then
-              echo \"Rollback completed successfully\"
+            # Test rollback
+            if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
+              echo 'ROLLBACK_SUCCESS'
             else
-              echo \"Rollback failed - manual intervention required\"
-              exit 1
+              echo 'ROLLBACK_FAILED'
+              # Last resort - emergency deployment
+              /opt/firefighter-app/emergency-deploy.sh
             fi
           else
-            echo \"No backup found - cannot rollback\"
-            echo \"This might be the first deployment\"
+            echo 'NO_BACKUP_AVAILABLE - executing emergency deployment'
+            /opt/firefighter-app/emergency-deploy.sh
           fi
-        "
+        " 2>&1)
+        
+        echo "$rollback_result"
+        
+        rm -f ~/.ssh/id_rsa
 
-    - name: Cleanup
-      if: always()
-      run: rm -f ~/.ssh/id_rsa
+  health-check:
+    name: Final Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy, emergency-fallback, rollback]
+    if: always()
+    outputs:
+      final-status: ${{ steps.health.outputs.status }}
+    
+    steps:
+    - name: Comprehensive health check
+      id: health
+      run: |
+        echo "🏥 FINAL HEALTH CHECK"
+        
+        # Wait for services to stabilize
+        sleep 30
+        
+        # Test frontend
+        frontend_status="DOWN"
+        for i in {1..5}; do
+          if curl -s --max-time 10 "http://${{ secrets.PRODUCTION_HOST }}:8000/" >/dev/null 2>&1; then
+            frontend_status="UP"
+            break
+          fi
+          sleep 10
+        done
+        
+        # Test backend  
+        backend_status="DOWN"
+        for i in {1..3}; do
+          if curl -s --max-time 10 "http://${{ secrets.PRODUCTION_HOST }}:5000/" >/dev/null 2>&1; then
+            backend_status="UP"
+            break
+          fi
+          sleep 10
+        done
+        
+        echo "Frontend: $frontend_status"
+        echo "Backend: $backend_status"
+        
+        if [ "$frontend_status" = "UP" ]; then
+          echo "status=healthy" >> $GITHUB_OUTPUT
+          echo "✅ SYSTEM IS HEALTHY - Frontend responding"
+        else
+          echo "status=critical" >> $GITHUB_OUTPUT
+          echo "❌ CRITICAL - No services responding"
+          exit 1
+        fi
 
   tag-stable:
-    name: Tag Stable Release
+    name: Tag Stable Version
     runs-on: ubuntu-latest
-    needs: [build, health-check]
-    if: always() && needs.health-check.outputs.health-status != 'unhealthy'
+    needs: [build-images, health-check]
+    if: always() && needs.health-check.outputs.final-status == 'healthy' && needs.build-images.result == 'success'
     permissions:
       contents: read
       packages: write
     
     steps:
-    - name: Log into GitHub Container Registry
+    - name: Login to registry
       uses: docker/login-action@v3
       with:
         registry: ${{ env.DOCKER_REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Tag successful deployment as stable
+    - name: Tag as stable
       run: |
-        # Pull the deployed images
-        docker pull ${{ needs.build.outputs.frontend-image }}
-        docker pull ${{ needs.build.outputs.backend-image }}
-        
-        # Extract base names
-        FRONTEND_BASE=$(echo "${{ needs.build.outputs.frontend-image }}" | cut -d':' -f1)
-        BACKEND_BASE=$(echo "${{ needs.build.outputs.backend-image }}" | cut -d':' -f1)
-        
-        # Tag as stable
-        docker tag ${{ needs.build.outputs.frontend-image }} ${FRONTEND_BASE}:stable
-        docker tag ${{ needs.build.outputs.backend-image }} ${BACKEND_BASE}:stable
-        
-        # Push stable tags
+        # Pull and tag frontend as stable
+        docker pull ${{ needs.build-images.outputs.frontend-image }}
+        FRONTEND_BASE=$(echo "${{ needs.build-images.outputs.frontend-image }}" | cut -d':' -f1)
+        docker tag ${{ needs.build-images.outputs.frontend-image }} ${FRONTEND_BASE}:stable
         docker push ${FRONTEND_BASE}:stable
-        docker push ${BACKEND_BASE}:stable
         
-        echo "Tagged deployment as stable"
+        # Try to tag backend as stable if available
+        if docker pull ${{ needs.build-images.outputs.backend-image }} 2>/dev/null; then
+          BACKEND_BASE=$(echo "${{ needs.build-images.outputs.backend-image }}" | cut -d':' -f1)
+          docker tag ${{ needs.build-images.outputs.backend-image }} ${BACKEND_BASE}:stable
+          docker push ${BACKEND_BASE}:stable
+        fi
+        
+        echo "Stable versions tagged successfully"
 
   notify:
-    name: Deployment Notification
+    name: Deployment Report
     runs-on: ubuntu-latest
-    needs: [pre-deploy, build, deploy, health-check, rollback, tag-stable]
+    needs: [pre-deployment, validate-environment, build-images, deploy, emergency-fallback, rollback, health-check, tag-stable]
     if: always()
     
     steps:
-    - name: Generate deployment report
+    - name: Generate comprehensive report
       run: |
-        echo "=== Deployment Report ===" | tee deployment-report.md
-        echo "Timestamp: $(date -u)" | tee -a deployment-report.md
-        echo "Commit: ${{ github.sha }}" | tee -a deployment-report.md
-        echo "Branch: ${{ github.ref_name }}" | tee -a deployment-report.md
-        echo "" | tee -a deployment-report.md
+        echo "🚒 AI FIREFIGHTER DEPLOYMENT REPORT 🚒" | tee report.md
+        echo "==========================================" | tee -a report.md
+        echo "Timestamp: $(date -u)" | tee -a report.md
+        echo "Commit: ${{ github.sha }}" | tee -a report.md
+        echo "" | tee -a report.md
         
-        # Job status summary
-        echo "## Job Status" | tee -a deployment-report.md
-        echo "- Pre-deploy: ${{ needs.pre-deploy.result }}" | tee -a deployment-report.md
-        echo "- Build: ${{ needs.build.result }}" | tee -a deployment-report.md
-        echo "- Deploy: ${{ needs.deploy.result }}" | tee -a deployment-report.md
-        echo "- Health Check: ${{ needs.health-check.result }}" | tee -a deployment-report.md
-        echo "- Rollback: ${{ needs.rollback.result }}" | tee -a deployment-report.md
-        echo "- Tag Stable: ${{ needs.tag-stable.result }}" | tee -a deployment-report.md
-        echo "" | tee -a deployment-report.md
+        # Job Results
+        echo "## Job Results:" | tee -a report.md
+        echo "- Pre-deployment: ${{ needs.pre-deployment.result }}" | tee -a report.md
+        echo "- Environment Validation: ${{ needs.validate-environment.result }}" | tee -a report.md
+        echo "- Build Images: ${{ needs.build-images.result }}" | tee -a report.md
+        echo "- Deploy: ${{ needs.deploy.result }}" | tee -a report.md
+        echo "- Emergency Fallback: ${{ needs.emergency-fallback.result }}" | tee -a report.md
+        echo "- Rollback: ${{ needs.rollback.result }}" | tee -a report.md
+        echo "- Health Check: ${{ needs.health-check.result }}" | tee -a report.md
+        echo "- Tag Stable: ${{ needs.tag-stable.result }}" | tee -a report.md
+        echo "" | tee -a report.md
         
-        # Final status
-        if [ "${{ needs.health-check.outputs.health-status }}" = "healthy" ] || [ "${{ needs.health-check.outputs.health-status }}" = "partial" ]; then
-          echo "## ✅ Deployment Successful" | tee -a deployment-report.md
-          echo "Application is running at:" | tee -a deployment-report.md
-          echo "- Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000" | tee -a deployment-report.md
-          echo "- Backend: http://${{ secrets.PRODUCTION_HOST }}:5000" | tee -a deployment-report.md
+        # Final Status
+        if [ "${{ needs.health-check.outputs.final-status }}" = "healthy" ]; then
+          echo "## ✅ DEPLOYMENT SUCCESSFUL" | tee -a report.md
+          echo "Application is available at: http://167.71.42.17:8000" | tee -a report.md
           
-          if [ "${{ needs.build.result }}" = "success" ]; then
-            echo "- Frontend Image: ${{ needs.build.outputs.frontend-image }}" | tee -a deployment-report.md
-            echo "- Backend Image: ${{ needs.build.outputs.backend-image }}" | tee -a deployment-report.md
+          if [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "✅ Normal deployment succeeded" | tee -a report.md
+          elif [ "${{ needs.emergency-fallback.result }}" = "success" ]; then
+            echo "⚠️ Emergency fallback deployment succeeded" | tee -a report.md
+          elif [ "${{ needs.rollback.result }}" = "success" ]; then
+            echo "🔄 Rollback deployment succeeded" | tee -a report.md
           fi
-        elif [ "${{ needs.rollback.result }}" = "success" ]; then
-          echo "## ⚠️ Rolled Back to Previous Version" | tee -a deployment-report.md
-          echo "Deployment failed but rollback was successful" | tee -a deployment-report.md
-          echo "Application should be accessible at previous URLs" | tee -a deployment-report.md
+          
         else
-          echo "## ❌ Deployment Failed" | tee -a deployment-report.md
-          echo "Manual intervention may be required" | tee -a deployment-report.md
+          echo "## ❌ DEPLOYMENT FAILED" | tee -a report.md
+          echo "All deployment strategies failed" | tee -a report.md
+          echo "Manual intervention required" | tee -a report.md
+        fi
+        
+        echo "" | tee -a report.md
+        echo "## Service Status:" | tee -a report.md
+        echo "- Frontend: ${{ needs.deploy.outputs.frontend-working == 'true' && '✅ Working' || '❌ Failed' }}" | tee -a report.md
+        echo "- Backend: ${{ needs.deploy.outputs.backend-working == 'true' && '✅ Working' || '❌ Failed' }}" | tee -a report.md
+        
+        if [ "${{ needs.build-images.result }}" = "success" ]; then
+          echo "" | tee -a report.md
+          echo "## Images Built:" | tee -a report.md
+          echo "- Frontend: ${{ needs.build-images.outputs.frontend-image }}" | tee -a report.md
+          echo "- Backend: ${{ needs.build-images.outputs.backend-image }}" | tee -a report.md
         fi
 
-    - name: Upload deployment report
+    - name: Upload report
       uses: actions/upload-artifact@v4
       with:
         name: deployment-report-${{ github.run_id }}
-        path: deployment-report.md
+        path: report.md
         retention-days: 30

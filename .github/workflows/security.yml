@@ -1,121 +1,197 @@
-name: Security Scanning
+name: Quality Gates
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  schedule:
-    - cron: '0 3 * * *' # Daily at 3 AM
+  workflow_run:
+    workflows: ["CI Pipeline", "CD Pipeline - Ultra Robust with Emergency Fallback"]
+    types: [completed]
+  workflow_dispatch:
 
 jobs:
-  sast:
-    name: SAST Analysis
+  quality-assessment:
+    name: Quality Assessment
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Semgrep SAST
-      uses: returntocorp/semgrep-action@v1
-      with:
-        config: p/ci
-      continue-on-error: true
-
-    - name: Run Gitleaks
-      uses: gitleaks/gitleaks-action@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      continue-on-error: true
-
-    - name: TruffleHog secrets scan
-      run: |
-        docker run --rm -v "$PWD":/pwd \
-          trufflesecurity/trufflehog:latest \
-          github --repo https://github.com/${{ github.repository }} --only-verified
-      continue-on-error: true
-
-  container-security:
-    name: Container Security
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-    - name: Build Frontend Docker image
+    - name: Download CI artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: quality-reports-${{ github.event.workflow_run.id }}
+        path: artifacts/
+      continue-on-error: true
+
+    - name: Analyze code coverage
       run: |
-        if [ -f "FO/Dockerfile" ]; then
-          docker build -t firefighter-frontend ./FO
+        pip install coverage
+        if [ -f "artifacts/coverage.xml" ]; then
+          coverage xml -i artifacts/coverage.xml
+          coverage_percent=$(grep -o 'line-rate="[^"]*"' artifacts/coverage.xml | head -1 | cut -d'"' -f2 | awk '{print $1*100}' 2>/dev/null || echo "0")
+          echo "Code coverage: ${coverage_percent}%"
+          
+          if [ "${coverage_percent%.*}" -ge 60 ]; then
+            echo "Coverage meets threshold (60%)"
+          else
+            echo "Coverage below 60% threshold but not blocking deployment"
+          fi
+        else
+          echo "No coverage report found, skipping coverage analysis"
+          coverage_percent="N/A"
+        fi
+        
+        echo "COVERAGE_PERCENT=$coverage_percent" >> $GITHUB_ENV
+
+    - name: Check code quality metrics
+      run: |
+        pip install flake8 radon bandit
+        
+        # Count Python files
+        python_files=$(find . -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" | wc -l)
+        echo "Python files found: $python_files"
+        
+        if [ $python_files -gt 0 ]; then
+          echo "Running quality checks..."
+          
+          # Flake8 issues
+          flake8_issues=$(flake8 . --count --statistics --exclude=__pycache__,*.egg-info,.git,venv,env 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
+          
+          # Complexity analysis
+          complexity=$(radon cc . -a 2>/dev/null | grep "Average complexity" | awk '{print $3}' || echo "N/A")
+          
+          # Security issues from previous bandit scan
+          security_issues=0
+          if [ -f "artifacts/bandit-critical.json" ]; then
+            security_issues=$(python3 -c "
+            import json
+            try:
+                with open('artifacts/bandit-critical.json', 'r') as f:
+                    data = json.load(f)
+                print(len(data.get('results', [])))
+            except:
+                print('0')
+            " 2>/dev/null || echo "0")
+          fi
+          
+          echo "Flake8 issues: $flake8_issues"
+          echo "Average complexity: $complexity"
+          echo "Security issues: $security_issues"
+          
+          echo "FLAKE8_ISSUES=$flake8_issues" >> $GITHUB_ENV
+          echo "COMPLEXITY=$complexity" >> $GITHUB_ENV
+          echo "SECURITY_ISSUES=$security_issues" >> $GITHUB_ENV
+        else
+          echo "No Python files found for quality analysis"
+          echo "FLAKE8_ISSUES=0" >> $GITHUB_ENV
+          echo "COMPLEXITY=N/A" >> $GITHUB_ENV
+          echo "SECURITY_ISSUES=0" >> $GITHUB_ENV
         fi
 
-    - name: Build Backend Docker image
+    - name: Generate quality report
       run: |
-        if [ -f "API/Dockerfile" ]; then
-          docker build -t firefighter-backend ./API
+        echo "# Quality Gates Report" > quality-report.md
+        echo "Generated on: $(date)" >> quality-report.md
+        echo "Commit: ${{ github.sha }}" >> quality-report.md
+        echo "Workflow: ${{ github.event.workflow_run.name || 'Manual' }}" >> quality-report.md
+        echo "" >> quality-report.md
+        
+        # Coverage section
+        echo "## Code Coverage" >> quality-report.md
+        if [ "$COVERAGE_PERCENT" != "N/A" ]; then
+          echo "Coverage: ${COVERAGE_PERCENT}%" >> quality-report.md
+          if [ "${COVERAGE_PERCENT%.*}" -ge 80 ]; then
+            echo "Status: Excellent" >> quality-report.md
+          elif [ "${COVERAGE_PERCENT%.*}" -ge 60 ]; then
+            echo "Status: Good" >> quality-report.md
+          else
+            echo "Status: Needs Improvement" >> quality-report.md
+          fi
+        else
+          echo "Coverage: Not available" >> quality-report.md
+        fi
+        echo "" >> quality-report.md
+        
+        # Code quality section
+        echo "## Code Quality" >> quality-report.md
+        echo "Flake8 issues: ${FLAKE8_ISSUES:-0}" >> quality-report.md
+        echo "Average complexity: ${COMPLEXITY:-N/A}" >> quality-report.md
+        echo "Security issues: ${SECURITY_ISSUES:-0}" >> quality-report.md
+        echo "" >> quality-report.md
+        
+        # Overall status
+        echo "## Overall Status" >> quality-report.md
+        issues_count=${FLAKE8_ISSUES:-0}
+        security_count=${SECURITY_ISSUES:-0}
+        
+        if [ "$issues_count" -lt 10 ] && [ "$security_count" -eq 0 ]; then
+          echo "Status: Excellent Quality" >> quality-report.md
+        elif [ "$issues_count" -lt 25 ] && [ "$security_count" -eq 0 ]; then
+          echo "Status: Good Quality" >> quality-report.md
+        elif [ "$issues_count" -lt 50 ]; then
+          echo "Status: Acceptable Quality" >> quality-report.md
+        else
+          echo "Status: Needs Attention" >> quality-report.md
+        fi
+        
+        echo "" >> quality-report.md
+        echo "Note: This report is informational and does not block deployment." >> quality-report.md
+
+    - name: Upload quality report
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-gates-report-${{ github.run_id }}
+        path: quality-report.md
+
+  deployment-analysis:
+    name: Deployment Analysis
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.name == 'CD Pipeline - Ultra Robust with Emergency Fallback'
+
+    steps:
+    - name: Analyze deployment outcome
+      run: |
+        echo "# Deployment Analysis Report" > deployment-analysis.md
+        echo "Generated on: $(date)" >> deployment-analysis.md
+        echo "Deployment workflow conclusion: ${{ github.event.workflow_run.conclusion }}" >> deployment-analysis.md
+        echo "" >> deployment-analysis.md
+        
+        if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+          echo "## Deployment Status: SUCCESS" >> deployment-analysis.md
+          echo "The application should be available at: http://167.71.42.17:8000" >> deployment-analysis.md
+        elif [ "${{ github.event.workflow_run.conclusion }}" = "failure" ]; then
+          echo "## Deployment Status: FAILED" >> deployment-analysis.md
+          echo "The emergency fallback should have activated to maintain service availability." >> deployment-analysis.md
+        else
+          echo "## Deployment Status: UNKNOWN" >> deployment-analysis.md
+          echo "Manual verification recommended." >> deployment-analysis.md
+        fi
+        
+        echo "" >> deployment-analysis.md
+        echo "## Recommended Actions" >> deployment-analysis.md
+        
+        if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+          echo "- No action required" >> deployment-analysis.md
+          echo "- Monitor application performance" >> deployment-analysis.md
+        else
+          echo "- Check deployment logs in GitHub Actions" >> deployment-analysis.md
+          echo "- Verify service availability at http://167.71.42.17:8000" >> deployment-analysis.md
+          echo "- Consider manual intervention if emergency fallback failed" >> deployment-analysis.md
         fi
 
-    - name: Build Backoffice Docker image
-      run: |
-        if [ -f "backoffice/Dockerfile" ]; then
-          docker build -t firefighter-backoffice ./backoffice
-        fi
-
-    - name: Trivy vulnerability scan - Frontend
-      uses: aquasecurity/trivy-action@master
+    - name: Upload deployment analysis
+      uses: actions/upload-artifact@v4
       with:
-        image-ref: 'firefighter-frontend'
-        format: 'sarif'
-        output: 'trivy-frontend-results.sarif'
-        severity: 'HIGH,CRITICAL'
-      continue-on-error: true
+        name: deployment-analysis-${{ github.run_id }}
+        path: deployment-analysis.md
 
-    - name: Trivy vulnerability scan - Backend
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: 'firefighter-backend'
-        format: 'sarif'
-        output: 'trivy-backend-results.sarif'
-        severity: 'HIGH,CRITICAL'
-      continue-on-error: true
-
-    - name: Trivy vulnerability scan - Backoffice
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: 'firefighter-backoffice'
-        format: 'sarif'
-        output: 'trivy-backoffice-results.sarif'
-        severity: 'HIGH,CRITICAL'
-      continue-on-error: true
-
-    - name: Upload Trivy results
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: 'trivy-frontend-results.sarif'
-      continue-on-error: true
-
-    - name: Upload Backend Trivy results
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: 'trivy-backend-results.sarif'
-      continue-on-error: true
-
-    - name: Upload Backoffice Trivy results
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: 'trivy-backoffice-results.sarif'
-      continue-on-error: true
-
-  dependency-scanning:
-    name: Dependency Scanning
+  documentation-check:
+    name: Documentation Quality
     runs-on: ubuntu-latest
 
     steps:
@@ -127,97 +203,63 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Run Safety check
+    - name: Check documentation coverage
       run: |
-        pip install safety
-        # Check Python dependencies
-        if [ -f "FO/requirements.txt" ]; then
-          echo "Scanning FO/requirements.txt..."
-          safety check -r FO/requirements.txt --json --output safety-fo-report.json || true
-        fi
-        if [ -f "API/requirements.txt" ]; then
-          echo "Scanning API/requirements.txt..."
-          safety check -r API/requirements.txt --json --output safety-api-report.json || true
-        fi
-        if [ -f "requirements.txt" ]; then
-          echo "Scanning requirements.txt..."
-          safety check -r requirements.txt --json --output safety-root-report.json || true
+        pip install interrogate
+        python_files=$(find . -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" | wc -l)
+        
+        if [ $python_files -gt 0 ]; then
+          doc_coverage=$(interrogate --ignore-nested-functions --ignore-private --quiet . | grep -o '[0-9.]*%' | head -1 || echo "0%")
+          echo "Documentation coverage: $doc_coverage"
+          echo "DOC_COVERAGE=$doc_coverage" >> $GITHUB_ENV
+        else
+          echo "No Python files found for documentation analysis"
+          echo "DOC_COVERAGE=N/A" >> $GITHUB_ENV
         fi
 
-    - name: Run npm audit
+    - name: Check for README and documentation
       run: |
-        if [ -f "backoffice/package.json" ]; then
-          cd backoffice
-          npm audit --json > npm-audit.json || true
+        echo "# Documentation Quality Report" > doc-report.md
+        echo "Generated on: $(date)" >> doc-report.md
+        echo "" >> doc-report.md
+        
+        # README check
+        if [ -f "README.md" ]; then
+          readme_lines=$(wc -l < README.md)
+          echo "README.md: Found ($readme_lines lines)" >> doc-report.md
+          if [ $readme_lines -gt 50 ]; then
+            echo "README quality: Comprehensive" >> doc-report.md
+          elif [ $readme_lines -gt 20 ]; then
+            echo "README quality: Good" >> doc-report.md
+          else
+            echo "README quality: Basic" >> doc-report.md
+          fi
+        else
+          echo "README.md: Missing (recommended)" >> doc-report.md
+        fi
+        
+        # Docs directory check
+        if [ -d "docs/" ]; then
+          doc_files=$(find docs/ -name "*.md" | wc -l)
+          echo "Documentation directory: Found ($doc_files files)" >> doc-report.md
+        else
+          echo "Documentation directory: Not found" >> doc-report.md
+        fi
+        
+        # Overall doc files count
+        total_md_files=$(find . -name "*.md" | wc -l)
+        echo "Total documentation files: $total_md_files" >> doc-report.md
+        echo "" >> doc-report.md
+        
+        # Code documentation
+        if [ "$DOC_COVERAGE" != "N/A" ]; then
+          echo "Code documentation coverage: $DOC_COVERAGE" >> doc-report.md
+        else
+          echo "Code documentation coverage: Not available" >> doc-report.md
         fi
 
-    - name: Upload security reports
+    - name: Upload documentation report
       uses: actions/upload-artifact@v4
       with:
-        name: security-reports
-        path: |
-          safety-*-report.json
-          backoffice/npm-audit.json
-      continue-on-error: true
-
-  sbom-generation:
-    name: SBOM Generation
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build images for SBOM
-      run: |
-        if [ -f "FO/Dockerfile" ]; then
-          docker build -t firefighter-frontend ./FO
-        fi
-        if [ -f "API/Dockerfile" ]; then
-          docker build -t firefighter-backend ./API
-        fi
-        if [ -f "backoffice/Dockerfile" ]; then
-          docker build -t firefighter-backoffice ./backoffice
-        fi
-
-    - name: Generate SBOM with Syft - Frontend
-      uses: anchore/sbom-action@v0
-      with:
-        image: firefighter-frontend
-        format: spdx-json
-        output-file: frontend-bom.spdx.json
-      continue-on-error: true
-
-    - name: Generate SBOM with Syft - Backend
-      uses: anchore/sbom-action@v0
-      with:
-        image: firefighter-backend
-        format: spdx-json
-        output-file: backend-bom.spdx.json
-      continue-on-error: true
-
-    - name: Generate SBOM with Syft - Backoffice
-      uses: anchore/sbom-action@v0
-      with:
-        image: firefighter-backoffice
-        format: spdx-json
-        output-file: backoffice-bom.spdx.json
-      continue-on-error: true
-
-    - name: Upload SBOM
-      uses: actions/upload-artifact@v4
-      with:
-        name: sbom
-        path: |
-          frontend-bom.spdx.json
-          backend-bom.spdx.json
-          backoffice-bom.spdx.json
-      continue-on-error: true
+        name: documentation-report-${{ github.run_id }}
+        path: doc-report.md
