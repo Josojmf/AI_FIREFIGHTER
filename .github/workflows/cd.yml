@@ -632,7 +632,7 @@ jobs:
     name: Rollback to Previous Version
     runs-on: ubuntu-latest
     needs: [deploy, backup_current, emergency_fallback]
-    if: always() && needs.deploy.outputs.deployment_status != 'true' && needs.emergency_fallback.outputs.emergency_status != 'success' && needs.backup_current.outputs.backup_available == 'true'
+    if: (needs.deploy.result != 'success' || needs.deploy.outputs.deployment_status != 'true') && needs.emergency_fallback.result != 'success' && needs.backup_current.outputs.backup_available == 'true'
 
     steps:
       - name: Setup SSH
