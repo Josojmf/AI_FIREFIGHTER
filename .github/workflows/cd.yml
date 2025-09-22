@@ -80,20 +80,29 @@ jobs:
       run: |
         errors=()
         
-        required_secrets=(
-          "PRODUCTION_SSH_KEY"
-          "PRODUCTION_HOST" 
-          "PRODUCTION_USER"
-          "DB_USERNAME"
-          "DB_PASSWORD"
-          "DB_CLUSTER"
-        )
+        if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+          errors+=("PRODUCTION_SSH_KEY is not set")
+        fi
         
-        for secret in "${required_secrets[@]}"; do
-          if [ -z "$(eval echo \${{ secrets.$secret }})" ]; then
-            errors+=("$secret is not set")
-          fi
-        done
+        if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
+          errors+=("PRODUCTION_HOST is not set")
+        fi
+        
+        if [ -z "${{ secrets.PRODUCTION_USER }}" ]; then
+          errors+=("PRODUCTION_USER is not set")
+        fi
+        
+        if [ -z "${{ secrets.DB_USERNAME }}" ]; then
+          errors+=("DB_USERNAME is not set")
+        fi
+        
+        if [ -z "${{ secrets.DB_PASSWORD }}" ]; then
+          errors+=("DB_PASSWORD is not set")
+        fi
+        
+        if [ -z "${{ secrets.DB_CLUSTER }}" ]; then
+          errors+=("DB_CLUSTER is not set")
+        fi
         
         if [ ${#errors[@]} -ne 0 ]; then
           echo "Missing required secrets:"
@@ -113,7 +122,7 @@ jobs:
       packages: write
     outputs:
       frontend-image: ${{ steps.frontend-image.outputs.image }}
-      backend-image: ${{ steps.backend-image.outputs.image }}
+      backend-image: ${{ steps.backend-image-name.outputs.image }}
       build-success: ${{ steps.build-status.outputs.success }}
     
     steps:
@@ -205,7 +214,7 @@ jobs:
         echo "image=${{ steps.image-names.outputs.frontend-image }}:${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}" >> $GITHUB_OUTPUT
         
     - name: Output backend image name
-      id: backend-image-name
+      id: backend-image-name  
       run: |
         echo "image=${{ steps.image-names.outputs.backend-image }}:${{ steps.image-names.outputs.timestamp }}-${{ steps.image-names.outputs.short-sha }}" >> $GITHUB_OUTPUT
 
@@ -258,12 +267,16 @@ jobs:
             # Export current images (mark as stable)
             source .env
             if [ ! -z \"\$FRONTEND_IMAGE\" ]; then
-              docker tag \"\$FRONTEND_IMAGE\" \"${{ steps.image-names.outputs.frontend-image }}:stable-$BACKUP_TIMESTAMP\" || true
-              docker push \"${{ steps.image-names.outputs.frontend-image }}:stable-$BACKUP_TIMESTAMP\" || true
+              REPO_OWNER_LOWER=\$(echo \"${{ github.repository_owner }}\" | tr '[:upper:]' '[:lower:]')
+              FRONTEND_BASE=\"${{ env.DOCKER_REGISTRY }}/\${REPO_OWNER_LOWER}/ai-firefighter-frontend\"
+              docker tag \"\$FRONTEND_IMAGE\" \"\$FRONTEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
+              docker push \"\$FRONTEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
             fi
             if [ ! -z \"\$BACKEND_IMAGE\" ]; then
-              docker tag \"\$BACKEND_IMAGE\" \"${{ steps.image-names.outputs.backend-image }}:stable-$BACKUP_TIMESTAMP\" || true
-              docker push \"${{ steps.image-names.outputs.backend-image }}:stable-$BACKUP_TIMESTAMP\" || true  
+              REPO_OWNER_LOWER=\$(echo \"${{ github.repository_owner }}\" | tr '[:upper:]' '[:lower:]')
+              BACKEND_BASE=\"${{ env.DOCKER_REGISTRY }}/\${REPO_OWNER_LOWER}/ai-firefighter-backend\"
+              docker tag \"\$BACKEND_IMAGE\" \"\$BACKEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
+              docker push \"\$BACKEND_BASE:stable-$BACKUP_TIMESTAMP\" || true
             fi
             
             echo 'Backup created successfully'
