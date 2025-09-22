@@ -168,8 +168,10 @@ jobs:
           SHORT_SHA=${GITHUB_SHA:0:7}
           BUILD_TAG="${TIMESTAMP}-${SHORT_SHA}"
 
-          FRONTEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_LOWER}/ai-firefighter-frontend"
-          BACKEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${REPO_LOWER}/ai-firefighter-backend"
+          FRONTEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-frontend"
+          BACKEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-backend"
+          FRONTEND_IMAGE=$(echo "$FRONTEND_IMAGE" | tr '[:upper:]' '[:lower:]')
+          BACKEND_IMAGE=$(echo "$BACKEND_IMAGE" | tr '[:upper:]' '[:lower:]')
 
           echo "frontend-base=${FRONTEND_IMAGE}" >> $GITHUB_OUTPUT
           echo "backend-base=${BACKEND_IMAGE}" >> $GITHUB_OUTPUT
@@ -368,84 +370,123 @@ jobs:
             chown -R ${{ secrets.PRODUCTION_USER }}:${{ secrets.PRODUCTION_USER }} /opt/firefighter-app
           "
 
-      - name: Upload deployment files to server
+      - name: Upload docker-compose to server
         run: |
           scp -o StrictHostKeyChecking=no deployment_files/docker-compose.yml ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
 
-      - name: Attempt normal deployment
+      - name: Purge ALL Docker services on server (requested)
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+            set -e
+            echo '*** PURGING ALL DOCKER SERVICES ***'
+            docker compose down --remove-orphans 2>/dev/null || docker-compose down --remove-orphans 2>/dev/null || true
+            docker stop \$(docker ps -aq) 2>/dev/null || true
+            docker rm \$(docker ps -aq) 2>/dev/null || true
+            docker network prune -f || true
+            docker volume prune -f || true
+          "
+
+      - name: Deploy (free ports, hotfix jwt if needed, start backend then frontend)
         id: deploy
         run: |
-          deployment_success="false"
-          frontend_ok="false"
-          backend_ok="false"
+          FRONTEND_IMAGE="${{ needs.build_images.outputs.frontend_image }}"
+          BACKEND_IMAGE="${{ needs.build_images.outputs.backend_image }}"
 
-          for attempt in 1 2; do
-            echo "Deployment attempt $attempt/2..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+            set -e
 
-            deployment_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-              cd /opt/firefighter-app
+            cd /opt/firefighter-app
 
-              # Login to registry
-              echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+            # 0) LIBERAR PUERTOS 8000/5000 y limpiar contenedores viejos
+            echo 'Freeing ports 8000/5000 if in use...'
+            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E '0.0.0.0:8000->|:8000->' | awk '{print \$1}' | xargs -r docker stop || true
+            docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E '0.0.0.0:5000->|:5000->' | awk '{print \$1}' | xargs -r docker stop || true
+            # emergencias antiguas
+            docker rm -f emergency-frontend emergency-backend 2>/dev/null || true
 
-              # Pull images
-              docker pull ${{ needs.build_images.outputs.frontend_image }}
-              docker pull ${{ needs.build_images.outputs.backend_image }}
+            # 1) Login y pull de imágenes
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.DOCKER_REGISTRY }} -u ${{ github.actor }} --password-stdin
+            docker pull $FRONTEND_IMAGE
+            docker pull $BACKEND_IMAGE
 
-              # Deploy
-              docker-compose down --timeout 30 || true
-              docker-compose up -d
-
-              # Wait and test
-              sleep 60
-
-              # Test services
-              frontend_status='FAIL'
-              backend_status='FAIL'
-
-              if curl -s --max-time 10 http://localhost:8000/ >/dev/null 2>&1; then
-                frontend_status='OK'
-              fi
-
-              if curl -s --max-time 10 http://localhost:5000/ >/dev/null 2>&1; then
-                backend_status='OK'
-              fi
-
-              echo \"FRONTEND_STATUS=\$frontend_status\"
-              echo \"BACKEND_STATUS=\$backend_status\"
-
-              if [ \"\$frontend_status\" = 'OK' ] && [ \"\$backend_status\" = 'OK' ]; then
-                echo 'DEPLOYMENT_SUCCESS'
-              else
-                echo 'DEPLOYMENT_FAILED'
-                docker-compose logs --tail=20
-              fi
-            " 2>&1)
-
-            echo "$deployment_result"
-
-            if echo "$deployment_result" | grep -q "FRONTEND_STATUS=OK"; then
-              frontend_ok="true"
+            # 2) Hotfix rápido si falta PyJWT en el backend
+            echo 'Checking PyJWT in backend image...'
+            if ! docker run --rm $BACKEND_IMAGE python -c 'import jwt' >/dev/null 2>&1; then
+              echo 'PyJWT missing. Building a small derived image with PyJWT...'
+              cat > Dockerfile.jwtfix <<EOF
+              FROM $BACKEND_IMAGE
+              RUN python -m pip install --no-cache-dir --upgrade pip && \
+                  pip install --no-cache-dir pyjwt
+              EOF
+              docker build -f Dockerfile.jwtfix -t backend:hotfix-jwt .
+              rm -f Dockerfile.jwtfix
+              # Sustituimos la imagen del backend en el docker-compose para esta ejecución
+              sed -i 's|image: .*ai-firefighter-backend.*|image: backend:hotfix-jwt|' docker-compose.yml
             fi
 
-            if echo "$deployment_result" | grep -q "BACKEND_STATUS=OK"; then
-              backend_ok="true"
+            # 3) Desplegar en orden: primero backend, esperar OK, luego frontend
+            docker-compose down --timeout 30 || true
+
+            echo 'Starting backend only...'
+            docker-compose up -d backend
+
+            echo 'Waiting backend to be reachable on :5000 (up to 120s)...'
+            for i in \$(seq 1 24); do
+              if curl -s --max-time 5 http://localhost:5000/ >/dev/null 2>&1; then
+                echo 'Backend is UP'
+                break
+              fi
+              sleep 5
+            done
+
+            if ! curl -s --max-time 5 http://localhost:5000/ >/dev/null 2>&1; then
+              echo 'Backend failed to start properly'
+              docker logs \$(docker ps -aq --filter name=firefighter-app-backend-1 | head -1) --tail=80 || true
+              echo 'FRONTEND_STATUS=FAIL'
+              echo 'BACKEND_STATUS=FAIL'
+              exit 1
             fi
 
-            if echo "$deployment_result" | grep -q "DEPLOYMENT_SUCCESS"; then
-              deployment_success="true"
-              break
+            echo 'Starting frontend...'
+            docker-compose up -d frontend
+
+            # 4) Comprobaciones finales
+            sleep 10
+            FRONTEND_STATUS='FAIL'
+            BACKEND_STATUS='FAIL'
+
+            if curl -s --max-time 10 http://localhost:8000/ >/dev/null 2>&1; then
+              FRONTEND_STATUS='OK'
+            fi
+            if curl -s --max-time 10 http://localhost:5000/ >/dev/null 2>&1; then
+              BACKEND_STATUS='OK'
             fi
 
-            echo "Attempt $attempt failed, will retry..."
-            sleep 30
-          done
+            echo \"FRONTEND_STATUS=\$FRONTEND_STATUS\"
+            echo \"BACKEND_STATUS=\$BACKEND_STATUS\"
+
+            if [ \"\$FRONTEND_STATUS\" = 'OK' ] && [ \"\$BACKEND_STATUS\" = 'OK' ]; then
+              echo 'DEPLOYMENT_SUCCESS'
+            else
+              echo 'DEPLOYMENT_FAILED'
+              docker-compose logs --tail=50 || true
+              exit 1
+            fi
+          " 2>&1 | tee deploy.log
+
+          # Parse resultados
+          frontend_ok=false
+          backend_ok=false
+          deployment_success=false
+          grep -q 'FRONTEND_STATUS=OK' deploy.log && frontend_ok=true
+          grep -q 'BACKEND_STATUS=OK' deploy.log && backend_ok=true
+          grep -q 'DEPLOYMENT_SUCCESS' deploy.log && deployment_success=true
 
           echo "status=$deployment_success" >> $GITHUB_OUTPUT
           echo "frontend_ok=$frontend_ok" >> $GITHUB_OUTPUT
           echo "backend_ok=$backend_ok" >> $GITHUB_OUTPUT
 
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_rsa deploy.log
 
   emergency_fallback:
     name: Emergency Fallback (All Services)
@@ -468,41 +509,77 @@ jobs:
         run: |
           echo "🚨 EXECUTING EMERGENCY FALLBACK - ALL SERVICES 🚨"
 
-          # Crear script local temporal
+          # Construimos nombres base de las imágenes a partir de las del build (sin tag) para probar :latest y luego :stable
+          FRONTEND_BASE="${{ env.DOCKER_REGISTRY }}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ai-firefighter-frontend"
+          BACKEND_BASE="${{ env.DOCKER_REGISTRY }}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ai-firefighter-backend"
+
+          # Script local temporal que hace: login GHCR, limpia, intenta latest y si falla intenta stable
           cat > emergency-deploy.sh << 'EOF'
           #!/bin/bash
+          set -e
+
           echo '🚨 EMERGENCY DEPLOYMENT - ALL SERVICES 🚨'
+
+          FRONTEND_BASE="$1"
+          BACKEND_BASE="$2"
+          GHCR_USER="$3"
+          GHCR_PAT="$4"
 
           # Quitar CRLF por si el archivo viene de Windows
           sed -i 's/\r$//' "$0" 2>/dev/null || true
 
           # Parar todo
-          docker-compose down --timeout 30 2>/dev/null || true
+          docker compose down --timeout 30 2>/dev/null || docker-compose down --timeout 30 2>/dev/null || true
           docker stop $(docker ps -aq) 2>/dev/null || true
           docker rm $(docker ps -aq) 2>/dev/null || true
 
-          # Login al registry (best effort)
-          if command -v docker >/dev/null 2>&1; then
-            echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin 2>/dev/null || true
+          # Login a GHCR con credenciales explícitas
+          if [ -n "$GHCR_USER" ] && [ -n "$GHCR_PAT" ]; then
+            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          else
+            echo "⚠️ GHCR_USER / GHCR_PAT no configurados; continuaré y puede fallar la descarga de imágenes privadas"
           fi
 
-          # Backend estable
+          # Función: intenta pull TAG1 y si falla prueba TAG2
+          pull_with_fallback () {
+            local base="$1"
+            local tag1="$2"
+            local tag2="$3"
+            if docker pull "$base:$tag1"; then
+              echo "$base:$tag1"
+              return 0
+            fi
+            if docker pull "$base:$tag2"; then
+              echo "$base:$tag2"
+              return 0
+            fi
+            return 1
+          }
+
+          echo "🔎 Intentando obtener imágenes (preferencia :latest, fallback :stable)..."
+          FRONTEND_IMG=$(pull_with_fallback "$FRONTEND_BASE" "latest" "stable") || { echo "❌ No pude descargar frontend ni con :latest ni con :stable"; exit 1; }
+          BACKEND_IMG=$(pull_with_fallback "$BACKEND_BASE" "latest" "stable") || { echo "❌ No pude descargar backend ni con :latest ni con :stable"; exit 1; }
+
+          echo "✅ Usando FRONTEND=$FRONTEND_IMG"
+          echo "✅ Usando BACKEND=$BACKEND_IMG"
+
+          # Backend primero
           echo 'Starting emergency backend...'
           docker run -d --name emergency-backend -p 5000:5000 \
-            -e DB_USERNAME="$1" \
-            -e DB_PASSWORD="$2" \
-            -e DB_CLUSTER="$3" \
+            -e DB_USERNAME="${DB_USERNAME}" \
+            -e DB_PASSWORD="${DB_PASSWORD}" \
+            -e DB_CLUSTER="${DB_CLUSTER}" \
             -e FLASK_ENV=production \
             --restart unless-stopped \
-            ghcr.io/josojmf/ai-firefighter-backend:stable || true
+            "$BACKEND_IMG" || true
 
-          # Frontend estable
+          # Frontend
           echo 'Starting emergency frontend...'
           docker run -d --name emergency-frontend -p 8000:8000 \
             -e FLASK_ENV=production \
             -e API_BASE_URL=http://localhost:5000/api \
             --restart unless-stopped \
-            ghcr.io/josojmf/ai-firefighter-frontend:stable || true
+            "$FRONTEND_IMG" || true
 
           # Esperar y comprobar
           sleep 30
@@ -535,13 +612,20 @@ jobs:
             exit 1
           fi
           EOF
+          chmod +x emergency-deploy.sh
 
-          # Subir y ejecutar en servidor
+          # Subir y ejecutar en servidor con secrets para login
           scp -o StrictHostKeyChecking=no emergency-deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
           ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-            chmod +x /opt/firefighter-app/emergency-deploy.sh
-            sed -i 's/\r$//' /opt/firefighter-app/emergency-deploy.sh || true
-            /opt/firefighter-app/emergency-deploy.sh '${{ secrets.DB_USERNAME }}' '${{ secrets.DB_PASSWORD }}' '${{ secrets.DB_CLUSTER }}'
+            cd /opt/firefighter-app
+            chmod +x emergency-deploy.sh
+            sed -i 's/\r$//' emergency-deploy.sh || true
+            FRONTEND_BASE='${FRONTEND_BASE}'
+            BACKEND_BASE='${BACKEND_BASE}'
+            GHCR_USER='${{ secrets.GHCR_USER }}'
+            GHCR_PAT='${{ secrets.GHCR_PAT }}'
+            DB_USERNAME='${{ secrets.DB_USERNAME }}' DB_PASSWORD='${{ secrets.DB_PASSWORD }}' DB_CLUSTER='${{ secrets.DB_CLUSTER }}' \
+              ./emergency-deploy.sh \"\$FRONTEND_BASE\" \"\$BACKEND_BASE\" \"\$GHCR_USER\" \"\$GHCR_PAT\"
           " 2>&1 | tee emergency.log
 
           if grep -q "EMERGENCY SUCCESS" emergency.log; then

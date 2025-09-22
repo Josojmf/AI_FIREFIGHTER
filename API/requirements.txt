@@ -19,3 +19,6 @@ requests==2.31.0
 
 # Production server
 gunicorn==21.2.0
+
+# JWT for authentication
+flask-jwt-extended==4.4.4
