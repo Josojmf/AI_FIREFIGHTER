@@ -413,8 +413,8 @@ jobs:
             echo 'Checking PyJWT in backend image...'
             if ! docker run --rm $BACKEND_IMAGE python -c 'import jwt' >/dev/null 2>&1; then
               echo 'PyJWT missing. Building a small derived image with PyJWT...'
-              cat > Dockerfile.jwtfix <<EOF
-              FROM $BACKEND_IMAGE
+              cat > Dockerfile.jwtfix <<'EOF'
+              FROM '"$BACKEND_IMAGE"'
               RUN python -m pip install --no-cache-dir --upgrade pip && \
                   pip install --no-cache-dir pyjwt
               EOF
@@ -509,11 +509,9 @@ jobs:
         run: |
           echo "🚨 EXECUTING EMERGENCY FALLBACK - ALL SERVICES 🚨"
 
-          # Construimos nombres base de las imágenes a partir de las del build (sin tag) para probar :latest y luego :stable
           FRONTEND_BASE="${{ env.DOCKER_REGISTRY }}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ai-firefighter-frontend"
           BACKEND_BASE="${{ env.DOCKER_REGISTRY }}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ai-firefighter-backend"
 
-          # Script local temporal que hace: login GHCR, limpia, intenta latest y si falla intenta stable
           cat > emergency-deploy.sh << 'EOF'
           #!/bin/bash
           set -e
@@ -524,6 +522,8 @@ jobs:
           BACKEND_BASE="$2"
           GHCR_USER="$3"
           GHCR_PAT="$4"
+          GITHUB_ACTOR_IN="$5"
+          GITHUB_TOKEN_IN="$6"
 
           # Quitar CRLF por si el archivo viene de Windows
           sed -i 's/\r$//' "$0" 2>/dev/null || true
@@ -533,32 +533,34 @@ jobs:
           docker stop $(docker ps -aq) 2>/dev/null || true
           docker rm $(docker ps -aq) 2>/dev/null || true
 
-          # Login a GHCR con credenciales explícitas
+          # Login a GHCR: PAT -> GITHUB_TOKEN -> anónimo
+          logged_in=false
           if [ -n "$GHCR_USER" ] && [ -n "$GHCR_PAT" ]; then
-            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-          else
-            echo "⚠️ GHCR_USER / GHCR_PAT no configurados; continuaré y puede fallar la descarga de imágenes privadas"
+            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin && logged_in=true || true
+          fi
+          if [ "$logged_in" != true ] && [ -n "$GITHUB_ACTOR_IN" ] && [ -n "$GITHUB_TOKEN_IN" ]; then
+            echo "$GITHUB_TOKEN_IN" | docker login ghcr.io -u "$GITHUB_ACTOR_IN" --password-stdin && logged_in=true || true
+          fi
+          if [ "$logged_in" != true ]; then
+            echo "⚠️ Sin credenciales válidas para GHCR; intentaré pulls anónimos (solo funcionará si los paquetes son públicos)."
           fi
 
-          # Función: intenta pull TAG1 y si falla prueba TAG2
           pull_with_fallback () {
             local base="$1"
             local tag1="$2"
             local tag2="$3"
-            if docker pull "$base:$tag1"; then
-              echo "$base:$tag1"
-              return 0
+            if docker pull "$base:$tag1" >/dev/null 2>&1; then
+              echo "$base:$tag1"; return 0
             fi
-            if docker pull "$base:$tag2"; then
-              echo "$base:$tag2"
-              return 0
+            if docker pull "$base:$tag2" >/dev/null 2>&1; then
+              echo "$base:$tag2"; return 0
             fi
             return 1
           }
 
           echo "🔎 Intentando obtener imágenes (preferencia :latest, fallback :stable)..."
-          FRONTEND_IMG=$(pull_with_fallback "$FRONTEND_BASE" "latest" "stable") || { echo "❌ No pude descargar frontend ni con :latest ni con :stable"; exit 1; }
-          BACKEND_IMG=$(pull_with_fallback "$BACKEND_BASE" "latest" "stable") || { echo "❌ No pude descargar backend ni con :latest ni con :stable"; exit 1; }
+          FRONTEND_IMG="$(pull_with_fallback "$FRONTEND_BASE" "latest" "stable")" || { echo "❌ No pude descargar frontend (:latest ni :stable)"; exit 1; }
+          BACKEND_IMG="$(pull_with_fallback "$BACKEND_BASE" "latest" "stable")" || { echo "❌ No pude descargar backend (:latest ni :stable)"; exit 1; }
 
           echo "✅ Usando FRONTEND=$FRONTEND_IMG"
           echo "✅ Usando BACKEND=$BACKEND_IMG"
@@ -581,40 +583,24 @@ jobs:
             --restart unless-stopped \
             "$FRONTEND_IMG" || true
 
-          # Esperar y comprobar
           sleep 30
 
           FRONTEND_OK=false
           BACKEND_OK=false
-
-          if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
-            echo '✅ Frontend is running'
-            FRONTEND_OK=true
-          else
-            echo '❌ Frontend failed'
-          fi
-
-          if curl -s --max-time 10 http://localhost:5000/ >/dev/null; then
-            echo '✅ Backend is running'
-            BACKEND_OK=true
-          else
-            echo '❌ Backend failed'
-          fi
+          curl -s --max-time 10 http://localhost:8000/ >/dev/null && FRONTEND_OK=true || true
+          curl -s --max-time 10 http://localhost:5000/ >/dev/null && BACKEND_OK=true || true
 
           if [ "$FRONTEND_OK" = true ] && [ "$BACKEND_OK" = true ]; then
-            echo '✅ EMERGENCY SUCCESS - All services running'
-            exit 0
+            echo '✅ EMERGENCY SUCCESS - All services running'; exit 0
           elif [ "$FRONTEND_OK" = true ]; then
-            echo '⚠️ EMERGENCY PARTIAL SUCCESS - Frontend running'
-            exit 0
+            echo '⚠️ EMERGENCY PARTIAL SUCCESS - Frontend running'; exit 0
           else
-            echo '❌ EMERGENCY FAILED'
-            exit 1
+            echo '❌ EMERGENCY FAILED'; exit 1
           fi
           EOF
           chmod +x emergency-deploy.sh
 
-          # Subir y ejecutar en servidor con secrets para login
+          # Subir y ejecutar en servidor, pasando PAT y también el GITHUB_TOKEN del job como fallback
           scp -o StrictHostKeyChecking=no emergency-deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
           ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
             cd /opt/firefighter-app
@@ -624,8 +610,10 @@ jobs:
             BACKEND_BASE='${BACKEND_BASE}'
             GHCR_USER='${{ secrets.GHCR_USER }}'
             GHCR_PAT='${{ secrets.GHCR_PAT }}'
+            GITHUB_ACTOR_IN='${{ github.actor }}'
+            GITHUB_TOKEN_IN='${{ secrets.GITHUB_TOKEN }}'
             DB_USERNAME='${{ secrets.DB_USERNAME }}' DB_PASSWORD='${{ secrets.DB_PASSWORD }}' DB_CLUSTER='${{ secrets.DB_CLUSTER }}' \
-              ./emergency-deploy.sh \"\$FRONTEND_BASE\" \"\$BACKEND_BASE\" \"\$GHCR_USER\" \"\$GHCR_PAT\"
+              ./emergency-deploy.sh \"\$FRONTEND_BASE\" \"\$BACKEND_BASE\" \"\$GHCR_USER\" \"\$GHCR_PAT\" \"\$GITHUB_ACTOR_IN\" \"\$GITHUB_TOKEN_IN\"
           " 2>&1 | tee emergency.log
 
           if grep -q "EMERGENCY SUCCESS" emergency.log; then
@@ -638,6 +626,7 @@ jobs:
           fi
 
           rm -f ~/.ssh/id_rsa emergency-deploy.sh emergency.log
+
 
   rollback:
     name: Rollback to Previous Version
