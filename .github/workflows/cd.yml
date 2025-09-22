@@ -1,6 +1,6 @@
 ﻿name: CD Pipeline - Ultra Robust with Emergency Fallback
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:
@@ -85,7 +85,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
-          current_status=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+          if ! current_status=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
             ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
               echo 'Server accessible'
 
@@ -112,7 +112,9 @@ jobs:
               else
                 echo 'DEPLOY_DIR_EXISTS=false'
               fi
-            " 2>&1) || echo "SSH_FAILED=true")
+            " 2>&1); then
+            current_status="SSH_FAILED=true"
+          fi
 
           echo "$current_status"
 
@@ -319,71 +321,6 @@ jobs:
                 retries: 3
           EOF
 
-          # Create emergency script
-          cat > deployment_files/emergency-deploy.sh << 'EOF'
-          #!/bin/bash
-          echo '🚨 EMERGENCY DEPLOYMENT - ALL SERVICES 🚨'
-
-          # Stop everything
-          docker-compose down --timeout 30 2>/dev/null || true
-          docker stop $(docker ps -aq) 2>/dev/null || true
-          docker rm $(docker ps -aq) 2>/dev/null || true
-
-          # Login to registry
-          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin
-
-          # Start backend
-          echo 'Starting emergency backend...'
-          docker run -d --name emergency-backend -p 5000:5000 \
-            -e DB_USERNAME="$1" \
-            -e DB_PASSWORD="$2" \
-            -e DB_CLUSTER="$3" \
-            -e FLASK_ENV=production \
-            --restart unless-stopped \
-            ghcr.io/josojmf/ai-firefighter-backend:stable
-
-          # Start frontend
-          echo 'Starting emergency frontend...'
-          docker run -d --name emergency-frontend -p 8000:8000 \
-            -e FLASK_ENV=production \
-            -e API_BASE_URL=http://localhost:5000/api \
-            --restart unless-stopped \
-            ghcr.io/josojmf/ai-firefighter-frontend:stable
-
-          # Wait and check
-          sleep 30
-
-          echo 'Checking services...'
-          if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
-            echo '✅ Frontend is running'
-            FRONTEND_OK=true
-          else
-            echo '❌ Frontend failed'
-            FRONTEND_OK=false
-          fi
-
-          if curl -s --max-time 10 http://localhost:5000/ >/dev/null; then
-            echo '✅ Backend is running'
-            BACKEND_OK=true
-          else
-            echo '❌ Backend failed'
-            BACKEND_OK=false
-          fi
-
-          if [ "$FRONTEND_OK" = true ] && [ "$BACKEND_OK" = true ]; then
-            echo '✅ EMERGENCY SUCCESS - All services running'
-            exit 0
-          elif [ "$FRONTEND_OK" = true ]; then
-            echo '⚠️ EMERGENCY PARTIAL SUCCESS - Frontend running'
-            exit 0
-          else
-            echo '❌ EMERGENCY FAILED'
-            exit 1
-          fi
-          EOF
-
-          chmod +x deployment_files/emergency-deploy.sh
-
       - name: Upload deployment files
         uses: actions/upload-artifact@v4
         with:
@@ -434,11 +371,6 @@ jobs:
       - name: Upload deployment files to server
         run: |
           scp -o StrictHostKeyChecking=no deployment_files/docker-compose.yml ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
-          scp -o StrictHostKeyChecking=no deployment_files/emergency-deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
-
-          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-            chmod +x /opt/firefighter-app/emergency-deploy.sh
-          "
 
       - name: Attempt normal deployment
         id: deploy
@@ -518,18 +450,12 @@ jobs:
   emergency_fallback:
     name: Emergency Fallback (All Services)
     runs-on: ubuntu-latest
-    needs: [deploy, validate_environment, prepare_deployment_files]
+    needs: [deploy, validate_environment]
     if: always() && (needs.deploy.outputs.deployment_status != 'true' || needs.deploy.outputs.frontend_working != 'true' || needs.deploy.outputs.backend_working != 'true')
     outputs:
       emergency_status: ${{ steps.emergency.outputs.status }}
 
     steps:
-      - name: Download deployment files
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-files
-          path: deployment_files
-
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -537,38 +463,97 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Execute emergency deployment for all services
+      - name: Execute emergency deployment for all services (no artifact)
         id: emergency
         run: |
           echo "🚨 EXECUTING EMERGENCY FALLBACK - ALL SERVICES 🚨"
 
-          emergency_result=$(ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
-            cd /opt/firefighter-app
+          # Crear script local temporal
+          cat > emergency-deploy.sh << 'EOF'
+          #!/bin/bash
+          echo '🚨 EMERGENCY DEPLOYMENT - ALL SERVICES 🚨'
 
-            # Execute emergency script
-            if [ -f emergency-deploy.sh ]; then
-              ./emergency-deploy.sh '${{ secrets.DB_USERNAME }}' '${{ secrets.DB_PASSWORD }}' '${{ secrets.DB_CLUSTER }}'
-            else
-              echo 'Emergency script not found'
-              exit 1
-            fi
-          " 2>&1)
+          # Quitar CRLF por si el archivo viene de Windows
+          sed -i 's/\r$//' "$0" 2>/dev/null || true
 
-          echo "$emergency_result"
+          # Parar todo
+          docker-compose down --timeout 30 2>/dev/null || true
+          docker stop $(docker ps -aq) 2>/dev/null || true
+          docker rm $(docker ps -aq) 2>/dev/null || true
 
-          if echo "$emergency_result" | grep -q "EMERGENCY SUCCESS"; then
+          # Login al registry (best effort)
+          if command -v docker >/dev/null 2>&1; then
+            echo "${GITHUB_TOKEN}" | docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin 2>/dev/null || true
+          fi
+
+          # Backend estable
+          echo 'Starting emergency backend...'
+          docker run -d --name emergency-backend -p 5000:5000 \
+            -e DB_USERNAME="$1" \
+            -e DB_PASSWORD="$2" \
+            -e DB_CLUSTER="$3" \
+            -e FLASK_ENV=production \
+            --restart unless-stopped \
+            ghcr.io/josojmf/ai-firefighter-backend:stable || true
+
+          # Frontend estable
+          echo 'Starting emergency frontend...'
+          docker run -d --name emergency-frontend -p 8000:8000 \
+            -e FLASK_ENV=production \
+            -e API_BASE_URL=http://localhost:5000/api \
+            --restart unless-stopped \
+            ghcr.io/josojmf/ai-firefighter-frontend:stable || true
+
+          # Esperar y comprobar
+          sleep 30
+
+          FRONTEND_OK=false
+          BACKEND_OK=false
+
+          if curl -s --max-time 10 http://localhost:8000/ >/dev/null; then
+            echo '✅ Frontend is running'
+            FRONTEND_OK=true
+          else
+            echo '❌ Frontend failed'
+          fi
+
+          if curl -s --max-time 10 http://localhost:5000/ >/dev/null; then
+            echo '✅ Backend is running'
+            BACKEND_OK=true
+          else
+            echo '❌ Backend failed'
+          fi
+
+          if [ "$FRONTEND_OK" = true ] && [ "$BACKEND_OK" = true ]; then
+            echo '✅ EMERGENCY SUCCESS - All services running'
+            exit 0
+          elif [ "$FRONTEND_OK" = true ]; then
+            echo '⚠️ EMERGENCY PARTIAL SUCCESS - Frontend running'
+            exit 0
+          else
+            echo '❌ EMERGENCY FAILED'
+            exit 1
+          fi
+          EOF
+
+          # Subir y ejecutar en servidor
+          scp -o StrictHostKeyChecking=no emergency-deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/opt/firefighter-app/
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "
+            chmod +x /opt/firefighter-app/emergency-deploy.sh
+            sed -i 's/\r$//' /opt/firefighter-app/emergency-deploy.sh || true
+            /opt/firefighter-app/emergency-deploy.sh '${{ secrets.DB_USERNAME }}' '${{ secrets.DB_PASSWORD }}' '${{ secrets.DB_CLUSTER }}'
+          " 2>&1 | tee emergency.log
+
+          if grep -q "EMERGENCY SUCCESS" emergency.log; then
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "✅ Emergency deployment successful - All services running"
-          elif echo "$emergency_result" | grep -q "PARTIAL SUCCESS"; then
+          elif grep -q "PARTIAL SUCCESS" emergency.log; then
             echo "status=partial" >> $GITHUB_OUTPUT
-            echo "⚠️ Emergency deployment partially successful - Frontend running"
           else
             echo "status=failed" >> $GITHUB_OUTPUT
-            echo "❌ Emergency deployment failed"
             exit 1
           fi
 
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_rsa emergency-deploy.sh emergency.log
 
   rollback:
     name: Rollback to Previous Version
