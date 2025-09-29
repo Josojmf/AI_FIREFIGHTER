@@ -21,17 +21,48 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io
-      # Asegúrate de que el basename esté TODO en minúsculas
-      IMAGE_BASENAME: ai-firefighter-frontend
-      # Forzamos el owner en minúsculas (evita el error de tag inválido)
-      IMAGE_OWNER: josojmf
+      IMAGE_BASENAME: ai-firefighter-frontend   # en minúsculas
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract short SHA
+      - name: Owner en minúsculas
+        id: lc
+        run: |
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Short SHA
         id: vars
         run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: List repo (debug)
+        run: |
+          pwd
+          ls -la
+          git ls-files | sed 's/^/ - /' | head -n 200
+
+      - name: Encontrar Dockerfile y context
+        id: finddf
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Busca candidatos comunes, respetando subcarpetas
+          CANDIDATES="$(git ls-files -co -m | grep -iE '(^|/)(Dockerfile|dockerfile)$' || true)"
+          if [ -z "$CANDIDATES" ]; then
+            echo "No se encontró ningún Dockerfile en el repo" >&2
+            exit 1
+          fi
+          DF="$(echo "$CANDIDATES" | head -n1)"
+          DIR="$(dirname "$DF")"
+          [ -z "$DIR" ] && DIR="."
+          echo "dockerfile=$DF" >> $GITHUB_OUTPUT
+          echo "context=$DIR" >> $GITHUB_OUTPUT
+          echo "Usando Dockerfile: $DF"
+          echo "Build context: $DIR"
+          # Muestra el Dockerfile para depurar
+          echo "----- Dockerfile -----"
+          sed -n '1,120p' "$DF" || true
+          echo "----------------------"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -40,12 +71,12 @@ jobs:
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Compose full image name (lowercased)
+      - name: Compose image name
         id: img
         run: |
-          echo "full_image=${REGISTRY}/${IMAGE_OWNER}/${IMAGE_BASENAME}" >> $GITHUB_OUTPUT
+          echo "full_image=${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}" >> $GITHUB_OUTPUT
 
-      - name: Set image tags
+      - name: Tags
         id: tags
         run: |
           echo "latest=${{ steps.img.outputs.full_image }}:latest" >> $GITHUB_OUTPUT
@@ -54,7 +85,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ steps.finddf.outputs.context }}
+          file:    ${{ steps.finddf.outputs.dockerfile }}
           push: true
           tags: |
             ${{ steps.tags.outputs.latest }}
@@ -69,11 +101,15 @@ jobs:
       APP_DIR: /opt/emergency
       COMPOSE_FILE: docker-compose.yml
       REGISTRY: ghcr.io
-      IMAGE_OWNER: josojmf
       IMAGE_BASENAME: ai-firefighter-frontend
     steps:
-      - name: Checkout (for possible scripts/templates)
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Owner en minúsculas
+        id: lc
+        run: |
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Prepare known_hosts
         run: |
@@ -90,32 +126,34 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_USER }}
           GHCR_PAT:  ${{ secrets.GHCR_PAT }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: root
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
           script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE_OWNER,IMAGE_BASENAME
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE
           script: |
             set -euo pipefail
 
-            echo "==> Accediendo a ${APP_DIR}"
+            echo "==> Directorio de la app"
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
-            echo "==> Login a GHCR en el servidor"
+            echo "==> Login GHCR en el servidor"
             echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-            echo "==> Haciendo pull de la imagen más reciente"
-            IMAGE="${REGISTRY}/${IMAGE_OWNER}/${IMAGE_BASENAME}:latest"
-            echo "Usando imagen: ${IMAGE}"
+            echo "==> Imagen objetivo: ${IMAGE}"
+            # Asegúrate de que docker-compose.yml usa esa imagen (o variable IMAGE)
 
-            # Asegúrate de que tu docker-compose.yml reference ${IMAGE} o la misma ruta en minúsculas
+            echo "==> Pull de imágenes"
             docker compose -f "${COMPOSE_FILE}" pull
+
+            echo "==> Up servicios"
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-            echo "==> Limpiando imágenes colgantes"
+            echo "==> Limpieza"
             docker image prune -f
 
             echo "==> Estado"
