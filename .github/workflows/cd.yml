@@ -30,6 +30,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate image tags
+        id: tags
+        run: |
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend=${{ env.DOCKER_REGISTRY }}/${REPO_OWNER}/ai-firefighter-backend" >> $GITHUB_OUTPUT
+          echo "frontend=${{ env.DOCKER_REGISTRY }}/${REPO_OWNER}/ai-firefighter-frontend" >> $GITHUB_OUTPUT
+
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
@@ -37,8 +44,8 @@ jobs:
           file: ./API/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-backend:latest
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-backend:${{ github.sha }}
+            ${{ steps.tags.outputs.backend }}:latest
+            ${{ steps.tags.outputs.backend }}:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -49,8 +56,8 @@ jobs:
           file: ./FO/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-frontend:latest
-            ${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-frontend:${{ github.sha }}
+            ${{ steps.tags.outputs.frontend }}:latest
+            ${{ steps.tags.outputs.frontend }}:${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -60,7 +67,7 @@ jobs:
           #!/bin/bash
           set -e
           
-          cd /opt/firefighter-app || mkdir -p /opt/firefighter-app && cd /opt/firefighter-app
+          cd /opt/firefighter-app || { mkdir -p /opt/firefighter-app && cd /opt/firefighter-app; }
           
           # Stop and remove old containers
           docker stop $(docker ps -aq) 2>/dev/null || true
@@ -107,11 +114,16 @@ jobs:
           sed -i "s|FRONTEND_IMAGE_PLACEHOLDER|$FRONTEND_IMAGE|g" docker-compose.yml
           
           # Create .env file
-          cat > .env << ENV_EOF
-          DB_USERNAME=$DB_USERNAME
-          DB_PASSWORD=$DB_PASSWORD
-          DB_CLUSTER=$DB_CLUSTER
+          cat > .env << 'ENV_EOF'
+          DB_USERNAME=${DB_USERNAME}
+          DB_PASSWORD=${DB_PASSWORD}
+          DB_CLUSTER=${DB_CLUSTER}
           ENV_EOF
+          
+          # Replace env vars in .env
+          sed -i "s|\${DB_USERNAME}|$DB_USERNAME|g" .env
+          sed -i "s|\${DB_PASSWORD}|$DB_PASSWORD|g" .env
+          sed -i "s|\${DB_CLUSTER}|$DB_CLUSTER|g" .env
           
           # Deploy
           docker-compose up -d
@@ -141,11 +153,6 @@ jobs:
 
       - name: Deploy to production
         run: |
-          BACKEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-backend:latest"
-          BACKEND_IMAGE=$(echo "$BACKEND_IMAGE" | tr '[:upper:]' '[:lower:]')
-          FRONTEND_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ github.repository_owner }}/ai-firefighter-frontend:latest"
-          FRONTEND_IMAGE=$(echo "$FRONTEND_IMAGE" | tr '[:upper:]' '[:lower:]')
-          
           # Upload script
           scp deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/tmp/
           
@@ -153,8 +160,8 @@ jobs:
           ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} \
             "export GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' \
              GITHUB_ACTOR='${{ github.actor }}' \
-             BACKEND_IMAGE='$BACKEND_IMAGE' \
-             FRONTEND_IMAGE='$FRONTEND_IMAGE' \
+             BACKEND_IMAGE='${{ steps.tags.outputs.backend }}:latest' \
+             FRONTEND_IMAGE='${{ steps.tags.outputs.frontend }}:latest' \
              DB_USERNAME='${{ secrets.DB_USERNAME }}' \
              DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
              DB_CLUSTER='${{ secrets.DB_CLUSTER }}' && \
@@ -166,6 +173,8 @@ jobs:
           if curl -sf http://${{ secrets.PRODUCTION_HOST }}:8000/ && \
              curl -sf http://${{ secrets.PRODUCTION_HOST }}:5000/; then
             echo "✅ All services are running"
+            echo "Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
+            echo "Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
           else
             echo "⚠️ Some services may not be responding"
             exit 1
