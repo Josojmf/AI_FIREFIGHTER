@@ -1,43 +1,35 @@
-﻿version: '3.8'
+﻿version: "3.9"
 
 services:
-  frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/frontend:latest}
+  emergency-frontend:
+    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
+    container_name: emergency-frontend
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    environment:
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_CLUSTER=${DB_CLUSTER}
-      - NODE_ENV=production
-      - API_BASE_URL=http://backend:5000/api
+    healthcheck:
+      # Tu frontend actual devuelve 200 en "/", no en "/health"
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  emergency-backend:
+    image: ghcr.io/josojmf/ai-firefighter-backend:latest
+    container_name: emergency-backend
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - firefighter-network
-
-  backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/josojmf/ai_firefighter/backend:latest}
+      - emergency-frontend
+    env_file:
+      - /root/firefighter.env
+    environment:
+      - FLASK_ENV=production
     ports:
       - "5000:5000"
-    environment:
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_CLUSTER=${DB_CLUSTER}
-      - NODE_ENV=production
-      - FLASK_ENV=production
-    restart: unless-stopped
     healthcheck:
+      # Liveness: no debe tocar DB (usa /ready para readiness si quieres)
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-    networks:
-      - firefighter-network
-
-networks:
-  firefighter-network:
-    driver: bridge
