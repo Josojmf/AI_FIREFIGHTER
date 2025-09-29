@@ -1,99 +1,92 @@
-﻿name: CD - Build, Push & Deploy
-
-on:
+﻿name: 'CD - Build, Push & Deploy'
+'on':
   push:
-    branches: [ "main" ]
+    branches:
+      - main
     paths-ignore:
-      - "**.md"
-  workflow_dispatch:
-
+      - '**.md'
+  workflow_dispatch: null
 concurrency:
-  group: cd-${{ github.ref }}
+  group: 'cd-${{ github.ref }}'
   cancel-in-progress: true
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   build-and-push:
     name: Build & Push image to GHCR
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io
-      IMAGE_BASENAME: ai-firefighter-frontend   # en minúsculas
+      IMAGE_BASENAME: ai-firefighter-frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Owner en minúsculas
         id: lc
-        run: |
-          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
+        run: >
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr
+          '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Short SHA
         id: vars
-        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-      - name: List repo (debug)
-        run: |
-          pwd
-          ls -la
-          git ls-files | sed 's/^/ - /' | head -n 200
-
-      - name: Encontrar Dockerfile y context
-        id: finddf
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Busca candidatos comunes, respetando subcarpetas
-          CANDIDATES="$(git ls-files -co -m | grep -iE '(^|/)(Dockerfile|dockerfile)$' || true)"
-          if [ -z "$CANDIDATES" ]; then
-            echo "No se encontró ningún Dockerfile en el repo" >&2
-            exit 1
-          fi
-          DF="$(echo "$CANDIDATES" | head -n1)"
-          DIR="$(dirname "$DF")"
-          [ -z "$DIR" ] && DIR="."
-          echo "dockerfile=$DF" >> $GITHUB_OUTPUT
-          echo "context=$DIR" >> $GITHUB_OUTPUT
-          echo "Usando Dockerfile: $DF"
-          echo "Build context: $DIR"
-          # Muestra el Dockerfile para depurar
-          echo "----- Dockerfile -----"
-          sed -n '1,120p' "$DF" || true
-          echo "----------------------"
-
+        run: 'echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT'
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ secrets.GHCR_USER }}
-          password: ${{ secrets.GHCR_PAT }}
+          username: '${{ secrets.GHCR_USER }}'
+          password: '${{ secrets.GHCR_PAT }}'
+      - name: Encontrar Dockerfile y context
+        id: finddf
+        shell: bash
+        run: >
+          set -euo pipefail
 
+          CANDIDATES="$(git ls-files -co -m | grep -iE
+          '(^|/)(Dockerfile|dockerfile)$' || true)"
+
+          if [ -z "$CANDIDATES" ]; then
+            echo "No se encontró ningún Dockerfile en el repo" >&2
+            exit 1
+          fi
+
+          DF="$(echo "$CANDIDATES" | head -n1)"
+
+          DIR="$(dirname "$DF")"
+
+          [ -z "$DIR" ] && DIR="."
+
+          echo "dockerfile=$DF" >> $GITHUB_OUTPUT
+
+          echo "context=$DIR" >> $GITHUB_OUTPUT
+
+          echo "Usando Dockerfile: $DF"
+
+          echo "Build context: $DIR"
       - name: Compose image name
         id: img
-        run: |
-          echo "full_image=${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}" >> $GITHUB_OUTPUT
-
+        run: >
+          echo "full_image=${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc
+          }}/${{ env.IMAGE_BASENAME }}" >> $GITHUB_OUTPUT
       - name: Tags
         id: tags
-        run: |
-          echo "latest=${{ steps.img.outputs.full_image }}:latest" >> $GITHUB_OUTPUT
-          echo "sha=${{ steps.img.outputs.full_image }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
+        run: >
+          echo "latest=${{ steps.img.outputs.full_image }}:latest" >>
+          $GITHUB_OUTPUT
 
+          echo "sha=${{ steps.img.outputs.full_image }}:${{
+          steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{ steps.finddf.outputs.context }}
-          file:    ${{ steps.finddf.outputs.dockerfile }}
+          context: '${{ steps.finddf.outputs.context }}'
+          file: '${{ steps.finddf.outputs.dockerfile }}'
           push: true
           tags: |
             ${{ steps.tags.outputs.latest }}
             ${{ steps.tags.outputs.sha }}
-
   deploy:
-    name: Deploy via SSH
+    name: Upload compose & Deploy via SSH
     runs-on: ubuntu-latest
     needs: build-and-push
     timeout-minutes: 30
@@ -105,12 +98,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Owner en minúsculas
         id: lc
-        run: |
-          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
+        run: >
+          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr
+          '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
       - name: Prepare known_hosts
         run: |
           mkdir -p ~/.ssh
@@ -120,41 +112,93 @@ jobs:
             ssh-keyscan -t ed25519 "${{ secrets.PRODUCTION_HOST }}" >> ~/.ssh/known_hosts
           fi
           chmod 644 ~/.ssh/known_hosts
-
+      - name: Upload docker-compose.prod.yml -> server/docker-compose.yml
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: '${{ secrets.PRODUCTION_HOST }}'
+          username: root
+          key: '${{ secrets.PRODUCTION_SSH_KEY }}'
+          port: 22
+          source: docker-compose.prod.yml
+          target: '${{ env.APP_DIR }}/docker-compose.yml'
+          overwrite: true
+          strip_components: 0
       - name: Remote deploy (docker compose pull & up)
         uses: appleboy/ssh-action@v0.1.8
         env:
-          GHCR_USER: ${{ secrets.GHCR_USER }}
-          GHCR_PAT:  ${{ secrets.GHCR_PAT }}
-          IMAGE: ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
+          GHCR_USER: '${{ secrets.GHCR_USER }}'
+          GHCR_PAT: '${{ secrets.GHCR_PAT }}'
+          IMAGE: >-
+            ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{
+            env.IMAGE_BASENAME }}:latest
         with:
-          host: ${{ secrets.PRODUCTION_HOST }}
+          host: '${{ secrets.PRODUCTION_HOST }}'
           username: root
-          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          key: '${{ secrets.PRODUCTION_SSH_KEY }}'
           port: 22
           script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE
-          script: |
+          envs: 'GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE'
+          script: >
             set -euo pipefail
 
-            echo "==> Directorio de la app"
+
+            echo "==> Crear directorio y situarse"
+
             mkdir -p "${APP_DIR}"
+
             cd "${APP_DIR}"
 
+
+            echo "==> Verificar docker y docker compose"
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "Instalando Docker..."
+              apt-get update -y
+              apt-get install -y docker.io
+              systemctl enable --now docker
+            fi
+
+            if ! docker compose version >/dev/null 2>&1; then
+              echo "Instalando docker compose plugin..."
+              apt-get update -y
+              apt-get install -y docker-compose-plugin
+            fi
+
+
             echo "==> Login GHCR en el servidor"
-            echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-            echo "==> Imagen objetivo: ${IMAGE}"
-            # Asegúrate de que docker-compose.yml usa esa imagen (o variable IMAGE)
+            echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}"
+            --password-stdin
 
-            echo "==> Pull de imágenes"
+
+            echo "==> Exportar IMAGE para compose"
+
+            export IMAGE="${IMAGE}"
+
+            echo "Usando imagen: ${IMAGE}"
+
+
+            echo "==> Comprobar compose presente"
+
+            test -f "${COMPOSE_FILE}" || { echo "No existe ${COMPOSE_FILE} en
+            $(pwd)"; exit 1; }
+
+
+            echo "==> Pull de la imagen"
+
             docker compose -f "${COMPOSE_FILE}" pull
 
-            echo "==> Up servicios"
+
+            echo "==> Levantar servicios"
+
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-            echo "==> Limpieza"
+
+            echo "==> Limpiar imágenes colgantes"
+
             docker image prune -f
 
+
             echo "==> Estado"
+
             docker compose -f "${COMPOSE_FILE}" ps
