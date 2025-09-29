@@ -5,38 +5,27 @@ on:
     branches: [ "main" ]
     paths-ignore:
       - "**.md"
-      - ".github/**"
   workflow_dispatch:
 
-# Evita solapes si hay múltiples pushes seguidos
 concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: true
 
-# Necesario para publicar en GHCR y leer el repo
 permissions:
   contents: read
   packages: write
-
-env:
-  REGISTRY: ghcr.io
-  # Ajusta el nombre de la imagen si tu repo/imagen se llama distinto
-  # Formato recomendado: ghcr.io/<usuario_ghcr>/<nombre-imagen>
-  IMAGE_NAME: ${{ secrets.GHCR_USER }}/ai-firefighter-frontend
-  # Ruta en el servidor donde vive tu proyecto (docker-compose.yml)
-  APP_DIR: /opt/emergency
-  # Nombre del archivo docker compose en el servidor
-  COMPOSE_FILE: docker-compose.yml
 
 jobs:
   build-and-push:
     name: Build & Push image to GHCR
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_BASENAME: ai-firefighter-frontend   # cambia si tu imagen se llama distinto
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # (Opcional) establece metadatos de etiquetas (latest + sha corto)
       - name: Extract short SHA
         id: vars
         run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
@@ -44,17 +33,22 @@ jobs:
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_PAT }}
+
+      - name: Compose full image name
+        id: img
+        run: |
+          echo "full_image=ghcr.io/${{ secrets.GHCR_USER }}/${IMAGE_BASENAME}" >> $GITHUB_OUTPUT
 
       - name: Set image tags
         id: tags
         run: |
-          echo "latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
-          echo "sha=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
+          echo "latest=${{ steps.img.outputs.full_image }}:latest" >> $GITHUB_OUTPUT
+          echo "sha=${{ steps.img.outputs.full_image }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
 
-      - name: Build and push (latest)
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -68,48 +62,54 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     timeout-minutes: 30
+    env:
+      APP_DIR: /opt/emergency          # cambia si tu ruta es otra
+      COMPOSE_FILE: docker-compose.yml # debe existir en el servidor
+      REGISTRY: ghcr.io
     steps:
       - name: Checkout (for possible scripts/templates)
         uses: actions/checkout@v4
 
-      - name: Add known_hosts (si tienes el secreto configurado)
-        if: ${{ secrets.PRODUCTION_KNOWN_HOSTS != '' }}
+      - name: Prepare known_hosts
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          if [ -n "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          else
+            ssh-keyscan -t ed25519 "${{ secrets.PRODUCTION_HOST }}" >> ~/.ssh/known_hosts
+          fi
           chmod 644 ~/.ssh/known_hosts
-
-      # Si no tienes PRODUCTION_KNOWN_HOSTS, puedes confiar en strictHostKeyChecking=no:
-      # (appleboy/ssh-action lo permite con 'timeout' y 'script_stop', pero mejor known_hosts)
 
       - name: Remote deploy (docker compose pull & up)
         uses: appleboy/ssh-action@v0.1.8
+        env:
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_PAT:  ${{ secrets.GHCR_PAT }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
-          username: ${{ secrets.PRODUCTION_USER || 'root' }}
+          username: root
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
           script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE_NAME
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY
           script: |
             set -euo pipefail
 
-            echo "==> Accediendo a ${APP_DIR}"
+            echo "==> Ensure directory and move there"
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
-            echo "==> Login a GHCR (para poder hacer pull de imágenes privadas)"
+            echo "==> Login to GHCR on server"
             echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-            # (Opcional) Traer el último docker-compose.yml desde el repo si lo publicas con el job de build
-            # Aquí asumimos que el servidor ya tiene el docker-compose.yml bueno en ${APP_DIR}/${COMPOSE_FILE}
-
-            echo "==> Actualizando servicios"
+            echo "==> Pull images defined in compose"
             docker compose -f "${COMPOSE_FILE}" pull
+
+            echo "==> Up services"
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-            echo "==> Limpiando imágenes colgantes"
+            echo "==> Prune dangling images"
             docker image prune -f
 
-            echo "==> Comprobación rápida de estado"
+            echo "==> Status"
             docker compose -f "${COMPOSE_FILE}" ps
