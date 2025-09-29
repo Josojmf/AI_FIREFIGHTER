@@ -151,6 +151,7 @@ jobs:
           envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,DB_NAME,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
           script: |
             set -euo pipefail
+            docker compose -f "${APP_DIR}/docker-compose.prod.yml" down || true
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
