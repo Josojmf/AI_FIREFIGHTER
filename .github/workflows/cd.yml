@@ -1,214 +1,197 @@
-﻿name: CD Pipeline - Simplified & Functional
+﻿name: CD - Deploy AI Firefighter
 
 on:
   push:
     branches: [main]
+    paths:
+      - "API/**"
+      - "FO/**"
+      - ".github/workflows/cd.yml"
+      - "docker-compose.prod.yml"
+      - "API/Dockerfile"
+      - "FO/Dockerfile"
   workflow_dispatch:
 
 env:
+  IMAGE_FRONTEND: ghcr.io/josojmf/ai-firefighter-frontend:latest
+  IMAGE_BACKEND:  ghcr.io/josojmf/ai-firefighter-backend:latest
   DOCKER_REGISTRY: ghcr.io
 
 jobs:
-  build_and_deploy:
-    name: Build and Deploy
+  build_images:
+    name: Build & Push Images
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      frontend_image: ${{ env.IMAGE_FRONTEND }}
+      backend_image:  ${{ env.IMAGE_BACKEND }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.DOCKER_REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate image tags
-        id: tags
-        run: |
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "backend=${{ env.DOCKER_REGISTRY }}/${REPO_OWNER}/ai-firefighter-backend" >> $GITHUB_OUTPUT
-          echo "frontend=${{ env.DOCKER_REGISTRY }}/${REPO_OWNER}/ai-firefighter-frontend" >> $GITHUB_OUTPUT
-
-      - name: Build and push Backend
+      - name: Build & Push backend
         uses: docker/build-push-action@v5
         with:
           context: ./API
           file: ./API/Dockerfile
           push: true
           tags: |
-            ${{ steps.tags.outputs.backend }}:latest
-            ${{ steps.tags.outputs.backend }}:${{ github.sha }}
+            ${{ env.IMAGE_BACKEND }}
+            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
-      - name: Build and push Frontend
+      - name: Build & Push frontend
         uses: docker/build-push-action@v5
         with:
           context: ./FO
           file: ./FO/Dockerfile
           push: true
           tags: |
-            ${{ steps.tags.outputs.frontend }}:latest
-            ${{ steps.tags.outputs.frontend }}:${{ github.sha }}
+            ${{ env.IMAGE_FRONTEND }}
+            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Create deployment script
-        run: |
-          cat > deploy.sh << 'SCRIPT_EOF'
-          #!/bin/bash
-          set -e
-          
-          cd /opt/firefighter-app || { mkdir -p /opt/firefighter-app && cd /opt/firefighter-app; }
-          
-          # Stop and remove old containers
-          docker stop $(docker ps -aq) 2>/dev/null || true
-          docker rm $(docker ps -aq) 2>/dev/null || true
-          
-          # Login to registry
-          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          
-          # Pull latest images
-          docker pull "$BACKEND_IMAGE"
-          docker pull "$FRONTEND_IMAGE"
-          
-          # Create docker-compose.yml
-          cat > docker-compose.yml << 'COMPOSE_EOF'
-          version: '3.8'
-          services:
-            backend:
-              image: BACKEND_IMAGE_PLACEHOLDER
-              container_name: firefighter-backend
-              ports:
-                - "5000:5000"
-              environment:
-                - DB_USERNAME=${DB_USERNAME}
-                - DB_PASSWORD=${DB_PASSWORD}
-                - DB_CLUSTER=${DB_CLUSTER}
-                - FLASK_ENV=production
-              restart: unless-stopped
-          
-            frontend:
-              image: FRONTEND_IMAGE_PLACEHOLDER
-              container_name: firefighter-frontend
-              ports:
-                - "8000:8000"
-              environment:
-                - FLASK_ENV=production
-                - API_BASE_URL=http://backend:5000/api
-              depends_on:
-                - backend
-              restart: unless-stopped
-          COMPOSE_EOF
-          
-          # Replace placeholders
-          sed -i "s|BACKEND_IMAGE_PLACEHOLDER|$BACKEND_IMAGE|g" docker-compose.yml
-          sed -i "s|FRONTEND_IMAGE_PLACEHOLDER|$FRONTEND_IMAGE|g" docker-compose.yml
-          
-          # Create .env file
-          cat > .env << 'ENV_EOF'
-          DB_USERNAME=${DB_USERNAME}
-          DB_PASSWORD=${DB_PASSWORD}
-          DB_CLUSTER=${DB_CLUSTER}
-          ENV_EOF
-          
-          # Replace env vars in .env
-          sed -i "s|\${DB_USERNAME}|$DB_USERNAME|g" .env
-          sed -i "s|\${DB_PASSWORD}|$DB_PASSWORD|g" .env
-          sed -i "s|\${DB_CLUSTER}|$DB_CLUSTER|g" .env
-          
-          # Deploy
-          docker-compose up -d
-          
-          # Wait and verify
-          echo "Waiting for services to start..."
-          sleep 30
-          
-          if curl -sf http://localhost:5000/ && curl -sf http://localhost:8000/; then
-            echo "✅ Deployment successful"
-            exit 0
-          else
-            echo "❌ Deployment verification failed"
-            docker-compose logs
-            exit 1
-          fi
-          SCRIPT_EOF
-          
-          chmod +x deploy.sh
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy to production
-        run: |
-          # Upload script
-          scp deploy.sh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }}:/tmp/
-          
-          # Execute deployment
-          ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} \
-            "export GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' \
-             GITHUB_ACTOR='${{ github.actor }}' \
-             BACKEND_IMAGE='${{ steps.tags.outputs.backend }}:latest' \
-             FRONTEND_IMAGE='${{ steps.tags.outputs.frontend }}:latest' \
-             DB_USERNAME='${{ secrets.DB_USERNAME }}' \
-             DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-             DB_CLUSTER='${{ secrets.DB_CLUSTER }}' && \
-             bash /tmp/deploy.sh"
-
-      - name: Verify deployment
-        run: |
-          sleep 10
-          if curl -sf http://${{ secrets.PRODUCTION_HOST }}:8000/ && \
-             curl -sf http://${{ secrets.PRODUCTION_HOST }}:5000/; then
-            echo "✅ All services are running"
-            echo "Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
-            echo "Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
-          else
-            echo "⚠️ Some services may not be responding"
-            exit 1
-          fi
-
-      - name: Cleanup
-        if: always()
-        run: rm -f ~/.ssh/id_rsa
-
-  health_check:
-    name: Final Health Check
+  validate_environment:
+    name: Validate Secrets & Server
     runs-on: ubuntu-latest
-    needs: build_and_deploy
-    if: always()
 
     steps:
-      - name: Check services
+      - name: Check required secrets
         run: |
-          echo "Checking services..."
-          sleep 20
-          
-          FRONTEND_UP=false
-          BACKEND_UP=false
-          
-          curl -sf http://${{ secrets.PRODUCTION_HOST }}:8000/ && FRONTEND_UP=true
-          curl -sf http://${{ secrets.PRODUCTION_HOST }}:5000/ && BACKEND_UP=true
-          
-          if [ "$FRONTEND_UP" = true ] && [ "$BACKEND_UP" = true ]; then
-            echo "✅ HEALTHY - All services running"
-            echo "Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
-            echo "Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
-          elif [ "$FRONTEND_UP" = true ]; then
-            echo "⚠️ DEGRADED - Only frontend running"
-          else
-            echo "❌ CRITICAL - Services down"
+          missing=()
+
+          # Opción recomendada: una sola URI
+          if [ -z "${{ secrets.MONGODB_URI }}" ]; then
+            [ -z "${{ secrets.MONGO_USER }}" ]    && missing+=("MONGO_USER")
+            [ -z "${{ secrets.MONGO_PASS }}" ]    && missing+=("MONGO_PASS")
+            [ -z "${{ secrets.MONGO_CLUSTER }}" ] && missing+=("MONGO_CLUSTER")
+            [ -z "${{ secrets.DB_NAME }}" ]       && missing+=("DB_NAME")
+          fi
+
+          [ -z "${{ secrets.SECRET_KEY }}" ] && missing+=("SECRET_KEY")
+          [ -z "${{ secrets.SSH_HOST }}" ]   && missing+=("SSH_HOST")
+          [ -z "${{ secrets.SSH_USER }}" ]   && missing+=("SSH_USER")
+          [ -z "${{ secrets.SSH_KEY }}" ]    && missing+=("SSH_KEY")
+
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "❌ Missing required secrets:"
+            printf " - %s\n" "${missing[@]}"
             exit 1
           fi
+          echo "✅ Secrets check OK"
+
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: [build_images, validate_environment]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Push docker-compose.prod.yml to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          rsync -avz --delete docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:/root/docker-compose.prod.yml"
+
+      - name: Prepare env & run compose remotely
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+
+          IMAGE_FRONTEND: ${{ env.IMAGE_FRONTEND }}
+          IMAGE_BACKEND:  ${{ env.IMAGE_BACKEND }}
+
+          # DB (prioridad a MONGODB_URI)
+          MONGODB_URI:   ${{ secrets.MONGODB_URI }}
+          MONGO_USER:    ${{ secrets.MONGO_USER }}
+          MONGO_PASS:    ${{ secrets.MONGO_PASS }}
+          MONGO_CLUSTER: ${{ secrets.MONGO_CLUSTER }}
+          DB_NAME:       ${{ secrets.DB_NAME }}
+
+          SECRET_KEY:    ${{ secrets.SECRET_KEY }}
+        run: |
+          ssh "${SSH_USER}@${SSH_HOST}" bash -s <<'EOSSH'
+          set -euo pipefail
+
+          echo "➡️  Login GHCR (pull anónimo si el paquete es público)..."
+          echo '${{ github.token }}' | docker login ${{ env.DOCKER_REGISTRY }} -u '${{ github.actor }}' --password-stdin || true
+
+          echo "➡️  Crear archivo de entorno /root/firefighter.env"
+          if [ -n "${MONGODB_URI}" ]; then
+            DB_URI="${MONGODB_URI}"
+            DB_NAME_SAFE="${DB_NAME:-}"
+          else
+            if [ -z "${MONGO_USER:-}" ] || [ -z "${MONGO_PASS:-}" ] || [ -z "${MONGO_CLUSTER:-}" ]; then
+              echo "❌ Faltan variables para construir la URI de MongoDB"
+              exit 1
+            fi
+            DB_URI="mongodb+srv://${MONGO_USER}:${MONGO_PASS}@${MONGO_CLUSTER}/${DB_NAME:-FIREFIGHTER}?retryWrites=true&w=majority&appName=FirefighterAPI"
+            DB_NAME_SAFE="${DB_NAME:-FIREFIGHTER}"
+          fi
+
+          cat >/root/firefighter.env <<EOF
+          # --- Backend ---
+          MONGO_USER=${MONGO_USER:-}
+          MONGO_PASS=${MONGO_PASS:-}
+          MONGO_CLUSTER=${MONGO_CLUSTER:-}
+          MONGODB_URI=${DB_URI}
+          DB_NAME=${DB_NAME_SAFE}
+          SECRET_KEY=${SECRET_KEY}
+          FLASK_ENV=production
+
+          # --- Frontend ---
+          API_BASE_URL=http://backend:5000/api
+          EOF
+
+          echo "➡️  Sustituir tags de imagen vía variables de entorno del compose"
+          export FRONTEND_IMAGE='${IMAGE_FRONTEND}'
+          export BACKEND_IMAGE='${IMAGE_BACKEND}'
+
+          echo "➡️  Pull imágenes"
+          docker pull "$FRONTEND_IMAGE" || true
+          docker pull "$BACKEND_IMAGE"  || true
+
+          echo "➡️  Levantar stack"
+          docker compose -f /root/docker-compose.prod.yml --env-file /root/firefighter.env up -d
+
+          echo "➡️  Comprobaciones rápidas"
+          sleep 8
+          curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "FE OK" || echo "FE FAIL"
+          curl -fsS http://127.0.0.1:5000/api/health -o /dev/null && echo "BE /api/health OK" || echo "BE FAIL"
+
+          echo "➡️  Health de contenedores (si existe)"
+          docker ps
+          (docker inspect --format '{{json .State.Health}}' backend 2>/dev/null || true)
+          (docker inspect --format '{{json .State.Health}}' frontend 2>/dev/null || true)
+          EOSSH
+
+      - name: Deployment report
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          echo "🚒 AI FIREFIGHTER DEPLOYMENT REPORT 🚒"
+          echo "Timestamp: $(date -u)"
+          echo "Frontend: http://${SSH_HOST}:8000"
+          echo "Backend:  http://${SSH_HOST}:5000"
