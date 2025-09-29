@@ -24,7 +24,7 @@ jobs:
       # Asegúrate de que el basename esté TODO en minúsculas
       IMAGE_BASENAME: ai-firefighter-frontend
       # Forzamos el owner en minúsculas (evita el error de tag inválido)
-      IMAGE_OWNER: ${{ toLower(github.repository_owner) }}
+      IMAGE_OWNER: josojmf
     steps:
       - name: Checkout
         uses: actions/checkout@v4
