@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 30
     env:
       APP_DIR: /opt/emergency
-      COMPOSE_FILE: docker-compose.prod.yml   # usamos directamente el prod
+      COMPOSE_FILE: docker-compose.prod.yml     # usamos el de prod directamente
       REGISTRY: ghcr.io
       IMAGE_BASENAME: ai-firefighter-frontend
     steps:
@@ -119,25 +119,42 @@ jobs:
           target: "${{ env.APP_DIR }}"
           overwrite: true
 
-      - name: Remote deploy (docker compose pull & up)
+      - name: Remote deploy (create env + compose up)
         uses: appleboy/ssh-action@v0.1.8
+        # Pasamos todos los secrets que quieras materializar en /root/firefighter.env
         env:
-          GHCR_USER: ${{ secrets.GHCR_USER }}
-          GHCR_PAT:  ${{ secrets.GHCR_PAT }}
-          IMAGE: ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
+          GHCR_USER:           ${{ secrets.GHCR_USER }}
+          GHCR_PAT:            ${{ secrets.GHCR_PAT }}
+          IMAGE:               ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
+
+          # ------ VARIABLES DE TU APP (ajusta a lo que uses) ------
+          SECRET_KEY:          ${{ secrets.SECRET_KEY }}
+          JWT_EXPIRES_HOURS:   ${{ secrets.JWT_EXPIRES_HOURS }}
+
+          # Mongo / DB (pon las que tengas):
+          MONGODB_URI:         ${{ secrets.MONGODB_URI }}
+          DB_NAME:             ${{ secrets.DB_NAME }}
+          MONGO_USER:          ${{ secrets.MONGO_USER }}
+          MONGO_PASS:          ${{ secrets.MONGO_PASS }}
+          MONGO_CLUSTER:       ${{ secrets.MONGO_CLUSTER }}
+
+          # VAPID (push):
+          VAPID_PUBLIC_KEY:    ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY:   ${{ secrets.VAPID_PRIVATE_KEY }}
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: root
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
           script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE
+          # haz disponibles las variables anteriores dentro del script
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,DB_NAME,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
           script: |
             set -euo pipefail
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
-            # Instalar docker y compose si no están
+            # Docker y compose
             if ! command -v docker >/dev/null 2>&1; then
               apt-get update -y && apt-get install -y docker.io
               systemctl enable --now docker
@@ -149,11 +166,32 @@ jobs:
             echo "==> Login GHCR en el servidor"
             echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
+            # --------- CREAR /root/firefighter.env QUE ESPERA compose ----------
+            ENV_FILE="/root/firefighter.env"
+            echo "==> Generando ${ENV_FILE}"
+            {
+              [ -n "${SECRET_KEY:-}" ]        && echo "SECRET_KEY=${SECRET_KEY}"
+              [ -n "${JWT_EXPIRES_HOURS:-}" ] && echo "JWT_EXPIRES_HOURS=${JWT_EXPIRES_HOURS}"
+
+              [ -n "${MONGODB_URI:-}" ]       && echo "MONGODB_URI=${MONGODB_URI}"
+              [ -n "${DB_NAME:-}" ]           && echo "DB_NAME=${DB_NAME}"
+              [ -n "${MONGO_USER:-}" ]        && echo "MONGO_USER=${MONGO_USER}"
+              [ -n "${MONGO_PASS:-}" ]        && echo "MONGO_PASS=${MONGO_PASS}"
+              [ -n "${MONGO_CLUSTER:-}" ]     && echo "MONGO_CLUSTER=${MONGO_CLUSTER}"
+
+              [ -n "${VAPID_PUBLIC_KEY:-}" ]  && echo "VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}"
+              [ -n "${VAPID_PRIVATE_KEY:-}" ] && echo "VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}"
+            } | sed 's/\r$//' > "${ENV_FILE}"
+
+            chmod 600 "${ENV_FILE}"
+
+            # Export para interpolaciones ${IMAGE} en compose si las hay
             export IMAGE="${IMAGE}"
             echo "Usando imagen: ${IMAGE}"
 
             test -f "${COMPOSE_FILE}" || { echo "No existe ${COMPOSE_FILE} en $(pwd)"; exit 1; }
 
+            # Pull & Up
             docker compose -f "${COMPOSE_FILE}" pull
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
             docker image prune -f
