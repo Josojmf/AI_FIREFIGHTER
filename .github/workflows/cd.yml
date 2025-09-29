@@ -1,197 +1,115 @@
-﻿name: CD - Deploy AI Firefighter
+﻿name: CD - Build, Push & Deploy
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "API/**"
-      - "FO/**"
-      - ".github/workflows/cd.yml"
-      - "docker-compose.prod.yml"
-      - "API/Dockerfile"
-      - "FO/Dockerfile"
+    branches: [ "main" ]
+    paths-ignore:
+      - "**.md"
+      - ".github/**"
   workflow_dispatch:
 
+# Evita solapes si hay múltiples pushes seguidos
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+# Necesario para publicar en GHCR y leer el repo
+permissions:
+  contents: read
+  packages: write
+
 env:
-  IMAGE_FRONTEND: ghcr.io/josojmf/ai-firefighter-frontend:latest
-  IMAGE_BACKEND:  ghcr.io/josojmf/ai-firefighter-backend:latest
-  DOCKER_REGISTRY: ghcr.io
+  REGISTRY: ghcr.io
+  # Ajusta el nombre de la imagen si tu repo/imagen se llama distinto
+  # Formato recomendado: ghcr.io/<usuario_ghcr>/<nombre-imagen>
+  IMAGE_NAME: ${{ secrets.GHCR_USER }}/ai-firefighter-frontend
+  # Ruta en el servidor donde vive tu proyecto (docker-compose.yml)
+  APP_DIR: /opt/emergency
+  # Nombre del archivo docker compose en el servidor
+  COMPOSE_FILE: docker-compose.yml
 
 jobs:
-  build_images:
-    name: Build & Push Images
+  build-and-push:
+    name: Build & Push image to GHCR
     runs-on: ubuntu-latest
-    outputs:
-      frontend_image: ${{ env.IMAGE_FRONTEND }}
-      backend_image:  ${{ env.IMAGE_BACKEND }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      # (Opcional) establece metadatos de etiquetas (latest + sha corto)
+      - name: Extract short SHA
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build & Push backend
-        uses: docker/build-push-action@v5
+      - name: Set image tags
+        id: tags
+        run: |
+          echo "latest=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "sha=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push (latest)
+        uses: docker/build-push-action@v6
         with:
-          context: ./API
-          file: ./API/Dockerfile
+          context: .
           push: true
           tags: |
-            ${{ env.IMAGE_BACKEND }}
-            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-
-      - name: Build & Push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./FO
-          file: ./FO/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_FRONTEND }}
-            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-  validate_environment:
-    name: Validate Secrets & Server
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check required secrets
-        run: |
-          missing=()
-
-          # Opción recomendada: una sola URI
-          if [ -z "${{ secrets.MONGODB_URI }}" ]; then
-            [ -z "${{ secrets.MONGO_USER }}" ]    && missing+=("MONGO_USER")
-            [ -z "${{ secrets.MONGO_PASS }}" ]    && missing+=("MONGO_PASS")
-            [ -z "${{ secrets.MONGO_CLUSTER }}" ] && missing+=("MONGO_CLUSTER")
-            [ -z "${{ secrets.DB_NAME }}" ]       && missing+=("DB_NAME")
-          fi
-
-          [ -z "${{ secrets.SECRET_KEY }}" ] && missing+=("SECRET_KEY")
-          [ -z "${{ secrets.SSH_HOST }}" ]   && missing+=("SSH_HOST")
-          [ -z "${{ secrets.SSH_USER }}" ]   && missing+=("SSH_USER")
-          [ -z "${{ secrets.SSH_KEY }}" ]    && missing+=("SSH_KEY")
-
-          if [ ${#missing[@]} -ne 0 ]; then
-            echo "❌ Missing required secrets:"
-            printf " - %s\n" "${missing[@]}"
-            exit 1
-          fi
-          echo "✅ Secrets check OK"
-
-      - name: Add host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+            ${{ steps.tags.outputs.latest }}
+            ${{ steps.tags.outputs.sha }}
 
   deploy:
-    name: Deploy to Server
+    name: Deploy via SSH
     runs-on: ubuntu-latest
-    needs: [build_images, validate_environment]
-
+    needs: build-and-push
+    timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout (for possible scripts/templates)
         uses: actions/checkout@v4
 
-      - name: Start ssh-agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Add known_hosts (si tienes el secreto configurado)
+        if: ${{ secrets.PRODUCTION_KNOWN_HOSTS != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # Si no tienes PRODUCTION_KNOWN_HOSTS, puedes confiar en strictHostKeyChecking=no:
+      # (appleboy/ssh-action lo permite con 'timeout' y 'script_stop', pero mejor known_hosts)
+
+      - name: Remote deploy (docker compose pull & up)
+        uses: appleboy/ssh-action@v0.1.8
         with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER || 'root' }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: 22
+          script_stop: true
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE_NAME
+          script: |
+            set -euo pipefail
 
-      - name: Push docker-compose.prod.yml to server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-        run: |
-          rsync -avz --delete docker-compose.prod.yml "${SSH_USER}@${SSH_HOST}:/root/docker-compose.prod.yml"
+            echo "==> Accediendo a ${APP_DIR}"
+            mkdir -p "${APP_DIR}"
+            cd "${APP_DIR}"
 
-      - name: Prepare env & run compose remotely
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+            echo "==> Login a GHCR (para poder hacer pull de imágenes privadas)"
+            echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-          IMAGE_FRONTEND: ${{ env.IMAGE_FRONTEND }}
-          IMAGE_BACKEND:  ${{ env.IMAGE_BACKEND }}
+            # (Opcional) Traer el último docker-compose.yml desde el repo si lo publicas con el job de build
+            # Aquí asumimos que el servidor ya tiene el docker-compose.yml bueno en ${APP_DIR}/${COMPOSE_FILE}
 
-          # DB (prioridad a MONGODB_URI)
-          MONGODB_URI:   ${{ secrets.MONGODB_URI }}
-          MONGO_USER:    ${{ secrets.MONGO_USER }}
-          MONGO_PASS:    ${{ secrets.MONGO_PASS }}
-          MONGO_CLUSTER: ${{ secrets.MONGO_CLUSTER }}
-          DB_NAME:       ${{ secrets.DB_NAME }}
+            echo "==> Actualizando servicios"
+            docker compose -f "${COMPOSE_FILE}" pull
+            docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-          SECRET_KEY:    ${{ secrets.SECRET_KEY }}
-        run: |
-          ssh "${SSH_USER}@${SSH_HOST}" bash -s <<'EOSSH'
-          set -euo pipefail
+            echo "==> Limpiando imágenes colgantes"
+            docker image prune -f
 
-          echo "➡️  Login GHCR (pull anónimo si el paquete es público)..."
-          echo '${{ github.token }}' | docker login ${{ env.DOCKER_REGISTRY }} -u '${{ github.actor }}' --password-stdin || true
-
-          echo "➡️  Crear archivo de entorno /root/firefighter.env"
-          if [ -n "${MONGODB_URI}" ]; then
-            DB_URI="${MONGODB_URI}"
-            DB_NAME_SAFE="${DB_NAME:-}"
-          else
-            if [ -z "${MONGO_USER:-}" ] || [ -z "${MONGO_PASS:-}" ] || [ -z "${MONGO_CLUSTER:-}" ]; then
-              echo "❌ Faltan variables para construir la URI de MongoDB"
-              exit 1
-            fi
-            DB_URI="mongodb+srv://${MONGO_USER}:${MONGO_PASS}@${MONGO_CLUSTER}/${DB_NAME:-FIREFIGHTER}?retryWrites=true&w=majority&appName=FirefighterAPI"
-            DB_NAME_SAFE="${DB_NAME:-FIREFIGHTER}"
-          fi
-
-          cat >/root/firefighter.env <<EOF
-          # --- Backend ---
-          MONGO_USER=${MONGO_USER:-}
-          MONGO_PASS=${MONGO_PASS:-}
-          MONGO_CLUSTER=${MONGO_CLUSTER:-}
-          MONGODB_URI=${DB_URI}
-          DB_NAME=${DB_NAME_SAFE}
-          SECRET_KEY=${SECRET_KEY}
-          FLASK_ENV=production
-
-          # --- Frontend ---
-          API_BASE_URL=http://backend:5000/api
-          EOF
-
-          echo "➡️  Sustituir tags de imagen vía variables de entorno del compose"
-          export FRONTEND_IMAGE='${IMAGE_FRONTEND}'
-          export BACKEND_IMAGE='${IMAGE_BACKEND}'
-
-          echo "➡️  Pull imágenes"
-          docker pull "$FRONTEND_IMAGE" || true
-          docker pull "$BACKEND_IMAGE"  || true
-
-          echo "➡️  Levantar stack"
-          docker compose -f /root/docker-compose.prod.yml --env-file /root/firefighter.env up -d
-
-          echo "➡️  Comprobaciones rápidas"
-          sleep 8
-          curl -fsS http://127.0.0.1:8000/ -o /dev/null && echo "FE OK" || echo "FE FAIL"
-          curl -fsS http://127.0.0.1:5000/api/health -o /dev/null && echo "BE /api/health OK" || echo "BE FAIL"
-
-          echo "➡️  Health de contenedores (si existe)"
-          docker ps
-          (docker inspect --format '{{json .State.Health}}' backend 2>/dev/null || true)
-          (docker inspect --format '{{json .State.Health}}' frontend 2>/dev/null || true)
-          EOSSH
-
-      - name: Deployment report
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-        run: |
-          echo "🚒 AI FIREFIGHTER DEPLOYMENT REPORT 🚒"
-          echo "Timestamp: $(date -u)"
-          echo "Frontend: http://${SSH_HOST}:8000"
-          echo "Backend:  http://${SSH_HOST}:5000"
+            echo "==> Comprobación rápida de estado"
+            docker compose -f "${COMPOSE_FILE}" ps
