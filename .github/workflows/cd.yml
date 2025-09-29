@@ -69,7 +69,7 @@ jobs:
       APP_DIR: /opt/emergency
       COMPOSE_FILE: docker-compose.yml
       REGISTRY: ghcr.io
-      IMAGE_OWNER: ${{ toLower(github.repository_owner) }}
+      IMAGE_OWNER: josojmf
       IMAGE_BASENAME: ai-firefighter-frontend
     steps:
       - name: Checkout (for possible scripts/templates)
