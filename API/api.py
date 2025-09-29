@@ -130,25 +130,6 @@ def internal_error(error):
     return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
 
 # --- Routes ---
-@app.get("/api/health")
-def health():
-    try:
-        # Test DB connection
-        client.server_info()
-        user_count = users.count_documents({})
-        return jsonify({
-            "ok": True, 
-            "service": "auth-api", 
-            "db": DB_NAME,
-            "users_count": user_count,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-    except Exception as e:
-        return jsonify({
-            "ok": False, 
-            "service": "auth-api", 
-            "error": str(e)
-        }), 500
 
 @app.post("/api/register")
 def api_register():
