@@ -1,0 +1,9 @@
+{% extends "bo_layout.html" %}
+{% block title %}BackOffice | Dashboard{% endblock %}
+{% block content %}
+  <h1>Panel de administración</h1>
+  <p class="muted">Bienvenido al BackOffice de FirefighterAI.</p>
+  <div style="margin-top:16px;">
+    <a href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+  </div>
+{% endblock %}

@@ -99,6 +99,23 @@ def verify_jwt(token: str):
     except jwt.InvalidTokenError:
         return False, "Token inválido"
 
+def require_auth(required_role=None):
+    """Validate Authorization header and optionally enforce role."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return False, (jsonify({"ok": False, "detail": "Token requerido"}), 401)
+
+    token = auth_header.split(' ', 1)[1].strip()
+    valid, payload = verify_jwt(token)
+    if not valid or not isinstance(payload, dict):
+        detail = payload if isinstance(payload, str) else "Token invalido"
+        return False, (jsonify({"ok": False, "detail": detail}), 401)
+
+    if required_role and payload.get('role') != required_role:
+        return False, (jsonify({"ok": False, "detail": "Permisos insuficientes"}), 403)
+
+    return True, payload
+
 # --- Error Handlers ---
 @app.errorhandler(400)
 def bad_request(error):
@@ -300,12 +317,10 @@ def api_reset_password():
 @app.get("/api/users")
 def api_get_users():
     """Endpoint para admin: listar usuarios"""
+    authorized, auth_result = require_auth(required_role="admin")
+    if not authorized:
+        return auth_result
     try:
-        # TODO: Aquí deberías verificar que el usuario sea admin
-        # auth_header = request.headers.get('Authorization')
-        # if not auth_header or not auth_header.startswith('Bearer '):
-        #     return jsonify({"ok": False, "detail": "Token requerido"}), 401
-        
         user_list = []
         for u in users.find({}, {"password_hash": 0}):  # Excluir hash de contraseña
             user_list.append({
@@ -535,7 +550,7 @@ def api_delete_memory_card(card_id):
         # Verificar si la card existe
         existing_card = memory_cards.find_one({"_id": card_id})
         if not existing_card:
-            return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
+            return json9ify({"ok": False, "detail": "Memory card no encontrada"}), 404
 
         # Eliminar
         result = memory_cards.delete_one({"_id": card_id})
@@ -551,6 +566,19 @@ def api_delete_memory_card(card_id):
     except Exception as e:
         app.logger.error(f"Error eliminando memory card: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+    
+@app.get("/health")
+def health():
+    return jsonify(ok=True, service="backend"), 200
+
+@app.get("/ready")
+def ready():
+    try:
+        # si tienes 'client' de Mongo, haz un ping rápido
+        client.server_info()
+        return jsonify(ready=True), 200
+    except Exception:
+        return jsonify(ready=False), 503
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+C:\INFORMATICA\AI_Firefighter\API\api.py
+C:\INFORMATICA\AI_Firefighter\BO\app\run.py
+C:\INFORMATICA\AI_Firefighter\FO\main.py
+C:\INFORMATICA\AI_Firefighter\nginx.conf
+C:\INFORMATICA\AI_Firefighter\docker-compose.yml

@@ -9,5 +9,5 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')  # ← Esto convierte a booleano
     
     # Admin credentials (para primer acceso)
-    ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+    ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin3')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')

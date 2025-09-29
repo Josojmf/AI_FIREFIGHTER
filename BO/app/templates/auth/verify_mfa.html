@@ -1,0 +1,171 @@
+<!-- app/templates/auth/verify_mfa.html -->
+{% extends "bo_layout.html" %}
+
+{% block title %}BackOffice | Verificación MFA{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+{% endblock %}
+
+{% block content %}
+  <h1>Verificación de Seguridad</h1>
+  <p class="muted">Hola <strong>{{ username }}</strong>, ingresa el código de 6 dígitos de tu app authenticator.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, msg in messages %}
+        <div class="flash {{ category }}">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if attempts > 0 %}
+    <div style="background: #7f1d1d; color: #fecaca; padding: 10px 12px; border-radius: 10px; margin: 10px 0; font-size: 14px; border: 1px solid #ef4444;">
+      <i class="fas fa-exclamation-triangle" style="margin-right: 5px;"></i>
+      Intentos fallidos: {{ attempts }}/5
+    </div>
+  {% endif %}
+
+  <form method="POST" id="mfaForm">
+    <div style="display: flex; gap: 10px; justify-content: center; margin: 20px 0;">
+      {% for i in range(6) %}
+        <input type="text" 
+               class="mfa-digit" 
+               maxlength="1" 
+               data-index="{{ i }}" 
+               style="width: 40px; height: 50px; text-align: center; font-size: 1.2rem; font-weight: bold; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; border-radius: 8px; outline: none;"
+               oninput="moveToNext(this)" 
+               onkeydown="handleBackspace(event, this)"
+               autocomplete="off">
+      {% endfor %}
+    </div>
+    
+    <input type="hidden" name="mfa_code" id="mfaCode">
+
+    <div style="text-align: center; margin: 15px 0; color: #94a3b8; font-size: 14px;">
+      <i class="fas fa-clock" style="margin-right: 5px;"></i>
+      Tiempo restante: <span id="timeRemaining">30:00</span>
+    </div>
+
+    <button type="submit" id="verifyBtn" disabled style="width: 100%; margin-top: 16px; padding: 12px 16px; border: 0; border-radius: 10px; background: #3b82f6; color: white; font-weight: 600; cursor: pointer; opacity: 0.6; transition: all 0.3s ease;">
+      <i class="fas fa-check-circle" style="margin-right: 8px;"></i>Verificar Código
+    </button>
+  </form>
+
+  <div style="margin-top: 20px; text-align: center; font-size: 14px; color: #94a3b8;">
+    <p style="margin-bottom: 10px;">
+      <i class="fas fa-question-circle" style="margin-right: 5px;"></i>
+      ¿Problemas con el código?
+    </p>
+    <div style="display: flex; gap: 15px; justify-content: center;">
+      <a href="{{ url_for('auth.login') }}" style="color: #94a3b8; text-decoration: none;">
+        <i class="fas fa-sign-out-alt" style="margin-right: 5px;"></i>Volver al login
+      </a>
+    </div>
+  </div>
+
+  <style>
+    .mfa-digit:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+    }
+    
+    .mfa-digit.filled {
+      border-color: #10b981 !important;
+      background: #064e3b !important;
+    }
+    
+    #verifyBtn:not(:disabled) {
+      opacity: 1 !important;
+    }
+    
+    #verifyBtn:not(:disabled):hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+  </style>
+
+  <script>
+    let timeLeft = 30 * 60; // 30 minutos en segundos
+    
+    function updateTimer() {
+      if (timeLeft <= 0) {
+        window.location.href = "{{ url_for('auth.login') }}";
+        return;
+      }
+      
+      const minutes = Math.floor(timeLeft / 60);
+      const seconds = timeLeft % 60;
+      document.getElementById('timeRemaining').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      timeLeft--;
+    }
+    
+    setInterval(updateTimer, 1000);
+    updateTimer();
+
+    function moveToNext(input) {
+      const index = parseInt(input.dataset.index);
+      const value = input.value;
+      
+      // Solo permitir números
+      if (!/^\d$/.test(value)) {
+        input.value = '';
+        return;
+      }
+      
+      input.classList.add('filled');
+      
+      // Mover al siguiente campo
+      if (index < 5 && value !== '') {
+        const nextInput = document.querySelector(`.mfa-digit[data-index="${index + 1}"]`);
+        nextInput.focus();
+      }
+      
+      updateHiddenInput();
+      checkFormCompletion();
+    }
+    
+    function handleBackspace(event, input) {
+      const index = parseInt(input.dataset.index);
+      
+      if (event.key === 'Backspace' && input.value === '' && index > 0) {
+        const prevInput = document.querySelector(`.mfa-digit[data-index="${index - 1}"]`);
+        prevInput.focus();
+        prevInput.value = '';
+        prevInput.classList.remove('filled');
+      }
+      
+      updateHiddenInput();
+      checkFormCompletion();
+    }
+    
+    function updateHiddenInput() {
+      const codes = Array.from(document.querySelectorAll('.mfa-digit'))
+        .map(input => input.value)
+        .join('');
+      document.getElementById('mfaCode').value = codes;
+    }
+    
+    function checkFormCompletion() {
+      const codes = document.getElementById('mfaCode').value;
+      const verifyBtn = document.getElementById('verifyBtn');
+      verifyBtn.disabled = codes.length !== 6;
+    }
+    
+    // Auto-enfocar primer campo al cargar
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelector('.mfa-digit[data-index="0"]').focus();
+      
+      // Auto-submit cuando se complete el código
+      document.getElementById('mfaForm').addEventListener('input', function() {
+        if (document.getElementById('mfaCode').value.length === 6) {
+          setTimeout(() => {
+            document.getElementById('verifyBtn').click();
+          }, 300);
+        }
+      });
+    });
+  </script>
+{% endblock %}
