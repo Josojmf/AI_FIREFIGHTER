@@ -151,7 +151,6 @@ jobs:
           envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,DB_NAME,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
           script: |
             set -euo pipefail
-            docker compose -f "${APP_DIR}/docker-compose.prod.yml" down || true
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
@@ -167,33 +166,53 @@ jobs:
             echo "==> Login GHCR en el servidor"
             echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-            # --------- CREAR /root/firefighter.env QUE ESPERA compose ----------
+            # --------- CREAR /root/firefighter.env ----------
             ENV_FILE="/root/firefighter.env"
             echo "==> Generando ${ENV_FILE}"
             {
               [ -n "${SECRET_KEY:-}" ]        && echo "SECRET_KEY=${SECRET_KEY}"
               [ -n "${JWT_EXPIRES_HOURS:-}" ] && echo "JWT_EXPIRES_HOURS=${JWT_EXPIRES_HOURS}"
-
               [ -n "${MONGODB_URI:-}" ]       && echo "MONGODB_URI=${MONGODB_URI}"
               [ -n "${DB_NAME:-}" ]           && echo "DB_NAME=${DB_NAME}"
               [ -n "${MONGO_USER:-}" ]        && echo "MONGO_USER=${MONGO_USER}"
               [ -n "${MONGO_PASS:-}" ]        && echo "MONGO_PASS=${MONGO_PASS}"
               [ -n "${MONGO_CLUSTER:-}" ]     && echo "MONGO_CLUSTER=${MONGO_CLUSTER}"
-
               [ -n "${VAPID_PUBLIC_KEY:-}" ]  && echo "VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}"
               [ -n "${VAPID_PRIVATE_KEY:-}" ] && echo "VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}"
             } | sed 's/\r$//' > "${ENV_FILE}"
-
             chmod 600 "${ENV_FILE}"
 
-            # Export para interpolaciones ${IMAGE} en compose si las hay
             export IMAGE="${IMAGE}"
             echo "Usando imagen: ${IMAGE}"
 
             test -f "${COMPOSE_FILE}" || { echo "No existe ${COMPOSE_FILE} en $(pwd)"; exit 1; }
 
-            # Pull & Up
+            echo "==> DOWN previo para evitar conflictos de puertos"
+            docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
+
+            echo "==> Si hay algún contenedor ajeno en 0.0.0.0:5000, lo paramos"
+            CONTAINER_ON_5000="$(docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' | awk '/0\.0\.0\.0:5000->/ {print $1}')"
+            if [ -n "${CONTAINER_ON_5000}" ]; then
+              echo "Parando contenedor en 5000: ${CONTAINER_ON_5000}"
+              docker stop "${CONTAINER_ON_5000}" || true
+              docker rm "${CONTAINER_ON_5000}" || true
+            fi
+
+            echo "==> Si el puerto 5000 sigue ocupado por otro proceso, mostramos diagnóstico y abortamos"
+            if ss -ltnp | grep -q ':5000 '; then
+              ss -ltnp | grep ':5000 ' || true
+              echo "Puerto 5000 ocupado por un proceso no-Docker. Libéralo o cambia el mapeo en compose."
+              exit 1
+            fi
+
+            echo "==> Pull de imágenes"
             docker compose -f "${COMPOSE_FILE}" pull
+
+            echo "==> Up servicios"
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
+
+            echo "==> Limpieza"
             docker image prune -f
+
+            echo "==> Estado"
             docker compose -f "${COMPOSE_FILE}" ps
