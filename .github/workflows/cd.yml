@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 30
     env:
       APP_DIR: /opt/emergency
-      COMPOSE_FILE: docker-compose.prod.yml     # usamos el de prod directamente
+      COMPOSE_FILE: docker-compose.prod.yml
       REGISTRY: ghcr.io
       IMAGE_BASENAME: ai-firefighter-frontend
     steps:
@@ -121,24 +121,24 @@ jobs:
 
       - name: Remote deploy (create env + compose up)
         uses: appleboy/ssh-action@v0.1.8
-        # Pasamos todos los secrets que quieras materializar en /root/firefighter.env
         env:
           GHCR_USER:           ${{ secrets.GHCR_USER }}
           GHCR_PAT:            ${{ secrets.GHCR_PAT }}
           IMAGE:               ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
 
-          # ------ VARIABLES DE TU APP (ajusta a lo que uses) ------
+          # ------ VARIABLES DE TU APP ------
           SECRET_KEY:          ${{ secrets.SECRET_KEY }}
           JWT_EXPIRES_HOURS:   ${{ secrets.JWT_EXPIRES_HOURS }}
 
-          # Mongo / DB (pon las que tengas):
+          # Mongo / DB: puedes tener MONGODB_URI o MONGO_URI o el trío MONGO_USER/PASS/CLUSTER
           MONGODB_URI:         ${{ secrets.MONGODB_URI }}
-          DB_NAME:             ${{ secrets.DB_NAME }}
+          MONGO_URI:           ${{ secrets.MONGO_URI }}
           MONGO_USER:          ${{ secrets.MONGO_USER }}
           MONGO_PASS:          ${{ secrets.MONGO_PASS }}
           MONGO_CLUSTER:       ${{ secrets.MONGO_CLUSTER }}
+          DB_NAME:             ${{ secrets.DB_NAME }}
 
-          # VAPID (push):
+          # VAPID (push)
           VAPID_PUBLIC_KEY:    ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY:   ${{ secrets.VAPID_PRIVATE_KEY }}
         with:
@@ -147,8 +147,7 @@ jobs:
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
           script_stop: true
-          # haz disponibles las variables anteriores dentro del script
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,DB_NAME,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,MONGO_URI,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,DB_NAME,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
           script: |
             set -euo pipefail
             mkdir -p "${APP_DIR}"
@@ -172,11 +171,16 @@ jobs:
             {
               [ -n "${SECRET_KEY:-}" ]        && echo "SECRET_KEY=${SECRET_KEY}"
               [ -n "${JWT_EXPIRES_HOURS:-}" ] && echo "JWT_EXPIRES_HOURS=${JWT_EXPIRES_HOURS}"
-              [ -n "${MONGODB_URI:-}" ]       && echo "MONGODB_URI=${MONGODB_URI}"
-              [ -n "${DB_NAME:-}" ]           && echo "DB_NAME=${DB_NAME}"
+
+              # Mongo / DB
+              [ -n "${MONGODB_URI:-}" ]       && echo "MONGO_URI=${MONGODB_URI}"   # MAPEO CLAVE → la API entiende MONGO_URI
+              [ -n "${MONGO_URI:-}" ]         && echo "MONGO_URI=${MONGO_URI}"
               [ -n "${MONGO_USER:-}" ]        && echo "MONGO_USER=${MONGO_USER}"
               [ -n "${MONGO_PASS:-}" ]        && echo "MONGO_PASS=${MONGO_PASS}"
               [ -n "${MONGO_CLUSTER:-}" ]     && echo "MONGO_CLUSTER=${MONGO_CLUSTER}"
+              [ -n "${DB_NAME:-}" ]           && echo "DB_NAME=${DB_NAME}"
+
+              # VAPID
               [ -n "${VAPID_PUBLIC_KEY:-}" ]  && echo "VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}"
               [ -n "${VAPID_PRIVATE_KEY:-}" ] && echo "VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}"
             } | sed 's/\r$//' > "${ENV_FILE}"

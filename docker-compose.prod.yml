@@ -1,6 +1,4 @@
-﻿version: "3.9"
-
-services:
+﻿services:
   frontend:
     container_name: frontend
     image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai-firefighter-frontend:latest}
@@ -16,7 +14,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      # Tu app devuelve 200 en "/", no existe /health
+      # La app devuelve 200 en "/", no existe /health en el frontend
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
       timeout: 5s
@@ -33,21 +31,20 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # El backend lee estas variables o MONGODB_URI directamente (ver api.py)
+      # El backend lee estas variables o MONGO_URI directamente (ver api.py)
       - MONGO_USER=${MONGO_USER:-}
       - MONGO_PASS=${MONGO_PASS:-}
       - MONGO_CLUSTER=${MONGO_CLUSTER:-}
-      - MONGODB_URI=${MONGODB_URI:-}
+      - MONGO_URI=${MONGO_URI:-}
       - DB_NAME=${DB_NAME:-FIREFIGHTER}
       - SECRET_KEY=${SECRET_KEY:-change-me}
       - FLASK_ENV=production
     healthcheck:
-      # En tu backend existe /api/health; no uses la raíz
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
       retries: 5
-      start_period: 60s
+      start_period: 10s
     networks:
       - firefighter
 
