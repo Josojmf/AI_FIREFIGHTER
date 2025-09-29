@@ -21,7 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io
-      IMAGE_BASENAME: ai-firefighter-frontend   # cambia si tu imagen se llama distinto
+      # Asegúrate de que el basename esté TODO en minúsculas
+      IMAGE_BASENAME: ai-firefighter-frontend
+      # Forzamos el owner en minúsculas (evita el error de tag inválido)
+      IMAGE_OWNER: ${{ toLower(github.repository_owner) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,10 +40,10 @@ jobs:
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Compose full image name
+      - name: Compose full image name (lowercased)
         id: img
         run: |
-          echo "full_image=ghcr.io/${{ secrets.GHCR_USER }}/${IMAGE_BASENAME}" >> $GITHUB_OUTPUT
+          echo "full_image=${REGISTRY}/${IMAGE_OWNER}/${IMAGE_BASENAME}" >> $GITHUB_OUTPUT
 
       - name: Set image tags
         id: tags
@@ -63,9 +66,11 @@ jobs:
     needs: build-and-push
     timeout-minutes: 30
     env:
-      APP_DIR: /opt/emergency          # cambia si tu ruta es otra
-      COMPOSE_FILE: docker-compose.yml # debe existir en el servidor
+      APP_DIR: /opt/emergency
+      COMPOSE_FILE: docker-compose.yml
       REGISTRY: ghcr.io
+      IMAGE_OWNER: ${{ toLower(github.repository_owner) }}
+      IMAGE_BASENAME: ai-firefighter-frontend
     steps:
       - name: Checkout (for possible scripts/templates)
         uses: actions/checkout@v4
@@ -91,25 +96,27 @@ jobs:
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
           script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY
+          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE_OWNER,IMAGE_BASENAME
           script: |
             set -euo pipefail
 
-            echo "==> Ensure directory and move there"
+            echo "==> Accediendo a ${APP_DIR}"
             mkdir -p "${APP_DIR}"
             cd "${APP_DIR}"
 
-            echo "==> Login to GHCR on server"
+            echo "==> Login a GHCR en el servidor"
             echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
 
-            echo "==> Pull images defined in compose"
-            docker compose -f "${COMPOSE_FILE}" pull
+            echo "==> Haciendo pull de la imagen más reciente"
+            IMAGE="${REGISTRY}/${IMAGE_OWNER}/${IMAGE_BASENAME}:latest"
+            echo "Usando imagen: ${IMAGE}"
 
-            echo "==> Up services"
+            # Asegúrate de que tu docker-compose.yml reference ${IMAGE} o la misma ruta en minúsculas
+            docker compose -f "${COMPOSE_FILE}" pull
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
-            echo "==> Prune dangling images"
+            echo "==> Limpiando imágenes colgantes"
             docker image prune -f
 
-            echo "==> Status"
+            echo "==> Estado"
             docker compose -f "${COMPOSE_FILE}" ps
