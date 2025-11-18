@@ -114,15 +114,19 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            # Install Docker if not present
             if ! command -v docker &> /dev/null; then
               apt-get update -y
               apt-get install -y docker.io
               systemctl enable --now docker
             fi
 
-            if ! docker compose version &> /dev/null; then
+            # Install Docker Compose (using the standalone version for compatibility)
+            if ! command -v docker-compose &> /dev/null; then
               apt-get update -y
-              apt-get install -y docker-compose-plugin
+              apt-get install -y curl
+              curl -SL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+              chmod +x /usr/local/bin/docker-compose
             fi
 
       - name: Login GHCR in server
@@ -167,8 +171,8 @@ jobs:
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
             cd /opt/emergency
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
             docker system prune -f
 
       - name: Deployment Finished
