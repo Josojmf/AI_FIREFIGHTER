@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Certificaciones | FirefighterAI</title>
-  <meta name="description" content="FirefighterAI - Plataforma Inteligente para preparar oposiciones de bombero con IA, simulacros y sistema Leitner.">
+  <meta name="description"
+    content="FirefighterAI - Plataforma Inteligente para preparar oposiciones de bombero con IA, simulacros y sistema Leitner.">
   <meta name="theme-color" content="#dc2626">
-  
+
   <!-- Fuente moderna -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap"
+    rel="stylesheet">
 
   <!-- Variables y estilos globales -->
   <style>
@@ -138,9 +141,11 @@
       0% {
         box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.42);
       }
+
       70% {
         box-shadow: 0 0 0 22px rgba(220, 38, 38, 0);
       }
+
       100% {
         box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
       }
@@ -211,8 +216,8 @@
       align-items: center;
       padding: .35rem .7rem;
       border-radius: 999px;
-      background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(255, 255, 255, .12);
       color: var(--text-secondary);
       font-weight: 600;
       margin-bottom: 1rem;
@@ -245,9 +250,9 @@
       gap: .4rem;
       align-items: center;
       padding: .45rem .7rem;
-      border: 1px solid rgba(255,255,255,.12);
+      border: 1px solid rgba(255, 255, 255, .12);
       border-radius: 999px;
-      background: rgba(255,255,255,.04);
+      background: rgba(255, 255, 255, .04);
       color: var(--text-secondary);
       font-weight: 600;
     }
@@ -258,7 +263,7 @@
 
     .controls-wrapper {
       background: var(--gradient-card);
-      border: 1px solid rgba(255,255,255,.08);
+      border: 1px solid rgba(255, 255, 255, .08);
       border-radius: var(--radius-xl);
       padding: 1.5rem;
       text-align: center;
@@ -285,8 +290,8 @@
       gap: .5rem;
       padding: .8rem 1.1rem;
       border-radius: var(--radius-lg);
-      border: 1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: rgba(255, 255, 255, .06);
       cursor: pointer;
       font-weight: 600;
       transition: all var(--transition-base);
@@ -296,15 +301,15 @@
 
     .control-btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .2);
     }
 
     .iframe-container {
       position: relative;
       border-radius: var(--radius-xl);
       background: var(--gradient-card);
-      border: 1px solid rgba(255,255,255,.08);
-      box-shadow: 0 14px 40px rgba(0,0,0,.35);
+      border: 1px solid rgba(255, 255, 255, .08);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, .35);
       overflow: hidden;
       min-height: 400px;
     }
@@ -315,7 +320,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(180deg, rgba(11,11,15,.75), rgba(11,11,15,.35));
+      background: linear-gradient(180deg, rgba(11, 11, 15, .75), rgba(11, 11, 15, .35));
       backdrop-filter: blur(4px);
       z-index: 10;
       text-align: center;
@@ -328,7 +333,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(180deg, rgba(11,11,15,.9), rgba(11,11,15,.6));
+      background: linear-gradient(180deg, rgba(11, 11, 15, .9), rgba(11, 11, 15, .6));
       backdrop-filter: blur(6px);
       z-index: 10;
       text-align: center;
@@ -339,14 +344,16 @@
       width: 50px;
       height: 50px;
       border-radius: 50%;
-      border: 4px solid rgba(255,255,255,.2);
+      border: 4px solid rgba(255, 255, 255, .2);
       border-top-color: #fff;
       animation: spin 1s linear infinite;
       margin: 0 auto 1rem;
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .error-icon {
@@ -374,7 +381,7 @@
 
     .info-card {
       background: var(--gradient-card);
-      border: 1px solid rgba(255,255,255,.08);
+      border: 1px solid rgba(255, 255, 255, .08);
       border-radius: var(--radius-lg);
       padding: 1.5rem;
       text-align: center;
@@ -398,7 +405,7 @@
 
     .faq-item {
       background: var(--gradient-card);
-      border: 1px solid rgba(255,255,255,.08);
+      border: 1px solid rgba(255, 255, 255, .08);
       border-radius: var(--radius-lg);
       overflow: hidden;
     }
@@ -431,7 +438,7 @@
       background: var(--gradient-card);
       border-radius: var(--radius-xl);
       padding: 2rem;
-      border: 1px solid rgba(255,255,255,.08);
+      border: 1px solid rgba(255, 255, 255, .08);
     }
 
     .cta-icon {
@@ -452,16 +459,17 @@
         flex-direction: column;
         align-items: center;
       }
-      
+
       .control-btn {
         width: 100%;
         justify-content: center;
       }
-      
-      .error-actions, .cta-buttons {
+
+      .error-actions,
+      .cta-buttons {
         flex-direction: column;
       }
-      
+
       .info-cards {
         grid-template-columns: 1fr;
       }
@@ -484,166 +492,185 @@
 
   <!-- Main content -->
   <main>
-    
-<!-- Certificaciones Hero Section -->
-<section class="certificaciones-hero">
-  <div class="container">
-    <div class="hero-content animate-on-scroll">
-      <div class="hero-badge">
-        <span class="badge-icon">🎓</span>
-        <span class="badge-text">Plataforma de Certificaciones Profesionales</span>
-      </div>
-      <h1 class="hero-title">
-        <span class="text-gradient">Certificaciones</span><br>
-        Oficiales y Formación <span class="text-gradient">Reconocida</span>
-      </h1>
-      <p class="hero-subtitle">
-        Accede a contenidos acreditados, programas con reconocimiento oficial 
-        y vías de certificación profesional para tu desarrollo como bombero.
-      </p>
-      <div class="hero-features">
-        <div class="feature-item"><span class="feature-icon">🏆</span><span class="feature-text">Reconocimiento Oficial</span></div>
-        <div class="feature-item"><span class="feature-icon">📋</span><span class="feature-text">Programas Acreditados</span></div>
-        <div class="feature-item"><span class="feature-icon">🎯</span><span class="feature-text">Desarrollo Profesional</span></div>
-      </div>
-    </div>
-  </div>
-</section>
 
-<!-- Platform Controls -->
-<section class="platform-controls">
-  <div class="container">
-    <div class="controls-wrapper animate-on-scroll">
-      <div class="controls-header">
-        <h2>Plataforma de Formación Certificada</h2>
-        <p>Gestiona tu experiencia de aprendizaje con los controles avanzados</p>
-      </div>
-      <div class="controls-grid">
-        <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="control-btn btn-primary" id="openExternal">
-          <span class="btn-icon">🌐</span><span class="btn-text">Abrir en Nueva Pestaña</span>
-        </a>
-        <button type="button" class="control-btn btn-secondary" id="reloadFrame">
-          <span class="btn-icon">🔄</span><span class="btn-text">Recargar Plataforma</span>
-        </button>
-        <button type="button" class="control-btn btn-secondary" id="toggleFit">
-          <span class="btn-icon">↕️</span><span class="btn-text">Ajustar Altura</span>
-        </button>
-        <button type="button" class="control-btn btn-accent" id="enterFullscreen">
-          <span class="btn-icon">⛶</span><span class="btn-text">Pantalla Completa</span>
-        </button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Embedded Platform -->
-<section class="embedded-platform-section">
-  <div class="container">
-    <div class="iframe-container animate-on-scroll" id="embedCard">
-      <!-- Loader - Mostrado inicialmente -->
-      <div id="loader" class="iframe-loading">
-        <div class="loading-content">
-          <div class="loading-spinner-large"></div>
-          <h3>Cargando Plataforma de Certificaciones</h3>
-          <p>Conectando con la plataforma oficial...</p>
+    <!-- Certificaciones Hero Section -->
+    <section class="certificaciones-hero">
+      <div class="container">
+        <div class="hero-content animate-on-scroll">
+          <div class="hero-badge">
+            <span class="badge-icon">🎓</span>
+            <span class="badge-text">Plataforma de Certificaciones Profesionales</span>
+          </div>
+          <h1 class="hero-title">
+            <span class="text-gradient">Certificaciones</span><br>
+            Oficiales y Formación <span class="text-gradient">Reconocida</span>
+          </h1>
+          <p class="hero-subtitle">
+            Accede a contenidos acreditados, programas con reconocimiento oficial
+            y vías de certificación profesional para tu desarrollo como bombero.
+          </p>
+          <div class="hero-features">
+            <div class="feature-item"><span class="feature-icon">🏆</span><span class="feature-text">Reconocimiento
+                Oficial</span></div>
+            <div class="feature-item"><span class="feature-icon">📋</span><span class="feature-text">Programas
+                Acreditados</span></div>
+            <div class="feature-item"><span class="feature-icon">🎯</span><span class="feature-text">Desarrollo
+                Profesional</span></div>
+          </div>
         </div>
       </div>
+    </section>
 
-      <!-- Bloqueado - Mostrado si falla la carga -->
-      <div id="frameBlocked" class="iframe-error" style="display:none;">
-        <div class="error-content">
-          <div class="error-icon">🛡️</div>
-          <h3>Contenido Bloqueado por Seguridad</h3>
-          <p>La plataforma utiliza políticas que impiden su visualización embebida.</p>
-          <div class="error-details">
-            <h4>Detalles técnicos:</h4>
-            <ul class="error-reasons">
-              <li><code>X-Frame-Options</code></li>
-              <li><code>Content-Security-Policy: frame-ancestors</code></li>
-              <li>Protección contra clickjacking</li>
-            </ul>
+    <!-- Platform Controls -->
+    <section class="platform-controls">
+      <div class="container">
+        <div class="controls-wrapper animate-on-scroll">
+          <div class="controls-header">
+            <h2>Plataforma de Formación Certificada</h2>
+            <p>Gestiona tu experiencia de aprendizaje con los controles avanzados</p>
           </div>
-          <div class="error-actions">
-            <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary">
-              <span class="btn-icon">🔗</span><span class="btn-text">Abrir en Nueva Ventana</span>
+          <div class="controls-grid">
+            <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="control-btn btn-primary"
+              id="openExternal">
+              <span class="btn-icon">🌐</span><span class="btn-text">Abrir en Nueva Pestaña</span>
             </a>
-            <button type="button" class="btn btn-secondary" id="tryAgain">
-              <span class="btn-icon">🔄</span><span class="btn-text">Reintentar Carga</span>
+            <button type="button" class="control-btn btn-secondary" id="reloadFrame">
+              <span class="btn-icon">🔄</span><span class="btn-text">Recargar Plataforma</span>
+            </button>
+            <button type="button" class="control-btn btn-secondary" id="toggleFit">
+              <span class="btn-icon">↕️</span><span class="btn-text">Ajustar Altura</span>
+            </button>
+            <button type="button" class="control-btn btn-accent" id="enterFullscreen">
+              <span class="btn-icon">⛶</span><span class="btn-text">Pantalla Completa</span>
             </button>
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- Iframe - Oculto inicialmente -->
-      <div class="iframe-wrapper" id="embedAspect" style="display:none;">
-        <iframe id="certFrame"
-                src="/onfire-academy/"
-                frameborder="0"
-                allowfullscreen
-                referrerpolicy="no-referrer-when-downgrade"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                title="Plataforma de Certificaciones Profesionales"
-                loading="lazy">
-        </iframe>
-      </div>
-    </div>
-
-    <!-- Info Cards -->
-    <div class="platform-info animate-on-scroll">
-      <div class="info-cards">
-        <div class="info-card"><div class="card-icon">📜</div><h3>Certificaciones Oficiales</h3><p>Certificados reconocidos por organismos oficiales del sector.</p></div>
-        <div class="info-card"><div class="card-icon">👨‍🏫</div><h3>Instructores Expertos</h3><p>Aprende con profesionales con años de experiencia.</p></div>
-        <div class="info-card"><div class="card-icon">🎯</div><h3>Formación Especializada</h3><p>Programas adaptados a necesidades del sector.</p></div>
-      </div>
-    </div>
-
-    <!-- FAQ -->
-    <div class="faq-section animate-on-scroll">
-      <h2 class="section-title">Preguntas Frecuentes</h2>
-      <div class="faq-container">
-        <details class="faq-item">
-          <summary class="faq-question"><span>¿Por qué a veces no se muestra el contenido embebido?</span><span class="faq-icon">▼</span></summary>
-          <div class="faq-answer">
-            <p>Algunos sitios bloquean iframes por seguridad (XFO/CSP). Usa "Abrir en Nueva Pestaña".</p>
+    <!-- Embedded Platform -->
+    <section class="embedded-platform-section">
+      <div class="container">
+        <div class="iframe-container animate-on-scroll" id="embedCard">
+          <!-- Loader - Mostrado inicialmente -->
+          <div id="loader" class="iframe-loading">
+            <div class="loading-content">
+              <div class="loading-spinner-large"></div>
+              <h3>Cargando Plataforma de Certificaciones</h3>
+              <p>Conectando con la plataforma oficial...</p>
+            </div>
           </div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-question"><span>¿Cómo maximizo mi experiencia?</span><span class="faq-icon">▼</span></summary>
-          <div class="faq-answer">
-            <ul>
-              <li>Usa pantalla completa</li><li>Ajusta la altura</li><li>Conexión estable</li><li>Navegador actualizado</li>
-            </ul>
-          </div>
-        </details>
-        <details class="faq-item">
-          <summary class="faq-question"><span>¿Las certificaciones tienen validez oficial?</span><span class="faq-icon">▼</span></summary>
-          <div class="faq-answer">
-            <p>Sí: reconocimiento institucional, certificados verificables y válidos en procesos.</p>
-          </div>
-        </details>
-      </div>
-    </div>
-  </div>
-</section>
 
-<!-- CTA -->
-<section class="cta-section">
-  <div class="container">
-    <div class="cta-content animate-on-scroll">
-      <div class="cta-icon">🎓</div>
-      <h2 class="cta-title">¿Listo para obtener tu certificación profesional?</h2>
-      <p class="cta-subtitle">Accede a la formación más completa y reconocida del sector.</p>
-      <div class="cta-buttons">
-        <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary btn-large">
-          <span class="btn-icon">🚀</span><span class="btn-text">Comenzar Certificación</span>
-        </a>
-        <a href="/contact" class="btn btn-secondary btn-large">
-          <span class="btn-icon">💬</span><span class="btn-text">Más Información</span>
-        </a>
+          <!-- Bloqueado - Mostrado si falla la carga -->
+          <div id="frameBlocked" class="iframe-error" style="display:none;">
+            <div class="error-content">
+              <div class="error-icon">🛡️</div>
+              <h3>Contenido Bloqueado por Seguridad</h3>
+              <p>La plataforma utiliza políticas que impiden su visualización embebida.</p>
+              <div class="error-details">
+                <h4>Detalles técnicos:</h4>
+                <ul class="error-reasons">
+                  <li><code>X-Frame-Options</code></li>
+                  <li><code>Content-Security-Policy: frame-ancestors</code></li>
+                  <li>Protección contra clickjacking</li>
+                </ul>
+              </div>
+              <div class="error-actions">
+                <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary">
+                  <span class="btn-icon">🔗</span><span class="btn-text">Abrir en Nueva Ventana</span>
+                </a>
+                <button type="button" class="btn btn-secondary" id="tryAgain">
+                  <span class="btn-icon">🔄</span><span class="btn-text">Reintentar Carga</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Iframe - Oculto inicialmente -->
+          <!-- Solo la parte del iframe que necesita cambio -->
+          <div class="iframe-wrapper" id="embedAspect" style="display:none;">
+            <iframe id="certFrame" src="{{ proxied_url if proxied_url else '/onfire-academy/' }}" frameborder="0"
+              allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              title="Plataforma de Certificaciones Profesionales" loading="lazy">
+            </iframe>
+          </div>
+        </div>
+
+        <!-- Info Cards -->
+        <div class="platform-info animate-on-scroll">
+          <div class="info-cards">
+            <div class="info-card">
+              <div class="card-icon">📜</div>
+              <h3>Certificaciones Oficiales</h3>
+              <p>Certificados reconocidos por organismos oficiales del sector.</p>
+            </div>
+            <div class="info-card">
+              <div class="card-icon">👨‍🏫</div>
+              <h3>Instructores Expertos</h3>
+              <p>Aprende con profesionales con años de experiencia.</p>
+            </div>
+            <div class="info-card">
+              <div class="card-icon">🎯</div>
+              <h3>Formación Especializada</h3>
+              <p>Programas adaptados a necesidades del sector.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ -->
+        <div class="faq-section animate-on-scroll">
+          <h2 class="section-title">Preguntas Frecuentes</h2>
+          <div class="faq-container">
+            <details class="faq-item">
+              <summary class="faq-question"><span>¿Por qué a veces no se muestra el contenido embebido?</span><span
+                  class="faq-icon">▼</span></summary>
+              <div class="faq-answer">
+                <p>Algunos sitios bloquean iframes por seguridad (XFO/CSP). Usa "Abrir en Nueva Pestaña".</p>
+              </div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-question"><span>¿Cómo maximizo mi experiencia?</span><span class="faq-icon">▼</span>
+              </summary>
+              <div class="faq-answer">
+                <ul>
+                  <li>Usa pantalla completa</li>
+                  <li>Ajusta la altura</li>
+                  <li>Conexión estable</li>
+                  <li>Navegador actualizado</li>
+                </ul>
+              </div>
+            </details>
+            <details class="faq-item">
+              <summary class="faq-question"><span>¿Las certificaciones tienen validez oficial?</span><span
+                  class="faq-icon">▼</span></summary>
+              <div class="faq-answer">
+                <p>Sí: reconocimiento institucional, certificados verificables y válidos en procesos.</p>
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+      <div class="container">
+        <div class="cta-content animate-on-scroll">
+          <div class="cta-icon">🎓</div>
+          <h2 class="cta-title">¿Listo para obtener tu certificación profesional?</h2>
+          <p class="cta-subtitle">Accede a la formación más completa y reconocida del sector.</p>
+          <div class="cta-buttons">
+            <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary btn-large">
+              <span class="btn-icon">🚀</span><span class="btn-text">Comenzar Certificación</span>
+            </a>
+            <a href="/contact" class="btn btn-secondary btn-large">
+              <span class="btn-icon">💬</span><span class="btn-text">Más Información</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
 
   </main>
 
@@ -663,7 +690,8 @@
 
       <!-- Branding + redes -->
       <div style="display:flex; flex-direction:column; gap:1rem; align-items:center;">
-        <div class="logo" style="font-weight:800; font-size:1.3rem; background:var(--gradient-fire); -webkit-background-clip:text; color:transparent;">
+        <div class="logo"
+          style="font-weight:800; font-size:1.3rem; background:var(--gradient-fire); -webkit-background-clip:text; color:transparent;">
           🔥 FirefighterAI
         </div>
         <div style="display:flex; gap:1rem; font-size:1.4rem; color:var(--text-secondary);">
@@ -683,138 +711,139 @@
 
   <!-- Scripts -->
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    // Inicialmente mostrar el loader y ocultar el iframe
-    const loader = document.getElementById('loader');
-    const blocked = document.getElementById('frameBlocked');
-    const iframeWrapper = document.getElementById('embedAspect');
-    const frame = document.getElementById('certFrame');
-    
-    // Mostrar loader inmediatamente
-    loader.style.display = 'flex';
-    iframeWrapper.style.display = 'none';
-    blocked.style.display = 'none';
-    
-    // Configurar eventos para detectar si el iframe está bloqueado
-    let isBlocked = false;
-    
-    // Verificar si el iframe está bloqueado después de un tiempo
-    const checkIfBlocked = setTimeout(() => {
-      try {
-        // Intentar acceder al contenido del iframe
-        // Si falla, significa que está bloqueado
-        const iframeDoc = frame.contentDocument || frame.contentWindow.document;
-        if (iframeDoc && iframeDoc.body) {
-          // Si podemos acceder al documento, no está bloqueado
-          loader.style.display = 'none';
-          iframeWrapper.style.display = 'block';
-        }
-      } catch (e) {
-        // Error al acceder - está bloqueado
-        isBlocked = true;
-        loader.style.display = 'none';
-        blocked.style.display = 'flex';
-        iframeWrapper.style.display = 'none';
-      }
-    }, 3000);
-    
-    // Evento de carga del iframe
-    frame.addEventListener('load', () => {
-      clearTimeout(checkIfBlocked);
-      
-      // Pequeño retraso para asegurar que la carga esté completa
-      setTimeout(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      // Inicialmente mostrar el loader y ocultar el iframe
+      const loader = document.getElementById('loader');
+      const blocked = document.getElementById('frameBlocked');
+      const iframeWrapper = document.getElementById('embedAspect');
+      const frame = document.getElementById('certFrame');
+
+      // Mostrar loader inmediatamente
+      loader.style.display = 'flex';
+      iframeWrapper.style.display = 'none';
+      blocked.style.display = 'none';
+
+      // Configurar eventos para detectar si el iframe está bloqueado
+      let isBlocked = false;
+
+      // Verificar si el iframe está bloqueado después de un tiempo
+      const checkIfBlocked = setTimeout(() => {
         try {
+          // Intentar acceder al contenido del iframe
+          // Si falla, significa que está bloqueado
           const iframeDoc = frame.contentDocument || frame.contentWindow.document;
-          if (iframeDoc && iframeDoc.body && iframeDoc.body.children.length > 0) {
-            // Carga exitosa
+          if (iframeDoc && iframeDoc.body) {
+            // Si podemos acceder al documento, no está bloqueado
             loader.style.display = 'none';
             iframeWrapper.style.display = 'block';
-          } else {
-            // Iframe cargado pero vacío (probablemente bloqueado)
-            isBlocked = true;
-            loader.style.display = 'none';
-            blocked.style.display = 'flex';
-            iframeWrapper.style.display = 'none';
           }
         } catch (e) {
-          // Error de acceso - bloqueado
+          // Error al acceder - está bloqueado
           isBlocked = true;
           loader.style.display = 'none';
           blocked.style.display = 'flex';
           iframeWrapper.style.display = 'none';
         }
-      }, 500);
-    });
-    
-    // Evento de error del iframe
-    frame.addEventListener('error', () => {
-      clearTimeout(checkIfBlocked);
-      isBlocked = true;
-      loader.style.display = 'none';
-      blocked.style.display = 'flex';
-      iframeWrapper.style.display = 'none';
-    });
-    
-    // Botones de control
-    const tryAgain = document.getElementById('tryAgain');
-    const reloadBtn = document.getElementById('reloadFrame');
-    const fsBtn = document.getElementById('enterFullscreen');
-    const card = document.getElementById('embedCard');
+      }, 3000);
 
-    if (tryAgain) {
-      tryAgain.addEventListener('click', () => {
-        loader.style.display = 'flex';
-        blocked.style.display = 'none';
-        iframeWrapper.style.display = 'none';
-        // Forzar recarga con parámetro aleatorio para evitar caché
-        frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
-      });
-    }
+      // Evento de carga del iframe
+      frame.addEventListener('load', () => {
+        clearTimeout(checkIfBlocked);
 
-    if (reloadBtn) {
-      reloadBtn.addEventListener('click', () => {
-        loader.style.display = 'flex';
-        blocked.style.display = 'none';
-        iframeWrapper.style.display = 'none';
-        try {
-          frame.contentWindow.location.reload();
-        } catch {
-          frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
-        }
-      });
-    }
-
-    if (fsBtn) {
-      fsBtn.addEventListener('click', async () => {
-        try {
-          if (document.fullscreenElement) {
-            await document.exitFullscreen();
-          } else {
-            await card.requestFullscreen();
+        // Pequeño retraso para asegurar que la carga esté completa
+        setTimeout(() => {
+          try {
+            const iframeDoc = frame.contentDocument || frame.contentWindow.document;
+            if (iframeDoc && iframeDoc.body && iframeDoc.body.children.length > 0) {
+              // Carga exitosa
+              loader.style.display = 'none';
+              iframeWrapper.style.display = 'block';
+            } else {
+              // Iframe cargado pero vacío (probablemente bloqueado)
+              isBlocked = true;
+              loader.style.display = 'none';
+              blocked.style.display = 'flex';
+              iframeWrapper.style.display = 'none';
+            }
+          } catch (e) {
+            // Error de acceso - bloqueado
+            isBlocked = true;
+            loader.style.display = 'none';
+            blocked.style.display = 'flex';
+            iframeWrapper.style.display = 'none';
           }
-        } catch(e) {
-          console.warn('Fullscreen no disponible:', e);
-        }
+        }, 500);
       });
-    }
-    
-    // Animaciones de scroll
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('animate-in');
-        }
+
+      // Evento de error del iframe
+      frame.addEventListener('error', () => {
+        clearTimeout(checkIfBlocked);
+        isBlocked = true;
+        loader.style.display = 'none';
+        blocked.style.display = 'flex';
+        iframeWrapper.style.display = 'none';
       });
-    }, {
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px'
+
+      // Botones de control
+      const tryAgain = document.getElementById('tryAgain');
+      const reloadBtn = document.getElementById('reloadFrame');
+      const fsBtn = document.getElementById('enterFullscreen');
+      const card = document.getElementById('embedCard');
+
+      if (tryAgain) {
+        tryAgain.addEventListener('click', () => {
+          loader.style.display = 'flex';
+          blocked.style.display = 'none';
+          iframeWrapper.style.display = 'none';
+          // Forzar recarga con parámetro aleatorio para evitar caché
+          frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
+        });
+      }
+
+      if (reloadBtn) {
+        reloadBtn.addEventListener('click', () => {
+          loader.style.display = 'flex';
+          blocked.style.display = 'none';
+          iframeWrapper.style.display = 'none';
+          try {
+            frame.contentWindow.location.reload();
+          } catch {
+            frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
+          }
+        });
+      }
+
+      if (fsBtn) {
+        fsBtn.addEventListener('click', async () => {
+          try {
+            if (document.fullscreenElement) {
+              await document.exitFullscreen();
+            } else {
+              await card.requestFullscreen();
+            }
+          } catch (e) {
+            console.warn('Fullscreen no disponible:', e);
+          }
+        });
+      }
+
+      // Animaciones de scroll
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('animate-in');
+          }
+        });
+      }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+      });
+
+      document.querySelectorAll('.animate-on-scroll').forEach(el => {
+        observer.observe(el);
+      });
     });
-    
-    document.querySelectorAll('.animate-on-scroll').forEach(el => {
-      observer.observe(el);
-    });
-  });
   </script>
 </body>
+
 </html>

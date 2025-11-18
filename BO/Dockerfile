@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && rm -rf /root/.cache/pip
 
-# Copy application
+# Copy the full app
 COPY . .
 
 EXPOSE 3001
@@ -27,5 +27,5 @@ ENV FLASK_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD curl -f http://localhost:3001/health || exit 1
 
-# RUN BACKOFFICE CORRECTLY
+# IMPORTANT: Run using our script, not waitress-serve
 CMD ["python", "serve_waitress.py"]

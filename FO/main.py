@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
 import requests
 import json
 import os
@@ -465,10 +465,32 @@ def clear_chat():
     session.modified = True
     return jsonify({"success": True, "message": "Chat limpiado"})
 
-@app.route("/certificaciones", methods=["GET", "POST"])
+@app.route("/certificaciones", methods=["GET"])
 @login_required
-def certificacion():
-    return render_template("certificaciones.html")
+def certificaciones():
+    """Página de certificaciones con múltiples opciones de carga"""
+    
+    # URLs de fallback en orden de prioridad
+    urls = [
+        "/onfire-academy/",  # Proxy interno (bypass X-Frame-Options)
+        "https://www.onfireacademy.es/",  # URL directa
+        "https://www.onfireacademy.es/index.html#header13-2w"  # URL específica
+    ]
+    
+    # Detectar si es una petición específica o general
+    proxy_mode = request.args.get('proxy', 'internal')
+    
+    if proxy_mode == 'direct':
+        proxied_url = urls[1]  # URL directa
+    elif proxy_mode == 'specific':
+        proxied_url = urls[2]  # URL con fragmento específico
+    else:
+        proxied_url = urls[0]  # Proxy interno (por defecto)
+    
+    return render_template("certificaciones.html", 
+                         proxied_url=proxied_url,
+                         proxy_mode=proxy_mode,
+                         fallback_urls=urls[1:])
 
 # --- Estado de la API Auth ---
 @app.route("/api-status")
@@ -503,6 +525,95 @@ def logout():
     
     flash('Sesión cerrada correctamente', 'success')
     return response
+
+
+# Añadir estas rutas al final de tu app.py (antes del if __name__ == "__main__"):
+
+@app.route("/onfire-academy/")
+@login_required  
+def proxy_onfire():
+    """Proxy para bypass de X-Frame-Options"""
+    import requests
+    from urllib.parse import urljoin, urlparse
+    
+    try:
+        target_url = "https://www.onfireacademy.es/"
+        
+        # Headers para bypass
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        response = requests.get(target_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            content = response.text
+            
+            # Modificar el HTML para que funcione embebido
+            content = content.replace('X-Frame-Options', 'X-Frame-Options-Disabled')
+            content = content.replace('frame-ancestors', 'frame-ancestors-disabled')
+            
+            # Arreglar rutas relativas
+            content = content.replace('href="/', f'href="{target_url}')
+            content = content.replace('src="/', f'src="{target_url}')
+            content = content.replace("href='/", f"href='{target_url}")
+            content = content.replace("src='/", f"src='{target_url}")
+            
+            # Crear respuesta sin headers restrictivos
+            resp = make_response(content)
+            resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+            # NO añadir X-Frame-Options
+            resp.headers.pop('X-Frame-Options', None)
+            
+            return resp
+        else:
+            # Fallback en caso de error
+            return redirect("https://www.onfireacademy.es/", code=302)
+            
+    except Exception as e:
+        print(f"⚠️ Error en proxy: {e}")
+        # Fallback directo
+        return redirect("https://www.onfireacademy.es/", code=302)
+
+
+@app.route("/certificaciones/proxy/<path:subpath>")
+@login_required
+def proxy_onfire_assets(subpath):
+    """Proxy para assets (CSS, JS, imágenes) de OnFire Academy"""
+    import requests
+    
+    try:
+        target_url = f"https://www.onfireacademy.es/{subpath}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://www.onfireacademy.es/',
+        }
+        
+        response = requests.get(target_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            resp = make_response(response.content)
+            
+            # Mantener el content-type original
+            if 'content-type' in response.headers:
+                resp.headers['Content-Type'] = response.headers['content-type']
+                
+            return resp
+        else:
+            return "Asset not found", 404
+            
+    except Exception as e:
+        print(f"⚠️ Error en proxy asset: {e}")
+        return "Proxy error", 500
+
+# Asegúrate de importar make_response al inicio del archivo:
+# from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, make_response
 
 if __name__ == "__main__":
     _safe_print("🚀 Frontend iniciando...")
