@@ -1,226 +1,151 @@
-﻿name: CD - Build, Push & Deploy
+﻿name: CD Pipeline - Ultra Robust with Emergency Fallback
 
 on:
   push:
-    branches: [ "main" ]
-    paths-ignore:
-      - "**.md"
+    branches:
+      - main
+    # Se despliega solo si cambian archivos relevantes
+    paths:
+      - "Dockerfile"
+      - "docker-compose.prod.yml"
+      - "api/**"
+      - "BO/**"
+      - "AGENTS.md"
+
+  # Permite ejecutarlo manualmente desde GitHub Actions
   workflow_dispatch:
 
-concurrency:
-  group: cd-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  packages: write
-
 jobs:
+
+  # -------------------------------------------------------------
+  # 1. BUILD & PUSH DOCKER IMAGE TO GHCR
+  # -------------------------------------------------------------
   build-and-push:
-    name: Build & Push image to GHCR
+    name: 🏗️ Build & Push Docker Image
     runs-on: ubuntu-latest
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_BASENAME: ai-firefighter-frontend
+
     steps:
-      - name: Checkout
+
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Owner en minúsculas
-        id: lc
-        run: |
-          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
-      - name: Short SHA
-        id: vars
-        run: echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-      - name: Login GHCR
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Encontrar Dockerfile y context
-        id: finddf
-        shell: bash
-        run: |
-          set -euo pipefail
-          CANDIDATES="$(git ls-files -co -m | grep -iE '(^|/)(Dockerfile|dockerfile)$' || true)"
-          if [ -z "$CANDIDATES" ]; then
-            echo "No se encontró ningún Dockerfile en el repo" >&2
-            exit 1
-          fi
-          DF="$(echo "$CANDIDATES" | head -n1)"
-          DIR="$(dirname "$DF")"
-          [ -z "$DIR" ] && DIR="."
-          echo "dockerfile=$DF" >> $GITHUB_OUTPUT
-          echo "context=$DIR" >> $GITHUB_OUTPUT
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
 
-      - name: Compose image name
-        id: img
-        run: |
-          echo "full_image=${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}" >> $GITHUB_OUTPUT
-
-      - name: Tags
-        id: tags
-        run: |
-          echo "latest=${{ steps.img.outputs.full_image }}:latest" >> $GITHUB_OUTPUT
-          echo "sha=${{ steps.img.outputs.full_image }}:${{ steps.vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
-
-      - name: Build and push
+      - name: Build & Push Docker Image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ steps.finddf.outputs.context }}
-          file:    ${{ steps.finddf.outputs.dockerfile }}
+          context: .
+          file: ./Dockerfile
           push: true
-          tags: |
-            ${{ steps.tags.outputs.latest }}
-            ${{ steps.tags.outputs.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
+  # -------------------------------------------------------------
+  # 2. DEPLOY TO DROPLET
+  # -------------------------------------------------------------
   deploy:
-    name: Upload compose & Deploy via SSH
+    name: 🚀 Deploy to Production Droplet
     runs-on: ubuntu-latest
-    needs: build-and-push
-    timeout-minutes: 30
-    env:
-      APP_DIR: /opt/emergency
-      COMPOSE_FILE: docker-compose.prod.yml
-      REGISTRY: ghcr.io
-      IMAGE_BASENAME: ai-firefighter-frontend
+    needs: build-and-push         # Solo si build pasa
+
     steps:
-      - name: Checkout
+
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Owner en minúsculas
-        id: lc
-        run: |
-          echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
-      - name: Prepare known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          if [ -n "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" ]; then
-            echo "${{ secrets.PRODUCTION_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-          else
-            ssh-keyscan -t ed25519 "${{ secrets.PRODUCTION_HOST }}" >> ~/.ssh/known_hosts
-          fi
-          chmod 644 ~/.ssh/known_hosts
+      - name: Create docker-compose directory on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            mkdir -p /opt/emergency
 
       - name: Upload docker-compose.prod.yml
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.2.0
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
-          username: root
+          username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          port: 22
           source: "docker-compose.prod.yml"
-          target: "${{ env.APP_DIR }}"
-          overwrite: true
+          target: "/opt/emergency/"
 
-      - name: Remote deploy (create env + compose up)
-        uses: appleboy/ssh-action@v0.1.8
-        env:
-          GHCR_USER:           ${{ secrets.GHCR_USER }}
-          GHCR_PAT:            ${{ secrets.GHCR_PAT }}
-          IMAGE:               ${{ env.REGISTRY }}/${{ steps.lc.outputs.owner_lc }}/${{ env.IMAGE_BASENAME }}:latest
-
-          # ------ VARIABLES DE TU APP ------
-          SECRET_KEY:          ${{ secrets.SECRET_KEY }}
-          JWT_EXPIRES_HOURS:   ${{ secrets.JWT_EXPIRES_HOURS }}
-
-          # Mongo / DB: puedes tener MONGODB_URI o MONGO_URI o el trío MONGO_USER/PASS/CLUSTER
-          MONGODB_URI:         ${{ secrets.MONGODB_URI }}
-          MONGO_URI:           ${{ secrets.MONGO_URI }}
-          MONGO_USER:          ${{ secrets.MONGO_USER }}
-          MONGO_PASS:          ${{ secrets.MONGO_PASS }}
-          MONGO_CLUSTER:       ${{ secrets.MONGO_CLUSTER }}
-          DB_NAME:             ${{ secrets.DB_NAME }}
-
-          # VAPID (push)
-          VAPID_PUBLIC_KEY:    ${{ secrets.VAPID_PUBLIC_KEY }}
-          VAPID_PRIVATE_KEY:   ${{ secrets.VAPID_PRIVATE_KEY }}
+      - name: Install Docker & Compose on Droplet
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
-          username: root
+          username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          port: 22
-          script_stop: true
-          envs: GHCR_USER,GHCR_PAT,APP_DIR,COMPOSE_FILE,REGISTRY,IMAGE,SECRET_KEY,JWT_EXPIRES_HOURS,MONGODB_URI,MONGO_URI,MONGO_USER,MONGO_PASS,MONGO_CLUSTER,DB_NAME,VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY
           script: |
-            set -euo pipefail
-            mkdir -p "${APP_DIR}"
-            cd "${APP_DIR}"
-
-            # Docker y compose
-            if ! command -v docker >/dev/null 2>&1; then
-              apt-get update -y && apt-get install -y docker.io
+            if ! command -v docker &> /dev/null; then
+              apt-get update -y
+              apt-get install -y docker.io
               systemctl enable --now docker
             fi
-            if ! docker compose version >/dev/null 2>&1; then
-              apt-get update -y && apt-get install -y docker-compose-plugin
+
+            if ! docker compose version &> /dev/null; then
+              apt-get update -y
+              apt-get install -y docker-compose-plugin
             fi
 
-            echo "==> Login GHCR en el servidor"
-            echo "${GHCR_PAT}" | docker login "${REGISTRY}" -u "${GHCR_USER}" --password-stdin
+      - name: Log in GHCR in Droplet
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
 
-            # --------- CREAR /root/firefighter.env ----------
-            ENV_FILE="/root/firefighter.env"
-            echo "==> Generando ${ENV_FILE}"
-            : > "${ENV_FILE}"
+      - name: Generate firefighter.env file in Droplet
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cat << EOF > /root/firefighter.env
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            JWT_EXPIRES_HOURS=${{ secrets.JWT_EXPIRES_HOURS }}
 
-            # App
-            if [ -n "${SECRET_KEY:-}" ];        then echo "SECRET_KEY=${SECRET_KEY}" >> "${ENV_FILE}"; fi
-            if [ -n "${JWT_EXPIRES_HOURS:-}" ]; then echo "JWT_EXPIRES_HOURS=${JWT_EXPIRES_HOURS}" >> "${ENV_FILE}"; fi
+            MONGO_CLUSTER=${{ secrets.MONGO_CLUSTER }}
+            MONGO_USER=${{ secrets.MONGO_USER }}
+            MONGO_PASS=${{ secrets.MONGO_PASS }}
 
-            # Mongo / DB (mapear MONGODB_URI -> MONGO_URI + soportar ambas formas)
-            if [ -n "${MONGODB_URI:-}" ]; then echo "MONGO_URI=${MONGODB_URI}" >> "${ENV_FILE}"; fi
-            if [ -n "${MONGO_URI:-}" ];   then echo "MONGO_URI=${MONGO_URI}"   >> "${ENV_FILE}"; fi
-            if [ -n "${MONGO_USER:-}" ];  then echo "MONGO_USER=${MONGO_USER}" >> "${ENV_FILE}"; fi
-            if [ -n "${MONGO_PASS:-}" ];  then echo "MONGO_PASS=${MONGO_PASS}" >> "${ENV_FILE}"; fi
-            if [ -n "${MONGO_CLUSTER:-}" ]; then echo "MONGO_CLUSTER=${MONGO_CLUSTER}" >> "${ENV_FILE}"; fi
-            if [ -n "${DB_NAME:-}" ];     then echo "DB_NAME=${DB_NAME}"       >> "${ENV_FILE}"; fi
+            DB_CLUSTER=${{ secrets.DB_CLUSTER }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_NAME=${{ secrets.DB_NAME }}
 
-            # VAPID
-            if [ -n "${VAPID_PUBLIC_KEY:-}" ];  then echo "VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}"   >> "${ENV_FILE}"; fi
-            if [ -n "${VAPID_PRIVATE_KEY:-}" ]; then echo "VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}" >> "${ENV_FILE}"; fi
+            VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
+            VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
 
-            # Normaliza finales de línea sin romper si no hay dos2unix
-            sed -i 's/\r$//' "${ENV_FILE}" 2>/dev/null || true
-            chmod 600 "${ENV_FILE}"
+            PRODUCTION_HOST=${{ secrets.PRODUCTION_HOST }}
+            EOF
 
-            export IMAGE="${IMAGE}"
-            echo "Usando imagen: ${IMAGE}"
+      - name: Deploy Containers (Pull + Up)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/emergency
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker system prune -f
 
-            test -f "${COMPOSE_FILE}" || { echo "No existe ${COMPOSE_FILE} en $(pwd)"; exit 1; }
-
-            echo "==> DOWN previo para evitar conflictos de puertos"
-            docker compose -f "${COMPOSE_FILE}" down --remove-orphans || true
-
-            echo "==> Si hay algún contenedor ajeno en 0.0.0.0:5000, lo paramos"
-            CONTAINER_ON_5000="$(docker ps --format '{{.ID}} {{.Ports}} {{.Names}}' | awk '/0\.0\.0\.0:5000->/ {print $1}')"
-            if [ -n "${CONTAINER_ON_5000}" ]; then
-              echo "Parando contenedor en 5000: ${CONTAINER_ON_5000}"
-              docker stop "${CONTAINER_ON_5000}" || true
-              docker rm "${CONTAINER_ON_5000}" || true
-            fi
-
-            echo "==> Si el puerto 5000 sigue ocupado por otro proceso, mostramos diagnóstico y abortamos"
-            if ss -ltnp | grep -q ':5000 '; then
-              ss -ltnp | grep ':5000 ' || true
-              echo "Puerto 5000 ocupado por un proceso no-Docker. Libéralo o cambia el mapeo en compose."
-              exit 1
-            fi
-
-            echo "==> Pull de imágenes"
-            docker compose -f "${COMPOSE_FILE}" pull
-
-            echo "==> Up servicios"
-            docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
-
-            echo "==> Limpieza"
-            docker image prune -f
-
-            echo "==> Estado"
-            docker compose -f "${COMPOSE_FILE}" ps
+      - name: Deployment Complete
+        run: echo "🔥 Deployment finished successfully!"
