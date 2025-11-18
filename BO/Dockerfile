@@ -13,12 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Code - COPIA EXPLÍCITA Y VERIFICADA
 COPY app/ ./app/
-COPY templates/ ./templates/ 2>/dev/null || echo "⚠️ No templates directory"
-COPY static/ ./static/ 2>/dev/null || echo "⚠️ No static directory" 
+COPY templates/ ./templates/ 2>/dev/null || echo "No templates directory"
+COPY static/ ./static/ 2>/dev/null || echo "No static directory" 
 COPY *.py ./
 COPY *.txt ./
-COPY *.html ./ 2>/dev/null || echo "⚠️ No HTML files"
-
+COPY *.html ./ 2>/dev/null || echo "No HTML files"
 # Verificar estructura de archivos copiada
 RUN echo "📁 Estructura final en /app:" && \
     find . -name "*.py" -type f | head -20 && \
