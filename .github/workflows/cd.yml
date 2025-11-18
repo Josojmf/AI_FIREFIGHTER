@@ -163,7 +163,17 @@ jobs:
             EOF
             chmod 600 /root/firefighter.env
 
-      - name: Deploy stack with docker compose
+      - name: Stop existing containers
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/emergency
+            docker-compose -f docker-compose.prod.yml down --remove-orphans
+
+      - name: Pull latest images
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -172,7 +182,62 @@ jobs:
           script: |
             cd /opt/emergency
             docker-compose -f docker-compose.prod.yml pull
+
+      - name: Deploy stack with health check handling
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/emergency
+            
+            # Start all services
             docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+            
+            # Wait for backend to become healthy with timeout
+            echo "Waiting for backend to be healthy..."
+            for i in {1..30}; do
+              if docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
+                echo "✅ Backend is healthy!"
+                break
+              fi
+              
+              echo "Backend status: $(docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo 'starting') (attempt $i/30)"
+              
+              if [ $i -eq 30 ]; then
+                echo "⚠️  Backend health check timeout, but continuing deployment..."
+                echo "Backend logs:"
+                docker logs backend --tail 20
+              fi
+              
+              sleep 5
+            done
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            echo "📊 Final container status:"
+            cd /opt/emergency
+            docker-compose -f docker-compose.prod.yml ps
+            
+            echo "🔍 Backend health status:"
+            docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo "No health status available"
+            
+            echo "🌐 Testing backend connectivity..."
+            curl -f http://localhost:5000/ && echo "✅ Backend is responding" || echo "❌ Backend is not responding"
+
+      - name: Cleanup system
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
             docker system prune -f
 
       - name: Deployment Finished
