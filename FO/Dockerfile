@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Build arguments for React/Vue app
+ARG API_BASE_URL=http://backend:5000/api
+ENV API_BASE_URL=$API_BASE_URL
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

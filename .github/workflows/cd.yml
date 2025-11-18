@@ -42,6 +42,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       # FRONTEND
+# FRONTEND
       - name: Build + Push FRONTEND
         uses: docker/build-push-action@v6
         with:
@@ -51,6 +52,8 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ github.sha }}
+          build-args: |
+            API_BASE_URL=http://backend:5000/api
           no-cache: true
 
       # BACKEND
