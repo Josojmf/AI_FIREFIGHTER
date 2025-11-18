@@ -16,5 +16,11 @@
     "email": "Jaja1@jaja.com",
     "created_at": "2025-09-21T17:52:40.992285",
     "active": true
+  },
+  "test2": {
+    "password": "f03ea40457aad3d43fb05fcb41c2b35292eb8eb98079ff3565f672b35105c841",
+    "email": "test2@Test.com",
+    "created_at": "2025-11-18T19:28:38.845615",
+    "active": true
   }
 }
