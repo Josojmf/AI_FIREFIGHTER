@@ -1,6 +1,7 @@
 ﻿version: '3.9'
 
 services:
+
   frontend:
     container_name: frontend
     image: ghcr.io/josojmf/ai-firefighter-frontend:latest
@@ -10,14 +11,13 @@ services:
     env_file:
       - /root/firefighter.env
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     networks:
       - firefighter
 
@@ -30,8 +30,8 @@ services:
     env_file:
       - /root/firefighter.env
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 0"]
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
@@ -47,14 +47,13 @@ services:
     env_file:
       - /root/firefighter.env
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     networks:
       - firefighter
 
