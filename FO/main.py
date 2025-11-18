@@ -470,150 +470,424 @@ def clear_chat():
 def certificaciones():
     """Página de certificaciones con múltiples opciones de carga"""
     
-    # URLs de fallback en orden de prioridad
-    urls = [
-        "/onfire-academy/",  # Proxy interno (bypass X-Frame-Options)
-        "https://www.onfireacademy.es/",  # URL directa
-        "https://www.onfireacademy.es/index.html#header13-2w"  # URL específica
-    ]
+    # URLs específicas que quieres embeber
+    urls = {
+        'main': '/onfire-academy/',  # https://www.onfireacademy.es/
+        'header': '/onfire-academy/index.html#header13-2w',  # Con fragmento específico
+        'examinadores': '/onfire-academy/examinadores.html',  # Página de examinadores
+        'formacion': '/formacion-certificada/',  # https://www.formacioncertificadoprofesional.com/
+        'direct_main': 'https://www.onfireacademy.es/',
+        'direct_header': 'https://www.onfireacademy.es/index.html#header13-2w',
+        'direct_examinadores': 'https://www.onfireacademy.es/examinadores.html',
+        'direct_formacion': 'https://www.formacioncertificadoprofesional.com/'
+    }
     
-    # Detectar si es una petición específica o general
-    proxy_mode = request.args.get('proxy', 'internal')
+    # Detectar modo y URL específica
+    mode = request.args.get('mode', 'main')
+    proxy_type = request.args.get('proxy', 'internal')
     
-    if proxy_mode == 'direct':
-        proxied_url = urls[1]  # URL directa
-    elif proxy_mode == 'specific':
-        proxied_url = urls[2]  # URL con fragmento específico
+    if proxy_type == 'direct':
+        proxied_url = urls.get(f'direct_{mode}', urls['direct_main'])
     else:
-        proxied_url = urls[0]  # Proxy interno (por defecto)
+        proxied_url = urls.get(mode, urls['main'])
     
     return render_template("certificaciones.html", 
                          proxied_url=proxied_url,
-                         proxy_mode=proxy_mode,
-                         fallback_urls=urls[1:])
-
-# --- Estado de la API Auth ---
-@app.route("/api-status")
-def api_status():
-    try:
-        res = requests.get(f"{API_BASE_URL.replace('/api', '/api/health')}", timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            return jsonify({"api_available": True, "api_status": data, "fallback_mode": False})
-        return jsonify({"api_available": False, "fallback_mode": True, "error": "API no responde"})
-    except Exception as e:
-        return jsonify({"api_available": False, "fallback_mode": True, "error": str(e)})
-    
-@app.route('/logout')
-def logout():
-    """Cierra la sesión y limpia todas las cookies"""
-    # Limpiar la sesión
-    session.clear()
-    
-    # Crear respuesta de redirección
-    response = redirect(url_for('login'))
-    
-    # Limpiar todas las cookies relacionadas con la sesión
-    response.delete_cookie('session')
-    response.delete_cookie('user')
-    response.delete_cookie('username')
-    response.delete_cookie('remember_token')
-    
-    # Opcional: limpiar otras cookies que puedas tener
-    response.delete_cookie('preferences')
-    response.delete_cookie('theme')
-    
-    flash('Sesión cerrada correctamente', 'success')
-    return response
+                         proxy_mode=proxy_type,
+                         current_mode=mode,
+                         available_urls=urls)
 
 
-# Añadir estas rutas al final de tu app.py (antes del if __name__ == "__main__"):
-
+# PROXY PRINCIPAL - ONFIREACADEMY.ES (mejorado)
 @app.route("/onfire-academy/")
+@app.route("/onfire-academy/<path:subpath>")
 @login_required  
-def proxy_onfire():
-    """Proxy para bypass de X-Frame-Options"""
+def proxy_onfire(subpath=""):
+    """Proxy avanzado para www.onfireacademy.es"""
+    return _enhanced_proxy("https://www.onfireacademy.es", subpath)
+
+
+# PROXY PARA FORMACIONCERTIFICADOPROFESIONAL.COM
+@app.route("/formacion-certificada/")
+@app.route("/formacion-certificada/<path:subpath>")
+@login_required  
+def proxy_formacion(subpath=""):
+    """Proxy avanzado para www.formacioncertificadoprofesional.com"""
+    return _enhanced_proxy("https://www.formacioncertificadoprofesional.com", subpath)
+
+
+# FUNCIÓN CENTRALIZADA DE PROXY (DRY principle)
+def _enhanced_proxy(base_url, subpath=""):
+    """Función centralizada para proxy con bypass completo"""
     import requests
-    from urllib.parse import urljoin, urlparse
+    import re
+    from urllib.parse import urlparse
     
     try:
-        target_url = "https://www.onfireacademy.es/"
+        # Construir URL objetivo
+        if subpath:
+            target_url = f"{base_url}/{subpath}"
+        else:
+            target_url = base_url + "/"
         
-        # Headers para bypass
+        domain = urlparse(base_url).netloc
+        print(f"🔗 Proxy request: {target_url} (domain: {domain})")
+        
+        # Headers realistas
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0',
+            'Referer': base_url
         }
         
-        response = requests.get(target_url, headers=headers, timeout=10)
+        response = requests.get(target_url, headers=headers, timeout=20, allow_redirects=True)
         
         if response.status_code == 200:
             content = response.text
+            content_type = response.headers.get('content-type', 'text/html')
             
-            # Modificar el HTML para que funcione embebido
-            content = content.replace('X-Frame-Options', 'X-Frame-Options-Disabled')
-            content = content.replace('frame-ancestors', 'frame-ancestors-disabled')
+            if 'text/html' in content_type:
+                # Determinar proxy path basado en el dominio
+                if 'onfireacademy' in domain:
+                    proxy_path = '/onfire-academy/'
+                elif 'formacioncertificado' in domain:
+                    proxy_path = '/formacion-certificada/'
+                else:
+                    proxy_path = '/proxy-generic/'
+                
+                content = _process_html_content(content, base_url, domain, proxy_path)
             
-            # Arreglar rutas relativas
-            content = content.replace('href="/', f'href="{target_url}')
-            content = content.replace('src="/', f'src="{target_url}')
-            content = content.replace("href='/", f"href='{target_url}")
-            content = content.replace("src='/", f"src='{target_url}")
-            
-            # Crear respuesta sin headers restrictivos
+            # Crear respuesta
             resp = make_response(content)
-            resp.headers['Content-Type'] = 'text/html; charset=utf-8'
-            # NO añadir X-Frame-Options
-            resp.headers.pop('X-Frame-Options', None)
+            resp.headers['Content-Type'] = content_type
             
+            # Eliminar headers restrictivos
+            headers_to_remove = [
+                'X-Frame-Options', 'Content-Security-Policy', 'X-Content-Type-Options',
+                'X-XSS-Protection', 'Strict-Transport-Security', 'X-Frame-Options'
+            ]
+            
+            for header in headers_to_remove:
+                resp.headers.pop(header, None)
+            
+            # Headers permisivos
+            resp.headers['X-Frame-Options'] = 'ALLOWALL'
+            resp.headers['Content-Security-Policy'] = "frame-ancestors *; default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"
+            resp.headers['X-Content-Type-Options'] = 'nosniff'
+            
+            print(f"✅ Proxy success: {domain} - {response.status_code} - {len(content)} chars")
             return resp
         else:
-            # Fallback en caso de error
-            return redirect("https://www.onfireacademy.es/", code=302)
+            print(f"❌ Proxy failed: {response.status_code}")
+            return redirect(target_url, code=302)
             
+    except requests.exceptions.Timeout:
+        print(f"⚠️ Proxy timeout: {domain}")
+        return redirect(base_url, code=302)
     except Exception as e:
-        print(f"⚠️ Error en proxy: {e}")
-        # Fallback directo
-        return redirect("https://www.onfireacademy.es/", code=302)
+        print(f"⚠️ Proxy error: {domain} - {e}")
+        return redirect(base_url, code=302)
 
 
-@app.route("/certificaciones/proxy/<path:subpath>")
+# VERSIÓN FINAL CORREGIDA - FILTRA CORRECTAMENTE
+
+
+def _process_html_content(content, base_url, domain, proxy_path):
+    """Procesa HTML para assets - VERSIÓN LIMPIA Y FINAL"""
+    import re
+    
+    print(f"🔧 Processing HTML for {domain} with proxy_path: {proxy_path}")
+    
+    # PASO 1: Eliminar meta tags restrictivos
+    patterns_to_remove = [
+        r'<meta[^>]*http-equiv=["\']?X-Frame-Options["\']?[^>]*>',
+        r'<meta[^>]*name=["\']?X-Frame-Options["\']?[^>]*>',
+        r'<meta[^>]*http-equiv=["\']?Content-Security-Policy["\']?[^>]*>',
+        r'<meta[^>]*name=["\']?Content-Security-Policy["\']?[^>]*>'
+    ]
+    
+    for pattern in patterns_to_remove:
+        content = re.sub(pattern, '', content, flags=re.IGNORECASE)
+    
+    # PASO 2: Reemplazar referencias restrictivas
+    replacements = {
+        'X-Frame-Options': 'X-Frame-Options-Disabled',
+        'frame-ancestors': 'frame-ancestors-disabled',
+        "frame-ancestors 'none'": "frame-ancestors *",
+        "frame-ancestors 'self'": "frame-ancestors *",
+        'SAMEORIGIN': 'ALLOWALL',
+        'DENY': 'ALLOWALL'
+    }
+    
+    for old, new in replacements.items():
+        content = content.replace(old, new)
+    
+    # PASO 3: Procesamiento de assets
+    replacements_made = 0
+    
+    # Helper function para verificar si es un asset válido
+    def is_valid_asset(url):
+        if not url:
+            return False
+        if proxy_path.rstrip('/') in url:
+            return False
+        if any(url.startswith(prefix) for prefix in ['http:', 'https:', 'data:', 'mailto:', 'tel:', 'javascript:', '//']):
+            return False
+        if url.startswith(('#', '?')):
+            return False
+        return True
+    
+    # CSS Links
+    def replace_css(match):
+        nonlocal replacements_made
+        original = match.group(1)
+        
+        if not is_valid_asset(original):
+            return match.group(0)
+            
+        if not original.endswith('.css') and '.css?' not in original:
+            return match.group(0)
+        
+        if original.startswith('/'):
+            new_path = proxy_path + original[1:]
+        else:
+            new_path = proxy_path + original
+            
+        print(f"🎨 CSS: {original} → {new_path}")
+        replacements_made += 1
+        return f'href="{new_path}"'
+    
+    content = re.sub(r'href="([^"]*\.css[^"]*)"', replace_css, content)
+    content = re.sub(r"href='([^']*\.css[^']*)'", replace_css, content)
+    
+    # JavaScript
+    def replace_js(match):
+        nonlocal replacements_made
+        original = match.group(1)
+        
+        if not is_valid_asset(original):
+            return match.group(0)
+            
+        if not original.endswith('.js') and '.js?' not in original:
+            return match.group(0)
+        
+        if original.startswith('/'):
+            new_path = proxy_path + original[1:]
+        else:
+            new_path = proxy_path + original
+            
+        print(f"📜 JS: {original} → {new_path}")
+        replacements_made += 1
+        return f'src="{new_path}"'
+    
+    content = re.sub(r'src="([^"]*\.js[^"]*)"', replace_js, content)
+    content = re.sub(r"src='([^']*\.js[^']*)'", replace_js, content)
+    
+    # Images
+    def replace_img(match):
+        nonlocal replacements_made
+        original = match.group(1)
+        
+        if not is_valid_asset(original):
+            return match.group(0)
+        
+        if original.startswith('/'):
+            new_path = proxy_path + original[1:]
+        else:
+            new_path = proxy_path + original
+            
+        print(f"🖼️ IMG: {original} → {new_path}")
+        replacements_made += 1
+        return f'src="{new_path}"'
+    
+    content = re.sub(r'src="([^"]*\.(png|jpg|jpeg|gif|webp|svg|ico)[^"]*)"', replace_img, content)
+    content = re.sub(r"src='([^']*\.(png|jpg|jpeg|gif|webp|svg|ico)[^']*)'", replace_img, content)
+    
+    # PASO 4: URLs absolutas del dominio
+    domain_pattern = f'https?://{re.escape(domain)}/'
+    content = re.sub(domain_pattern, proxy_path, content)
+    
+    print(f"✅ Made {replacements_made} path replacements")
+    
+    # PASO 5: JavaScript bypass
+    bypass_js = f'''
+    <script>
+    console.log('🔥 FirefighterAI Proxy v7.0 - Clean Processing');
+    
+    // Frame busting protection
+    if (window.top !== window.self) {{
+        window.top = window.self;
+        window.parent = window.self;
+        
+        // Disable problematic methods
+        window.location.replace = function() {{ console.log('🔥 Blocked location.replace'); }};
+        window.location.assign = function() {{ console.log('🔥 Blocked location.assign'); }};
+    }}
+    
+    // Remove any remaining restrictive meta tags
+    document.addEventListener('DOMContentLoaded', function() {{
+        const restrictiveMetas = document.querySelectorAll(
+            'meta[http-equiv*="X-Frame"], meta[name*="X-Frame"], ' +
+            'meta[http-equiv*="Content-Security-Policy"], meta[name*="Content-Security-Policy"]'
+        );
+        restrictiveMetas.forEach(meta => {{
+            console.log('🔥 Removing:', meta.outerHTML);
+            meta.remove();
+        }});
+    }});
+    </script>
+    '''
+    
+    # Inyectar JavaScript
+    if '</head>' in content:
+        content = content.replace('</head>', f'{bypass_js}</head>')
+    else:
+        content = bypass_js + content
+    
+    return content
+
+
+@app.route("/certificaciones/selector")
 @login_required
-def proxy_onfire_assets(subpath):
-    """Proxy para assets (CSS, JS, imágenes) de OnFire Academy"""
+def certificaciones_selector():
+    """Página de selección de sitios de certificación"""
+    sites = {
+        'onfireacademy_main': {
+            'name': 'OnFire Academy - Principal',
+            'url': '/certificaciones?mode=main',
+            'description': 'Plataforma principal de formación'
+        },
+        'onfireacademy_header': {
+            'name': 'OnFire Academy - Sección Header',
+            'url': '/certificaciones?mode=header',
+            'description': 'Acceso directo a sección específica'
+        },
+        'onfireacademy_examinadores': {
+            'name': 'OnFire Academy - Examinadores',
+            'url': '/certificaciones?mode=examinadores',
+            'description': 'Información sobre examinadores'
+        },
+        'formacion_profesional': {
+            'name': 'Formación Certificado Profesional',
+            'url': '/certificaciones?mode=formacion',
+            'description': 'Certificaciones profesionales oficiales'
+        }
+    }
+    
+    return render_template("certificaciones_selector.html", sites=sites)
+
+
+@app.route("/debug-html")
+@login_required
+def debug_html():
+    """Ver el HTML procesado del proxy"""
+    try:
+        import requests
+        
+        # Obtener HTML original
+        response = requests.get("https://www.onfireacademy.es/", timeout=15)
+        original_html = response.text
+        
+        # Procesarlo con tu función
+        processed_html = _process_html_content(
+            original_html, 
+            "https://www.onfireacademy.es", 
+            "www.onfireacademy.es", 
+            "/onfire-academy/"
+        )
+        
+        # Mostrar comparación
+        debug_output = f"""
+        <h1>🔧 Debug HTML Processing</h1>
+        
+        <h2>📄 Original HTML (primeras 500 chars):</h2>
+        <pre style="background:#f0f0f0;padding:10px;overflow:auto;max-height:200px;">
+{original_html[:500]}...
+        </pre>
+        
+        <h2>🔧 Processed HTML (primeras 500 chars):</h2>
+        <pre style="background:#e0f0e0;padding:10px;overflow:auto;max-height:200px;">
+{processed_html[:500]}...
+        </pre>
+        
+        <h2>🔗 Link tags encontrados en HTML original:</h2>
+        """
+        
+        import re
+        links = re.findall(r'<link[^>]*href=["\']([^"\']*)["\'][^>]*>', original_html)
+        scripts = re.findall(r'<script[^>]*src=["\']([^"\']*)["\'][^>]*>', original_html)
+        
+        debug_output += "<ul>"
+        for link in links[:10]:  # Primeros 10
+            debug_output += f"<li>📄 {link}</li>"
+        debug_output += "</ul>"
+        
+        debug_output += "<h2>🔗 Script tags encontrados:</h2><ul>"
+        for script in scripts[:10]:  # Primeros 10
+            debug_output += f"<li>📄 {script}</li>"
+        debug_output += "</ul>"
+        
+        return debug_output
+        
+    except Exception as e:
+        return f"<h1>Error:</h1><p>{str(e)}</p>"
+
+
+# ASSETS PROXY MEJORADO
+@app.route("/onfire-academy-assets/<path:subpath>")
+@app.route("/formacion-assets/<path:subpath>")
+@login_required
+def proxy_assets(subpath):
+    """Proxy mejorado para assets"""
     import requests
     
+    # Determinar origen basado en la ruta
+    if request.path.startswith('/onfire-academy-assets/'):
+        base_url = "https://www.onfireacademy.es"
+    else:
+        base_url = "https://www.formacioncertificadoprofesional.com"
+    
     try:
-        target_url = f"https://www.onfireacademy.es/{subpath}"
+        target_url = f"{base_url}/{subpath}"
+        print(f"🔗 Asset request: {target_url}")  # Debug
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://www.onfireacademy.es/',
+            'Referer': f'{base_url}/',
+            'Accept': '*/*',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
         }
         
         response = requests.get(target_url, headers=headers, timeout=10)
+        print(f"📄 Asset response: {response.status_code}")  # Debug
         
         if response.status_code == 200:
             resp = make_response(response.content)
-            
-            # Mantener el content-type original
             if 'content-type' in response.headers:
                 resp.headers['Content-Type'] = response.headers['content-type']
-                
+            
+            # CORS headers para evitar bloqueos
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            resp.headers['Access-Control-Allow-Headers'] = '*'
+            
             return resp
         else:
+            print(f"❌ Asset not found: {response.status_code}")
             return "Asset not found", 404
-            
     except Exception as e:
-        print(f"⚠️ Error en proxy asset: {e}")
-        return "Proxy error", 500
+        print(f"⚠️ Asset error: {e}")
+        return "Asset error", 500
 
-# Asegúrate de importar make_response al inicio del archivo:
-# from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, make_response
 
 if __name__ == "__main__":
     _safe_print("🚀 Frontend iniciando...")

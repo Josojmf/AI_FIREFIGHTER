@@ -77,6 +77,21 @@
     margin-bottom: .5rem;
   }
 
+  /* Indicador del sitio actual */
+  .current-site-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .4rem .8rem;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.15);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    color: #ef4444;
+    font-weight: 600;
+    font-size: .9rem;
+    margin-bottom: .5rem;
+  }
+
   .controls-grid {
     display: flex;
     gap: .6rem;
@@ -111,7 +126,20 @@
     border: 1px solid rgba(255,255,255,.08);
     box-shadow: 0 14px 40px rgba(0,0,0,.35);
     overflow: hidden;
-    min-height: 400px;
+    min-height: 600px; /* Aumentado para mejor visualización */
+  }
+
+  .iframe-wrapper {
+    width: 100%;
+    height: 600px;
+    position: relative;
+  }
+
+  .iframe-wrapper iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: var(--radius-xl);
   }
 
   .iframe-loading {
@@ -282,6 +310,14 @@
     .info-cards {
       grid-template-columns: 1fr;
     }
+
+    .iframe-container {
+      min-height: 400px;
+    }
+
+    .iframe-wrapper {
+      height: 400px;
+    }
   }
 </style>
 {% endblock %}
@@ -318,19 +354,59 @@
     <div class="controls-wrapper animate-on-scroll">
       <div class="controls-header">
         <h2>Plataforma de Formación Certificada</h2>
+        
+        <!-- Indicador del sitio actual -->
+        {% if current_mode %}
+        <div class="current-site-indicator">
+          {% if current_mode == 'main' %}
+            <span>🏠</span><span>OnFire Academy - Principal</span>
+          {% elif current_mode == 'header' %}
+            <span>🎯</span><span>OnFire Academy - Header</span>
+          {% elif current_mode == 'examinadores' %}
+            <span>👨‍🏫</span><span>OnFire Academy - Examinadores</span>
+          {% elif current_mode == 'formacion' %}
+            <span>🎓</span><span>Formación Certificado Profesional</span>
+          {% else %}
+            <span>🔥</span><span>Plataforma de Certificación</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        
         <p>Gestiona tu experiencia de aprendizaje con los controles avanzados</p>
       </div>
+      
       <div class="controls-grid">
-        <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="control-btn btn-primary" id="openExternal">
-          <span class="btn-icon">🌐</span><span class="btn-text">Abrir en Nueva Pestaña</span>
+        <a href="/certificaciones/selector" class="control-btn btn-primary">
+          <span class="btn-icon">🏠</span><span class="btn-text">Selector de Sitios</span>
         </a>
+        
+        {% if current_mode == 'main' %}
+        <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="control-btn btn-accent" id="openExternal">
+          <span class="btn-icon">🌐</span><span class="btn-text">OnFire Academy</span>
+        </a>
+        {% elif current_mode == 'formacion' %}
+        <a href="https://www.formacioncertificadoprofesional.com/" target="_blank" rel="noopener" class="control-btn btn-accent" id="openExternal">
+          <span class="btn-icon">🌐</span><span class="btn-text">Formación Profesional</span>
+        </a>
+        {% elif current_mode == 'examinadores' %}
+        <a href="https://www.onfireacademy.es/examinadores.html" target="_blank" rel="noopener" class="control-btn btn-accent" id="openExternal">
+          <span class="btn-icon">🌐</span><span class="btn-text">Examinadores</span>
+        </a>
+        {% elif current_mode == 'header' %}
+        <a href="https://www.onfireacademy.es/index.html#header13-2w" target="_blank" rel="noopener" class="control-btn btn-accent" id="openExternal">
+          <span class="btn-icon">🌐</span><span class="btn-text">Sección Header</span>
+        </a>
+        {% else %}
+        <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="control-btn btn-accent" id="openExternal">
+          <span class="btn-icon">🌐</span><span class="btn-text">Abrir Externa</span>
+        </a>
+        {% endif %}
+        
         <button type="button" class="control-btn btn-secondary" id="reloadFrame">
-          <span class="btn-icon">🔄</span><span class="btn-text">Recargar Plataforma</span>
+          <span class="btn-icon">🔄</span><span class="btn-text">Recargar</span>
         </button>
-        <button type="button" class="control-btn btn-secondary" id="toggleFit">
-          <span class="btn-icon">↕️</span><span class="btn-text">Ajustar Altura</span>
-        </button>
-        <button type="button" class="control-btn btn-accent" id="enterFullscreen">
+        
+        <button type="button" class="control-btn btn-secondary" id="enterFullscreen">
           <span class="btn-icon">⛶</span><span class="btn-text">Pantalla Completa</span>
         </button>
       </div>
@@ -366,9 +442,19 @@
             </ul>
           </div>
           <div class="error-actions">
+            {% if current_mode == 'formacion' %}
+            <a href="https://www.formacioncertificadoprofesional.com/" target="_blank" rel="noopener" class="btn btn-primary">
+              <span class="btn-icon">🔗</span><span class="btn-text">Abrir Formación Profesional</span>
+            </a>
+            {% elif current_mode == 'examinadores' %}
+            <a href="https://www.onfireacademy.es/examinadores.html" target="_blank" rel="noopener" class="btn btn-primary">
+              <span class="btn-icon">🔗</span><span class="btn-text">Abrir Examinadores</span>
+            </a>
+            {% else %}
             <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary">
               <span class="btn-icon">🔗</span><span class="btn-text">Abrir en Nueva Ventana</span>
             </a>
+            {% endif %}
             <button type="button" class="btn btn-secondary" id="tryAgain">
               <span class="btn-icon">🔄</span><span class="btn-text">Reintentar Carga</span>
             </button>
@@ -383,7 +469,7 @@
                 frameborder="0"
                 allowfullscreen 
                 referrerpolicy="no-referrer-when-downgrade"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation allow-modals"
                 title="Plataforma de Certificaciones Profesionales" 
                 loading="lazy">
         </iframe>
@@ -418,24 +504,19 @@
         <details class="faq-item">
           <summary class="faq-question"><span>¿Por qué a veces no se muestra el contenido embebido?</span><span class="faq-icon">▼</span></summary>
           <div class="faq-answer">
-            <p>Algunos sitios bloquean iframes por seguridad (XFO/CSP). Usa "Abrir en Nueva Pestaña".</p>
+            <p>Algunos sitios bloquean iframes por seguridad (XFO/CSP). Nuestro proxy avanzado intenta solucionarlo automáticamente.</p>
           </div>
         </details>
         <details class="faq-item">
-          <summary class="faq-question"><span>¿Cómo maximizo mi experiencia?</span><span class="faq-icon">▼</span></summary>
+          <summary class="faq-question"><span>¿Puedo cambiar entre diferentes plataformas?</span><span class="faq-icon">▼</span></summary>
           <div class="faq-answer">
-            <ul>
-              <li>Usa pantalla completa</li>
-              <li>Ajusta la altura</li>
-              <li>Conexión estable</li>
-              <li>Navegador actualizado</li>
-            </ul>
+            <p>Sí, usa el "Selector de Sitios" para acceder a OnFire Academy, Formación Profesional y páginas específicas.</p>
           </div>
         </details>
         <details class="faq-item">
           <summary class="faq-question"><span>¿Las certificaciones tienen validez oficial?</span><span class="faq-icon">▼</span></summary>
           <div class="faq-answer">
-            <p>Sí: reconocimiento institucional, certificados verificables y válidos en procesos.</p>
+            <p>Sí: reconocimiento institucional, certificados verificables y válidos en procesos oficiales.</p>
           </div>
         </details>
       </div>
@@ -451,11 +532,17 @@
       <h2 class="cta-title">¿Listo para obtener tu certificación profesional?</h2>
       <p class="cta-subtitle">Accede a la formación más completa y reconocida del sector.</p>
       <div class="cta-buttons">
+        {% if current_mode == 'formacion' %}
+        <a href="https://www.formacioncertificadoprofesional.com/" target="_blank" rel="noopener" class="btn btn-primary btn-large">
+          <span class="btn-icon">🚀</span><span class="btn-text">Comenzar Formación</span>
+        </a>
+        {% else %}
         <a href="https://www.onfireacademy.es/" target="_blank" rel="noopener" class="btn btn-primary btn-large">
           <span class="btn-icon">🚀</span><span class="btn-text">Comenzar Certificación</span>
         </a>
-        <a href="/contact" class="btn btn-secondary btn-large">
-          <span class="btn-icon">💬</span><span class="btn-text">Más Información</span>
+        {% endif %}
+        <a href="/certificaciones/selector" class="btn btn-secondary btn-large">
+          <span class="btn-icon">🏠</span><span class="btn-text">Ver Todas las Opciones</span>
         </a>
       </div>
     </div>
@@ -466,67 +553,75 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // Inicialmente mostrar el loader y ocultar el iframe
+  // Inicialización de elementos
   const loader = document.getElementById('loader');
   const blocked = document.getElementById('frameBlocked');
   const iframeWrapper = document.getElementById('embedAspect');
   const frame = document.getElementById('certFrame');
 
-  // Mostrar loader inmediatamente
+  // Estado inicial
   loader.style.display = 'flex';
   iframeWrapper.style.display = 'none';
   blocked.style.display = 'none';
 
-  // Configurar eventos para detectar si el iframe está bloqueado
   let isBlocked = false;
+  let loadAttempts = 0;
+  const maxAttempts = 3;
 
-  // Verificar si el iframe está bloqueado después de un tiempo
-  const checkIfBlocked = setTimeout(() => {
+  // Función para detectar si el iframe está bloqueado
+  function detectBlocking() {
     try {
       const iframeDoc = frame.contentDocument || frame.contentWindow.document;
-      if (iframeDoc && iframeDoc.body) {
+      if (iframeDoc && iframeDoc.body && iframeDoc.body.children.length > 0) {
+        // Carga exitosa
+        console.log('🔥 Iframe loaded successfully');
         loader.style.display = 'none';
         iframeWrapper.style.display = 'block';
+        return true;
       }
     } catch (e) {
-      isBlocked = true;
+      console.warn('🛡️ Iframe access blocked:', e.message);
+    }
+    return false;
+  }
+
+  // Timeout para detectar bloqueo
+  const blockTimeout = setTimeout(() => {
+    if (!detectBlocking()) {
+      console.log('🚫 Iframe appears to be blocked');
       loader.style.display = 'none';
       blocked.style.display = 'flex';
       iframeWrapper.style.display = 'none';
+      isBlocked = true;
     }
-  }, 3000);
+  }, 5000); // Aumentado a 5 segundos para dar más tiempo
 
-  // Evento de carga del iframe
+  // Event listener para carga exitosa
   frame.addEventListener('load', () => {
-    clearTimeout(checkIfBlocked);
+    clearTimeout(blockTimeout);
+    
+    // Pequeño delay para asegurar que el contenido se ha cargado
     setTimeout(() => {
-      try {
-        const iframeDoc = frame.contentDocument || frame.contentWindow.document;
-        if (iframeDoc && iframeDoc.body && iframeDoc.body.children.length > 0) {
-          loader.style.display = 'none';
-          iframeWrapper.style.display = 'block';
-        } else {
-          isBlocked = true;
-          loader.style.display = 'none';
-          blocked.style.display = 'flex';
-          iframeWrapper.style.display = 'none';
-        }
-      } catch (e) {
-        isBlocked = true;
+      if (detectBlocking()) {
+        console.log('🔥 Iframe content loaded via proxy');
+      } else {
+        console.log('🚫 Iframe loaded but content blocked');
         loader.style.display = 'none';
         blocked.style.display = 'flex';
         iframeWrapper.style.display = 'none';
+        isBlocked = true;
       }
-    }, 500);
+    }, 1000);
   });
 
-  // Evento de error del iframe
+  // Event listener para errores
   frame.addEventListener('error', () => {
-    clearTimeout(checkIfBlocked);
-    isBlocked = true;
+    clearTimeout(blockTimeout);
+    console.log('❌ Iframe failed to load');
     loader.style.display = 'none';
     blocked.style.display = 'flex';
     iframeWrapper.style.display = 'none';
+    isBlocked = true;
   });
 
   // Botones de control
@@ -537,10 +632,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (tryAgain) {
     tryAgain.addEventListener('click', () => {
-      loader.style.display = 'flex';
-      blocked.style.display = 'none';
-      iframeWrapper.style.display = 'none';
-      frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
+      if (loadAttempts < maxAttempts) {
+        loadAttempts++;
+        console.log(`🔄 Retry attempt ${loadAttempts}/${maxAttempts}`);
+        
+        loader.style.display = 'flex';
+        blocked.style.display = 'none';
+        iframeWrapper.style.display = 'none';
+        
+        // Forzar recarga con timestamp para evitar caché
+        const currentSrc = frame.src.split('?')[0];
+        frame.src = currentSrc + '?t=' + Date.now() + '&retry=' + loadAttempts;
+        isBlocked = false;
+      } else {
+        alert('Se han agotado los intentos de recarga. Usa "Abrir en Nueva Ventana".');
+      }
     });
   }
 
@@ -549,24 +655,37 @@ document.addEventListener('DOMContentLoaded', () => {
       loader.style.display = 'flex';
       blocked.style.display = 'none';
       iframeWrapper.style.display = 'none';
+      
       try {
         frame.contentWindow.location.reload();
       } catch {
-        frame.src = frame.src.split('?')[0] + '?t=' + new Date().getTime();
+        const currentSrc = frame.src.split('?')[0];
+        frame.src = currentSrc + '?t=' + Date.now();
       }
+      isBlocked = false;
     });
   }
 
-  if (fsBtn) {
+  if (fsBtn && card) {
     fsBtn.addEventListener('click', async () => {
       try {
         if (document.fullscreenElement) {
           await document.exitFullscreen();
+          fsBtn.innerHTML = '<span class="btn-icon">⛶</span><span class="btn-text">Pantalla Completa</span>';
         } else {
           await card.requestFullscreen();
+          fsBtn.innerHTML = '<span class="btn-icon">⛶</span><span class="btn-text">Salir Pantalla Completa</span>';
         }
       } catch (e) {
         console.warn('Fullscreen no disponible:', e);
+        alert('Pantalla completa no disponible en este navegador');
+      }
+    });
+
+    // Detectar salida de pantalla completa
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        fsBtn.innerHTML = '<span class="btn-icon">⛶</span><span class="btn-text">Pantalla Completa</span>';
       }
     });
   }
@@ -586,6 +705,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.animate-on-scroll').forEach(el => {
     observer.observe(el);
   });
+
+  // Log inicial para debugging
+  console.log('🔥 FirefighterAI Certificaciones initialized');
+  console.log('📄 Current iframe src:', frame.src);
 });
 </script>
 {% endblock %}
