@@ -32,3 +32,4 @@
 - Never commit secrets; load them through `.env` files and prefer `MONGO_URI` aggregation for production deployments.
 - On first API boot a default admin (`admin/admin123`) is created - change it immediately and store the rotation securely.
 - Run `setup-nginx.bat` before `start-with-nginx.bat` to scaffold logs and mime types; update your hosts file to route `onfire.local` domains when testing nginx.
+test
