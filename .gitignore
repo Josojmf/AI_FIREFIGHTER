@@ -98,7 +98,6 @@ htmlcov/
 *.h5
 *.pkl
 *.joblib
-models/
 
 # Documents
 *.pdf
