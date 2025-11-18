@@ -23,13 +23,9 @@ EXPOSE 3001
 ENV PYTHONPATH=/app
 ENV FLASK_ENV=production
 
-# Healthcheck (Backoffice lightweight)
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD curl -f http://localhost:3001/health || exit 1
 
-# FIXED: Use --call flag for function call or use the standalone script
-# Option A: Use --call flag
-CMD ["waitress-serve", "--listen=0.0.0.0:3001", "--threads=6", "--call", "app:create_app"]
-
-# Option B: Use the standalone script (alternative)
-# CMD ["python", "serve_waitress.py"]
+# RUN BACKOFFICE CORRECTLY
+CMD ["python", "serve_waitress.py"]
