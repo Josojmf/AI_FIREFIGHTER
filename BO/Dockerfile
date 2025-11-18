@@ -1,24 +1,36 @@
-# Build stage
-FROM node:18-alpine AS build
+# Use Python 3.10 slim
+FROM python:3.10-slim
 
+# Workdir
 WORKDIR /app
 
-RUN apk add --no-cache curl
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
-RUN npm install
+# Copy dependencies
+COPY requirements.txt .
 
+# Install Python deps
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app code
 COPY . .
-RUN npm run build
 
-# Production stage
-FROM nginx:alpine
-
-COPY --from=build /app/dist /usr/share/nginx/html
-
+# Expose port
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
-  CMD curl -f http://localhost:3001 || exit 1
+# Environment
+ENV PYTHONPATH=/app
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
 
-CMD ["nginx", "-g", "daemon off;"]
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# Start
+CMD ["python", "app.py"]
