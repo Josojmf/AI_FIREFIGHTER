@@ -1,20 +1,19 @@
-﻿services:
+﻿version: '3.9'
+
+services:
+
   frontend:
     container_name: frontend
-    image: ${FRONTEND_IMAGE:-ghcr.io/josojmf/ai-firefighter-frontend:latest}
+    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - /root/firefighter.env
-    environment:
-      # Por si no llega via env_file, aseguramos API hacia el servicio backend
-      - API_BASE_URL=${API_BASE_URL:-http://backend:5000/api}
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      # La app devuelve 200 en "/", no existe /health en el frontend
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 30s
       timeout: 5s
@@ -24,27 +23,37 @@
 
   backend:
     container_name: backend
-    image: ${BACKEND_IMAGE:-ghcr.io/josojmf/ai-firefighter-backend:latest}
+    image: ghcr.io/josojmf/ai-firefighter-backend:latest
     restart: unless-stopped
     ports:
       - "5000:5000"
     env_file:
       - /root/firefighter.env
-    environment:
-      # El backend lee estas variables o MONGO_URI directamente (ver api.py)
-      - MONGO_USER=${MONGO_USER:-}
-      - MONGO_PASS=${MONGO_PASS:-}
-      - MONGO_CLUSTER=${MONGO_CLUSTER:-}
-      - MONGO_URI=${MONGO_URI:-}
-      - DB_NAME=${DB_NAME:-FIREFIGHTER}
-      - SECRET_KEY=${SECRET_KEY:-change-me}
-      - FLASK_ENV=production
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health >/dev/null || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
+    networks:
+      - firefighter
+
+  backoffice:
+    container_name: backoffice
+    image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - /root/firefighter.env
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     networks:
       - firefighter
 

@@ -17,6 +17,6 @@ ENV PYTHONPATH=/app
 ENV FLASK_ENV=production
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
-    CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["gunicorn", "-b", "0.0.0.0:8000", "main:app"]
