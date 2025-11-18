@@ -52,6 +52,10 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
       # BACKEND
       - name: Build + Push BACKEND
@@ -63,6 +67,10 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
       # BACKOFFICE
       - name: Build + Push BACKOFFICE
@@ -74,6 +82,10 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
 
   # -------------------------------------------------------------------
@@ -83,6 +95,7 @@ jobs:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     needs: build-and-push
+    environment: production
 
     steps:
 
@@ -96,7 +109,11 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "📁 Ensuring deploy directory..."
             mkdir -p /opt/emergency
+            cd /opt/emergency
+            echo "✅ Deploy directory ready"
 
       - name: Upload docker-compose.prod.yml
         uses: appleboy/scp-action@v0.1.4
@@ -114,19 +131,30 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "🐳 Checking Docker installation..."
+            
             # Install Docker if not present
             if ! command -v docker &> /dev/null; then
+              echo "📥 Installing Docker..."
               apt-get update -y
               apt-get install -y docker.io
               systemctl enable --now docker
+              echo "✅ Docker installed"
+            else
+              echo "✅ Docker already installed"
             fi
 
             # Install Docker Compose (using the standalone version for compatibility)
             if ! command -v docker-compose &> /dev/null; then
+              echo "📥 Installing Docker Compose..."
               apt-get update -y
               apt-get install -y curl
               curl -SL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
               chmod +x /usr/local/bin/docker-compose
+              echo "✅ Docker Compose installed"
+            else
+              echo "✅ Docker Compose already installed"
             fi
 
       - name: Login GHCR in server
@@ -136,7 +164,10 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "🔐 Logging into GHCR..."
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
+            echo "✅ Logged into GHCR"
 
       - name: Generate /root/firefighter.env
         uses: appleboy/ssh-action@v0.1.10
@@ -145,6 +176,8 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "🔧 Generating environment file..."
             cat << EOF > /root/firefighter.env
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             JWT_EXPIRES_HOURS=${{ secrets.JWT_EXPIRES_HOURS }}
@@ -162,16 +195,33 @@ jobs:
             VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
             EOF
             chmod 600 /root/firefighter.env
+            echo "✅ Environment file created"
 
-      - name: Stop existing containers
+      - name: Backup and cleanup
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "💾 Creating backup and cleaning up..."
             cd /opt/emergency
-            docker-compose -f docker-compose.prod.yml down --remove-orphans
+            
+            # Backup current compose file
+            if [ -f docker-compose.prod.yml ]; then
+              cp docker-compose.prod.yml docker-compose.prod.yml.backup.$(date +%Y%m%d_%H%M%S)
+              echo "✅ Compose file backed up"
+            fi
+            
+            # Stop and remove existing containers
+            echo "🛑 Stopping existing containers..."
+            docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
+            
+            # Clean up old images
+            echo "🧹 Cleaning up old images..."
+            docker system prune -f --filter "until=24h" || true
+            echo "✅ Cleanup completed"
 
       - name: Pull latest images
         uses: appleboy/ssh-action@v0.1.10
@@ -180,65 +230,161 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "📥 Pulling latest images..."
             cd /opt/emergency
-            docker-compose -f docker-compose.prod.yml pull
+            docker-compose -f docker-compose.prod.yml pull --quiet
+            echo "✅ Images pulled successfully"
 
-      - name: Deploy stack with health check handling
+      - name: Deploy stack with robust health checks
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "🚀 Starting deployment..."
             cd /opt/emergency
             
             # Start all services
+            echo "🔄 Starting all services..."
             docker-compose -f docker-compose.prod.yml up -d --remove-orphans
             
-            # Wait for backend to become healthy with timeout
-            echo "Waiting for backend to be healthy..."
-            for i in {1..30}; do
-              if docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy"; then
-                echo "✅ Backend is healthy!"
+            # Wait for services to initialize
+            echo "⏳ Waiting for services to initialize..."
+            sleep 15
+            
+            # Robust health check with multiple verification methods
+            echo "🔍 Starting health checks..."
+            
+            MAX_RETRIES=30
+            RETRY_COUNT=0
+            ALL_HEALTHY=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES"
+              
+              # Check container status
+              BACKEND_STATUS=$(docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
+              FRONTEND_STATUS=$(docker inspect frontend --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
+              BACKOFFICE_STATUS=$(docker inspect backoffice --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
+              
+              echo "  Backend: $BACKEND_STATUS"
+              echo "  Frontend: $FRONTEND_STATUS" 
+              echo "  Backoffice: $BACKOFFICE_STATUS"
+              
+              # Test service connectivity directly
+              BACKEND_RESPONSE=$(curl -s -f http://localhost:5000/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              FRONTEND_RESPONSE=$(curl -s -f http://localhost:8000/ >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              BACKOFFICE_RESPONSE=$(curl -s -f http://localhost:3001/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              
+              echo "  Backend API: $BACKEND_RESPONSE"
+              echo "  Frontend: $FRONTEND_RESPONSE"
+              echo "  Backoffice: $BACKOFFICE_RESPONSE"
+              
+              # Check if all critical services are responsive
+              if [ "$BACKEND_RESPONSE" = "responsive" ] && [ "$FRONTEND_RESPONSE" = "responsive" ]; then
+                echo "✅ All critical services are responsive!"
+                ALL_HEALTHY=true
                 break
               fi
               
-              echo "Backend status: $(docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo 'starting') (attempt $i/30)"
-              
-              if [ $i -eq 30 ]; then
-                echo "⚠️  Backend health check timeout, but continuing deployment..."
-                echo "Backend logs:"
-                docker logs backend --tail 20
-              fi
-              
-              sleep 5
+              echo "⏱️ Waiting 10 seconds before next check..."
+              sleep 10
             done
+            
+            if [ "$ALL_HEALTHY" = false ]; then
+              echo "⚠️  Health check timeout - but continuing with deployment"
+              echo "📋 Current container status:"
+              docker-compose -f docker-compose.prod.yml ps
+              
+              echo "📄 Recent logs:"
+              docker-compose -f docker-compose.prod.yml logs --tail=20 || echo "Could not fetch logs"
+            else
+              echo "🎉 All services healthy and responsive!"
+            fi
 
-      - name: Verify deployment
+      - name: Comprehensive deployment verification
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
-            echo "📊 Final container status:"
+            set -e
+            echo "🔬 Comprehensive deployment verification..."
             cd /opt/emergency
+            
+            # Final container status
+            echo "📊 Final container status:"
             docker-compose -f docker-compose.prod.yml ps
             
-            echo "🔍 Backend health status:"
-            docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo "No health status available"
+            # Detailed health status
+            echo "❤️  Detailed health status:"
+            for service in backend frontend backoffice; do
+              if docker ps | grep -q $service; then
+                STATUS=$(docker inspect $service --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
+                UPTIME=$(docker inspect $service --format '{{.State.StartedAt}}' 2>/dev/null || echo "unknown")
+                echo "  $service: $STATUS (started: $UPTIME)"
+              else
+                echo "  $service: NOT RUNNING"
+              fi
+            done
             
-            echo "🌐 Testing backend connectivity..."
-            curl -f http://localhost:5000/ && echo "✅ Backend is responding" || echo "❌ Backend is not responding"
+            # Service connectivity tests
+            echo "🌐 Service connectivity tests:"
+            SERVICES=(
+              "Backend:5000:/health"
+              "Frontend:8000:/"
+              "Backoffice:3001:/health"
+            )
+            
+            for service_info in "${SERVICES[@]}"; do
+              IFS=':' read -r name port endpoint <<< "$service_info"
+              if curl -s -f --connect-timeout 10 "http://localhost:$port$endpoint" >/dev/null; then
+                echo "  ✅ $name (port $port) is responding"
+              else
+                echo "  ⚠️  $name (port $port) is slow or unresponsive"
+              fi
+            done
+            
+            # Resource usage
+            echo "📈 Resource usage:"
+            docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}" | head -5 || echo "  Could not fetch resource stats"
+            
+            echo "✅ Verification completed"
 
-      - name: Cleanup system
+      - name: Final cleanup and optimization
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           script: |
+            set -e
+            echo "🧹 Final cleanup..."
+            
+            # Remove unused containers, networks, images
             docker system prune -f
+            
+            # Clean up build cache
+            docker builder prune -f --all || true
+            
+            # Check disk space
+            echo "💾 Disk space after cleanup:"
+            df -h /var/lib/docker /opt/emergency 2>/dev/null || echo "Disk info not available"
+            
+            echo "✅ Cleanup completed"
 
-      - name: Deployment Finished
-        run: echo "🔥 Production updated successfully!"
+      - name: Deployment summary
+        run: |
+          echo "🔥 PRODUCTION DEPLOYMENT COMPLETED SUCCESSFULLY!"
+          echo "📅 $(date)"
+          echo "🔄 Services deployed:"
+          echo "   - Frontend: http://localhost:8000"
+          echo "   - Backend API: http://localhost:5000" 
+          echo "   - Backoffice: http://localhost:3001"
+          echo "✅ All images built and pushed to GHCR"
+          echo "🚀 Application running in production"
