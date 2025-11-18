@@ -18,18 +18,11 @@ EXPOSE 8000
 
 ENV PYTHONPATH=/app
 ENV FLASK_ENV=production
+ENV PYTHONUNBUFFERED=1
 
-# Healthcheck for Gunicorn / Flask
+# Healthcheck (extended)
 HEALTHCHECK --interval=30s --timeout=15s --retries=10 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# FIX: Gunicorn with extended timeout so model loading doesn't get killed
-CMD [
-  "gunicorn",
-  "main:app",
-  "-b", "0.0.0.0:8000",
-  "--timeout", "180",
-  "--graceful-timeout", "180",
-  "--worker-class", "sync",
-  "--workers", "1"
-]
+# FIX: Gunicorn extended timeout (MUST BE SINGLE LINE)
+CMD ["gunicorn", "main:app", "-b", "0.0.0.0:8000", "--timeout", "180", "--graceful-timeout", "180", "--worker-class", "sync", "--workers", "1"]
