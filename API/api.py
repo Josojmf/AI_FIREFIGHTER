@@ -406,12 +406,12 @@ def api_get_memory_cards():
         for card in memory_cards.find({}):
             cards_list.append({
                 "id": str(card["_id"]),
-                "title": card.get("title", ""),
-                "content": card.get("content", ""),
-                "category": card.get("category", ""),
+                "title": card.get("title") or card.get("front", ""),
+                "content": card.get("content") or card.get("back", ""),
+                "category": card.get("category") or card.get("deck", ""),
                 "difficulty": card.get("difficulty", "medium"),
                 "created_at": card.get("created_at", "").isoformat() if card.get("created_at") else "",
-                "created_by": card.get("created_by", "")
+                "created_by": card.get("created_by") or card.get("user", "")
             })
         
         return jsonify({"ok": True, "cards": cards_list})
@@ -488,13 +488,16 @@ def api_create_memory_card():
 
         # Crear card
         card_doc = {
-            "_id": str(ObjectId()),
-            "title": data["title"],
-            "content": data["content"],
-            "category": data["category"],
-            "difficulty": data.get("difficulty", "medium"),
+            "_id": ObjectId(),
+            "user": payload.get("username", "admin"),  # Campo requerido por Leitner
+            "deck": data.get("category", "general"),    # Mapear category a deck
+            "front": data["title"],                      # Mapear title a front
+            "back": data["content"],                     # Mapear content a back
+            "box": 1,
+            "due": datetime.utcnow(),
             "created_at": datetime.utcnow(),
-            "created_by": payload["username"]
+            "created_by": payload["username"],
+            "history": []
         }
 
         memory_cards.insert_one(card_doc)
