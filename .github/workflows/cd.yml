@@ -1,4 +1,4 @@
-﻿name: CD - Multi Image Deploy (FO/API/BO) - FIXED
+﻿name: CD - Multi Image Deploy (FO/API/BO) - FINAL FIXED
 
 on:
   push:
@@ -25,6 +25,9 @@ jobs:
   build-and-push:
     name: 🏗️ Build & Push All Images
     runs-on: ubuntu-latest
+
+    outputs:
+      owner_lc: ${{ steps.lc.outputs.owner_lc }}
 
     steps:
       - name: Checkout
@@ -231,26 +234,28 @@ jobs:
             echo "📥 Pulling latest images (this may take several minutes)..."
             cd /opt/emergency
             
+            echo "🔍 Using registry: ghcr.io/$OWNER_LC"
+            
             # Pull images one by one with progress
             echo "🔄 Pulling frontend image..."
-            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-frontend:latest || {
+            docker pull ghcr.io/$OWNER_LC/ai-firefighter-frontend:latest || {
               echo "⚠️ Frontend pull failed, trying with retry..."
               sleep 10
-              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-frontend:latest
+              docker pull ghcr.io/$OWNER_LC/ai-firefighter-frontend:latest
             }
             
             echo "🔄 Pulling backend image..."
-            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backend:latest || {
+            docker pull ghcr.io/$OWNER_LC/ai-firefighter-backend:latest || {
               echo "⚠️ Backend pull failed, trying with retry..."
               sleep 10
-              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backend:latest
+              docker pull ghcr.io/$OWNER_LC/ai-firefighter-backend:latest
             }
             
             echo "🔄 Pulling backoffice image..."
-            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backoffice:latest || {
+            docker pull ghcr.io/$OWNER_LC/ai-firefighter-backoffice:latest || {
               echo "⚠️ Backoffice pull failed, trying with retry..."
               sleep 10
-              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backoffice:latest
+              docker pull ghcr.io/$OWNER_LC/ai-firefighter-backoffice:latest
             }
             
             echo "✅ All images pulled successfully"
@@ -258,6 +263,8 @@ jobs:
             # Verify images
             echo "🔍 Verifying pulled images..."
             docker images | grep ai-firefighter || echo "No images found with ai-firefighter tag"
+        env:
+          OWNER_LC: ${{ needs.build-and-push.outputs.owner_lc }}
 
       - name: Deploy stack with robust health checks
         uses: appleboy/ssh-action@v0.1.10
