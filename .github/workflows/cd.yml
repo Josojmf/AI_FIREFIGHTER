@@ -267,13 +267,18 @@ jobs:
               echo "✅ Compose file backed up"
             fi
             
-            # Stop existing containers
-            docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
+            # Stop existing containers - CORREGIDO: verificar si el archivo existe primero
+            if [ -f docker-compose.prod.yml ]; then
+              docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
+              echo "✅ Containers stopped"
+            else
+              echo "ℹ️ No existing compose file found, skipping stop"
+            fi
             
             # Remove old backups (keep only last 5)
             ls -t docker-compose.prod.yml.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
             
-            echo "✅ Containers stopped and backups cleaned"
+            echo "✅ Cleanup completed"
 
       - name: Pull latest images with space management
         uses: appleboy/ssh-action@v0.1.10
@@ -364,8 +369,8 @@ jobs:
               RETRY_COUNT=$((RETRY_COUNT + 1))
               echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES"
               
-              # Check if containers are running
-              RUNNING_CONTAINERS=$(docker-compose ps -q | wc -l)
+              # Check if containers are running - CORREGIDO: añadir -f
+              RUNNING_CONTAINERS=$(docker-compose -f docker-compose.prod.yml ps -q | wc -l)
               echo "Running containers: $RUNNING_CONTAINERS"
               
               if [ "$RUNNING_CONTAINERS" -eq 3 ]; then
@@ -376,9 +381,9 @@ jobs:
               if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
                 echo "⚠️ Not all containers started properly"
                 echo "📋 Final status:"
-                docker-compose ps
+                docker-compose -f docker-compose.prod.yml ps
                 echo "📄 Recent logs:"
-                docker-compose logs --tail=20
+                docker-compose -f docker-compose.prod.yml logs --tail=20
                 break
               fi
               
@@ -398,9 +403,9 @@ jobs:
             echo "🔬 Final verification..."
             cd /opt/emergency
             
-            # Final container status
+            # Final container status - CORREGIDO: añadir -f
             echo "📊 Final container status:"
-            docker-compose ps
+            docker-compose -f docker-compose.prod.yml ps
             
             # Show which ports are exposed
             echo "🌐 Exposed ports:"
