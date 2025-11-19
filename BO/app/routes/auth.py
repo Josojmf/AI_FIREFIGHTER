@@ -1,4 +1,4 @@
-# app/routes/auth.py (VERSIÓN CORREGIDA - COMPLETA)
+# app/routes/auth.py (VERSIÓN CORREGIDA CON TOKEN ANTES DE LOGIN)
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models.user import BackofficeUser
@@ -15,9 +15,11 @@ def get_auth_headers():
         return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
     return {'Content-Type': 'application/json'}
 
+# app/routes/auth.py (CORRECCIÓN CRÍTICA - PARTE LOGIN)
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     print(f"🔍 Login endpoint - Method: {request.method}, User authenticated: {current_user.is_authenticated}")
+    print(f"📋 Sesión actual al entrar: {dict(session)}")
     
     if current_user.is_authenticated:
         print("✅ Usuario ya autenticado, redirigiendo a dashboard")
@@ -29,6 +31,7 @@ def login():
         
         print(f"🔍 Intentando login para usuario: {username}")
         
+        # LIMPIAR sesión completamente
         session.clear()
 
         user = BackofficeUser.authenticate(username, password)
@@ -36,31 +39,43 @@ def login():
         if user:
             print(f"✅ Autenticación exitosa para: {user.username}")
             print(f"🔍 MFA habilitado: {user.mfa_enabled}")
-            print(f"🔍 MFA Secret presente: {bool(user.mfa_secret)}")
+            print(f"🔍 Token obtenido: {user.token[:20] if user.token else 'NO TOKEN'}")
             
-            # ✅ GUARDAR TOKEN DE API EN SESIÓN
+            # ✅ CRÍTICO: GUARDAR DATOS EN SESIÓN ANTES DE login_user
             session['api_token'] = user.token
+            session['user_data'] = user.to_dict()
+            session['user_id'] = user.id
+            session.permanent = True
             
-            # ✅ DECISIÓN MFA BASADA EN DATOS REALES DE LA API
+            print(f"💾 Datos guardados en sesión:")
+            print(f"   - user_id: {session.get('user_id')}")
+            print(f"   - token: {session.get('api_token')[:20] if session.get('api_token') else 'NO'}")
+            print(f"   - user_data: {'✅' if session.get('user_data') else '❌'}")
+            
+            # ✅ DECISIÓN MFA
             if user.mfa_enabled:
-                # Usuario tiene MFA habilitado - requerir verificación
+                print(f"🔐 Usuario requiere MFA: {user.username}")
                 session['pending_user_id'] = user.id
                 session['pending_username'] = user.username
                 session['mfa_start_time'] = time.time()
                 session['mfa_attempts'] = 0
-                
-                print(f"🔐 Usuario requiere MFA: {user.username}")
                 return redirect(url_for('auth.verify_mfa'))
             else:
-                # Usuario sin MFA - login directo
-                print(f"🔓 Usuario SIN MFA: {user.username} - Login directo")
-                login_user(user, remember=True)
-                session['user_id'] = user.id
-                session['mfa_verified'] = True
+                # ✅ LOGIN DIRECTO SIN MFA
+                print(f"🔓 Login directo SIN MFA para: {user.username}")
                 
-                print(f"✅ Login directo exitoso para: {user.username}")
-                flash('✅ ¡Bienvenido/a!', 'success')
-                return redirect(url_for('dashboard.index'))
+                # Hacer login - DEBE funcionar porque user_loader tiene los datos
+                login_success = login_user(user, remember=True)
+                print(f"🔍 Resultado de login_user: {login_success}")
+                print(f"🔍 Current user después de login: {current_user.is_authenticated}")
+                
+                if current_user.is_authenticated:
+                    session['mfa_verified'] = True
+                    flash('✅ ¡Bienvenido/a!', 'success')
+                    return redirect(url_for('dashboard.index'))
+                else:
+                    print("❌ CRÍTICO: login_user no estableció autenticación")
+                    flash('❌ Error interno de autenticación', 'error')
         else:
             print("❌ Autenticación fallida")
             flash('❌ Credenciales inválidas', 'error')
@@ -102,9 +117,14 @@ def verify_mfa():
         
         # Verificar código MFA con la API (CON AUTENTICACIÓN)
         if verify_mfa_with_api(pending_user_id, mfa_code):
-            # ✅ Código correcto
+            # ✅ Código correcto - Cargar usuario y hacer login
             user = BackofficeUser.get(pending_user_id, session.get('api_token'))
             if user:
+                # Actualizar token en sesión
+                session['api_token'] = user.token
+                session['user_data'] = user.to_dict()
+                session.permanent = True
+                
                 login_user(user, remember=True)
                 session['user_id'] = user.id
                 session['mfa_verified'] = True
@@ -330,3 +350,25 @@ def mfa_recovery():
     
     return render_template('auth/mfa_recovery.html', 
                          username=session.get('pending_username'))
+
+@bp.route('/clear-session')
+def clear_session():
+    """Ruta temporal para limpiar sesiones - SOLO DESARROLLO"""
+    session.clear()
+    flash('🧹 Sesión limpiada correctamente', 'info')
+    return redirect(url_for('auth.login'))
+
+# Añadir en app/routes/auth.py
+@bp.route('/debug-session')
+def debug_session():
+    """Endpoint de diagnóstico"""
+    info = {
+        'session': dict(session),
+        'current_user': {
+            'is_authenticated': current_user.is_authenticated,
+            'id': getattr(current_user, 'id', None),
+            'username': getattr(current_user, 'username', None)
+        } if current_user else None,
+        'cookies': dict(request.cookies)
+    }
+    return info

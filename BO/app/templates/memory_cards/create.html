@@ -1,0 +1,123 @@
+<!-- app/templates/memory_cards/create.html -->
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Crear Memory Card - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Crear Memory Card{% endblock %}
+
+{% block content %}
+<div class="create-card">
+  <div class="form-container">
+    <form method="POST" class="card-form">
+      <div class="form-group">
+        <label for="title" class="form-label">Título</label>
+        <input type="text" id="title" name="title" class="form-input" required 
+               placeholder="Ingresa el título de la memory card">
+      </div>
+
+      <div class="form-group">
+        <label for="description" class="form-label">Descripción</label>
+        <textarea id="description" name="description" class="form-textarea" 
+                  placeholder="Describe el contenido de la memory card" rows="4"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="content" class="form-label">Contenido</label>
+        <textarea id="content" name="content" class="form-textarea" 
+                  placeholder="Contenido principal de la memory card" rows="6" required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="category" class="form-label">Categoría</label>
+        <select id="category" name="category" class="form-select">
+          <option value="">Seleccionar categoría</option>
+          <option value="training">Entrenamiento</option>
+          <option value="safety">Seguridad</option>
+          <option value="procedures">Procedimientos</option>
+          <option value="equipment">Equipamiento</option>
+        </select>
+      </div>
+
+      <div class="form-actions">
+        <a href="{{ url_for('memory_cards.card_list') }}" class="btn btn-secondary">
+          <span class="btn-icon">←</span>
+          Cancelar
+        </a>
+        <button type="submit" class="btn btn-primary">
+          <span class="btn-icon">💾</span>
+          Crear Memory Card
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.create-card {
+  padding: 20px;
+  max-width: 800px;
+}
+
+.form-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  padding: 30px;
+}
+
+.card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.form-input, .form-textarea, .form-select {
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: white;
+  text-decoration: none;
+}
+
+.btn-secondary:hover {
+  background-color: #4b5563;
+}
+</style>
+{% endblock %}

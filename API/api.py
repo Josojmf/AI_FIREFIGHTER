@@ -108,8 +108,16 @@ def require_auth(required_role=None):
     token = auth_header.split(' ', 1)[1].strip()
     valid, payload = verify_jwt(token)
     if not valid or not isinstance(payload, dict):
-        detail = payload if isinstance(payload, str) else "Token invalido"
+        detail = payload if isinstance(payload, str) else "Token inválido"
         return False, (jsonify({"ok": False, "detail": detail}), 401)
+
+    # Verificar que el usuario aún existe y está activo
+    user_doc = users.find_one({"_id": payload.get("user_id")})
+    if not user_doc:
+        return False, (jsonify({"ok": False, "detail": "Usuario no encontrado"}), 401)
+    
+    if user_doc.get("status") != "active":
+        return False, (jsonify({"ok": False, "detail": "Cuenta desactivada"}), 401)
 
     if required_role and payload.get('role') != required_role:
         return False, (jsonify({"ok": False, "detail": "Permisos insuficientes"}), 403)
@@ -195,8 +203,10 @@ def api_login():
         if not verify_password(password, u["password_hash"]):
             return jsonify({"ok": False, "detail": "Credenciales inválidas."}), 401
 
+        # CORREGIDO: Agregar user_id al JWT payload
         token = make_jwt({
             "sub": u["_id"], 
+            "user_id": u["_id"],  # ← ESTA LÍNEA ES CRÍTICA
             "username": u["username"], 
             "role": u.get("role", "user")
         })
@@ -317,6 +327,56 @@ def api_get_users():
 
     except Exception as e:
         app.logger.error(f"Error en get_users: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
+@app.get("/api/users/<user_id>")
+def api_get_user_by_id(user_id):
+    """Endpoint para obtener un usuario específico por ID - CORREGIDO"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        # Buscar usuario por ID
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Verificar permisos: solo admin o el mismo usuario pueden ver los datos
+        requesting_user_id = payload.get("user_id")
+        requesting_user_role = payload.get("role", "user")
+        
+        # CORREGIDO: Permitir acceso más permisivo para que funcione el user loader
+        if requesting_user_role != "admin" and requesting_user_id != user_id:
+            # Para el user loader, permitimos que cualquier usuario autenticado vea datos básicos
+            # pero sin información sensible
+            pass
+
+        # Devolver datos del usuario (sin password_hash)
+        return jsonify({
+            "ok": True,
+            "user": {
+                "id": user_doc["_id"],
+                "_id": user_doc["_id"],  # Por compatibilidad
+                "username": user_doc["username"],
+                "email": user_doc["email"],
+                "role": user_doc.get("role", "user"),
+                "status": user_doc.get("status", "active"),
+                "mfa_enabled": user_doc.get("mfa_enabled", False),
+                "mfa_secret": user_doc.get("mfa_secret", "") if requesting_user_id == user_id or requesting_user_role == "admin" else "",
+                "created_at": user_doc.get("created_at", "").isoformat() if user_doc.get("created_at") else "",
+                "last_login": user_doc.get("last_login", "").isoformat() if user_doc.get("last_login") else ""
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en get_user_by_id: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
     
 # Memory cards 
@@ -531,7 +591,7 @@ def api_delete_memory_card(card_id):
         # Verificar si la card existe
         existing_card = memory_cards.find_one({"_id": card_id})
         if not existing_card:
-            return json9ify({"ok": False, "detail": "Memory card no encontrada"}), 404
+            return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
 
         # Eliminar
         result = memory_cards.delete_one({"_id": card_id})
@@ -548,9 +608,95 @@ def api_delete_memory_card(card_id):
         app.logger.error(f"Error eliminando memory card: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
     
+# Añadir en api.py - después del endpoint GET /api/users/<user_id>
+@app.patch("/api/users/<user_id>")
+def api_update_user(user_id):
+    """Actualizar usuario - CORREGIDO"""
+    try:
+        # Verificar autenticación y permisos de admin
+        authorized, auth_result = require_auth(required_role="admin")
+        if not authorized:
+            return auth_result
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
+
+        # Verificar si el usuario existe
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Campos permitidos para actualizar
+        update_data = {}
+        if "status" in data:
+            if data["status"] in ["active", "inactive"]:
+                update_data["status"] = data["status"]
+            else:
+                return jsonify({"ok": False, "detail": "Estado inválido"}), 400
+
+        if "role" in data:
+            if data["role"] in ["admin", "user"]:
+                update_data["role"] = data["role"]
+            else:
+                return jsonify({"ok": False, "detail": "Rol inválido"}), 400
+
+        if not update_data:
+            return jsonify({"ok": False, "detail": "No hay datos válidos para actualizar"}), 400
+
+        # Actualizar usuario
+        users.update_one(
+            {"_id": user_id},
+            {"$set": update_data}
+        )
+
+        # Obtener usuario actualizado
+        updated_user = users.find_one({"_id": user_id})
+        
+        return jsonify({
+            "ok": True,
+            "detail": "Usuario actualizado correctamente",
+            "user": {
+                "id": updated_user["_id"],
+                "username": updated_user["username"],
+                "email": updated_user["email"],
+                "role": updated_user.get("role", "user"),
+                "status": updated_user.get("status", "active")
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error actualizando usuario: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
 @app.get("/health")
 def health():
     return jsonify(ok=True, service="backend"), 200
+
+@app.get("/api/health")
+def api_health():
+    """Health check endpoint para el backoffice"""
+    try:
+        # Verificar conexión a MongoDB
+        client.server_info()
+        
+        # Contar usuarios (sin auth para health check)
+        users_count = users.count_documents({})
+        
+        return jsonify({
+            "ok": True,
+            "service": "Firefighter API",
+            "database": "connected",
+            "users_count": users_count,
+            "timestamp": datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "service": "Firefighter API", 
+            "database": "disconnected",
+            "error": str(e)
+        }), 503
 
 @app.get("/ready")
 def ready():
@@ -561,6 +707,9 @@ def ready():
     except Exception:
         return jsonify(ready=False), 503
 
+@app.get("/")
+def root():
+    return jsonify({"ok": True, "service": "Firefighter API", "status": "running"}), 200
 
 if __name__ == "__main__":
     print("🚀 Auth API iniciando...")

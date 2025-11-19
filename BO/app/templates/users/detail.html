@@ -1,0 +1,329 @@
+<!-- app/templates/users/detail.html -->
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Usuario {{ user.username }} - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Detalles de Usuario{% endblock %}
+
+{% block content %}
+<div class="user-detail">
+  <div class="back-button">
+    <a href="{{ url_for('users.user_list') }}" class="btn btn-secondary">
+      <span class="btn-icon">←</span>
+      Volver a Usuarios
+    </a>
+  </div>
+
+  <div class="user-profile">
+    <div class="profile-header">
+      <div class="user-avatar-large">
+        {{ user.username[0]|upper }}
+      </div>
+      <div class="profile-info">
+        <h1 class="profile-name">{{ user.username }}</h1>
+        <p class="profile-email">{{ user.email }}</p>
+        <div class="profile-meta">
+          <span class="meta-badge role-{{ user.role }}">{{ user.role|title }}</span>
+          <span class="meta-badge status-{{ user.status or 'active' }}">{{ (user.status or 'active')|title }}</span>
+          {% if user.mfa_enabled %}
+            <span class="meta-badge mfa-enabled">MFA Activado</span>
+          {% else %}
+            <span class="meta-badge mfa-disabled">MFA No Activado</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-details">
+      <div class="detail-section">
+        <h3>Información General</h3>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <label>ID de Usuario</label>
+            <span class="detail-value">{{ user.id }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Nombre de Usuario</label>
+            <span class="detail-value">{{ user.username }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Email</label>
+            <span class="detail-value">{{ user.email }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Rol</label>
+            <span class="detail-value">{{ user.role|title }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Estado</label>
+            <span class="detail-value status-{{ user.status or 'active' }}">{{ (user.status or 'active')|title }}</span>
+          </div>
+          <div class="detail-item">
+            <label>MFA</label>
+            <span class="detail-value">
+              {% if user.mfa_enabled %}
+                <span class="text-success">🛡️ Activado</span>
+              {% else %}
+                <span class="text-danger">❌ No activado</span>
+              {% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Actividad</h3>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <label>Fecha de Creación</label>
+            <span class="detail-value">{{ user.created_at or 'No disponible' }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Último Acceso</label>
+            <span class="detail-value">{{ user.last_login or 'Nunca' }}</span>
+          </div>
+          <div class="detail-item">
+            <label>Última Actualización</label>
+            <span class="detail-value">{{ user.updated_at or 'No disponible' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-actions">
+      <form action="{{ url_for('users.toggle_user_status', user_id=user.id) }}" method="POST" class="action-form">
+        {% if user.status == 'active' %}
+          <button type="submit" class="btn btn-warning" onclick="return confirm('¿Estás seguro de que quieres desactivar este usuario?')">
+            <span class="btn-icon">⏸️</span>
+            Desactivar Usuario
+          </button>
+        {% else %}
+          <button type="submit" class="btn btn-success" onclick="return confirm('¿Estás seguro de que quieres activar este usuario?')">
+            <span class="btn-icon">▶️</span>
+            Activar Usuario
+          </button>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+.user-detail {
+  padding: 20px;
+  max-width: 1000px;
+}
+
+.back-button {
+  margin-bottom: 30px;
+}
+
+.user-profile {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.profile-header {
+  padding: 40px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.user-avatar-large {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.profile-info {
+  flex: 1;
+}
+
+.profile-name {
+  margin: 0 0 8px 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.profile-email {
+  margin: 0 0 20px 0;
+  opacity: 0.9;
+  font-size: 1.1rem;
+}
+
+.profile-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.meta-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.role-admin {
+  background: rgba(245, 158, 11, 0.8);
+}
+
+.role-user {
+  background: rgba(59, 130, 246, 0.8);
+}
+
+.status-active {
+  background: rgba(34, 197, 94, 0.8);
+}
+
+.status-inactive {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.mfa-enabled {
+  background: rgba(34, 197, 94, 0.8);
+}
+
+.mfa-disabled {
+  background: rgba(239, 68, 68, 0.8);
+}
+
+.profile-details {
+  padding: 40px;
+}
+
+.detail-section {
+  margin-bottom: 40px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section h3 {
+  margin: 0 0 20px 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-item label {
+  font-weight: 500;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.detail-value {
+  color: #1e293b;
+  font-size: 1rem;
+}
+
+.profile-actions {
+  padding: 30px 40px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.action-form {
+  display: flex;
+  gap: 15px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #4b5563;
+}
+
+.btn-warning {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.btn-warning:hover {
+  background-color: #d97706;
+}
+
+.btn-success {
+  background-color: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #059669;
+}
+
+.text-success {
+  color: #10b981;
+}
+
+.text-danger {
+  color: #ef4444;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    text-align: center;
+    padding: 30px 20px;
+  }
+  
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .action-form {
+    flex-direction: column;
+  }
+  
+  .profile-details {
+    padding: 20px;
+  }
+}
+</style>
+{% endblock %}
