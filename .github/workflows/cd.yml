@@ -1,4 +1,4 @@
-﻿name: CD - Multi Image Deploy (FO/API/BO) - FINAL
+﻿name: CD - Multi Image Deploy (FO/API/BO) - FIXED
 
 on:
   push:
@@ -42,7 +42,6 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       # FRONTEND
-# FRONTEND
       - name: Build + Push FRONTEND
         uses: docker/build-push-action@v6
         with:
@@ -100,6 +99,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 300s
           script: |
             set -e
             echo "📁 Ensuring deploy directory..."
@@ -122,6 +122,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 600s
           script: |
             set -e
             echo "🐳 Checking Docker installation..."
@@ -155,6 +156,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 180s
           script: |
             set -e
             echo "🔐 Logging into GHCR..."
@@ -167,6 +169,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 120s
           script: |
             set -e
             echo "🔧 Generating environment file..."
@@ -195,6 +198,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 300s
           script: |
             set -e
             echo "💾 Creating backup and cleaning up..."
@@ -210,23 +214,50 @@ jobs:
             echo "🛑 Stopping existing containers..."
             docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
             
-            # Clean up old images
+            # Clean up old images (but keep recent ones)
             echo "🧹 Cleaning up old images..."
-            docker system prune -f --filter "until=24h" || true
+            docker image prune -f --filter "until=48h" || true
             echo "✅ Cleanup completed"
 
-      - name: Pull latest images
+      - name: Pull latest images with extended timeout
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 1200s  # 20 minutos para el pull
           script: |
             set -e
-            echo "📥 Pulling latest images..."
+            echo "📥 Pulling latest images (this may take several minutes)..."
             cd /opt/emergency
-            docker-compose -f docker-compose.prod.yml pull --quiet
-            echo "✅ Images pulled successfully"
+            
+            # Pull images one by one with progress
+            echo "🔄 Pulling frontend image..."
+            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-frontend:latest || {
+              echo "⚠️ Frontend pull failed, trying with retry..."
+              sleep 10
+              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-frontend:latest
+            }
+            
+            echo "🔄 Pulling backend image..."
+            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backend:latest || {
+              echo "⚠️ Backend pull failed, trying with retry..."
+              sleep 10
+              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backend:latest
+            }
+            
+            echo "🔄 Pulling backoffice image..."
+            docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backoffice:latest || {
+              echo "⚠️ Backoffice pull failed, trying with retry..."
+              sleep 10
+              docker pull ghcr.io/${{ github.repository_owner }}/ai-firefighter-backoffice:latest
+            }
+            
+            echo "✅ All images pulled successfully"
+            
+            # Verify images
+            echo "🔍 Verifying pulled images..."
+            docker images | grep ai-firefighter || echo "No images found with ai-firefighter tag"
 
       - name: Deploy stack with robust health checks
         uses: appleboy/ssh-action@v0.1.10
@@ -234,6 +265,7 @@ jobs:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 600s
           script: |
             set -e
             echo "🚀 Starting deployment..."
@@ -245,7 +277,7 @@ jobs:
             
             # Wait for services to initialize
             echo "⏳ Waiting for services to initialize..."
-            sleep 15
+            sleep 20
             
             # Robust health check with multiple verification methods
             echo "🔍 Starting health checks..."
@@ -258,19 +290,10 @@ jobs:
               RETRY_COUNT=$((RETRY_COUNT + 1))
               echo "Health check attempt $RETRY_COUNT/$MAX_RETRIES"
               
-              # Check container status
-              BACKEND_STATUS=$(docker inspect backend --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
-              FRONTEND_STATUS=$(docker inspect frontend --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
-              BACKOFFICE_STATUS=$(docker inspect backoffice --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
-              
-              echo "  Backend: $BACKEND_STATUS"
-              echo "  Frontend: $FRONTEND_STATUS" 
-              echo "  Backoffice: $BACKOFFICE_STATUS"
-              
               # Test service connectivity directly
-              BACKEND_RESPONSE=$(curl -s -f http://localhost:5000/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
-              FRONTEND_RESPONSE=$(curl -s -f http://localhost:8000/ >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
-              BACKOFFICE_RESPONSE=$(curl -s -f http://localhost:3001/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              BACKEND_RESPONSE=$(curl -s -f --connect-timeout 10 http://localhost:5000/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              FRONTEND_RESPONSE=$(curl -s -f --connect-timeout 10 http://localhost:8000/ >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
+              BACKOFFICE_RESPONSE=$(curl -s -f --connect-timeout 10 http://localhost:3001/health >/dev/null 2>&1 && echo "responsive" || echo "unresponsive")
               
               echo "  Backend API: $BACKEND_RESPONSE"
               echo "  Frontend: $FRONTEND_RESPONSE"
@@ -283,47 +306,44 @@ jobs:
                 break
               fi
               
-              echo "⏱️ Waiting 10 seconds before next check..."
-              sleep 10
+              # Show container status if health check is failing
+              if [ $RETRY_COUNT -eq 10 ] || [ $RETRY_COUNT -eq 20 ]; then
+                echo "📋 Container status:"
+                docker-compose -f docker-compose.prod.yml ps
+                echo "📄 Recent logs:"
+                docker-compose -f docker-compose.prod.yml logs --tail=10 || true
+              fi
+              
+              echo "⏱️ Waiting 15 seconds before next check..."
+              sleep 15
             done
             
             if [ "$ALL_HEALTHY" = false ]; then
-              echo "⚠️  Health check timeout - but continuing with deployment"
-              echo "📋 Current container status:"
+              echo "⚠️  Health check timeout - but deployment will continue"
+              echo "📋 Final container status:"
               docker-compose -f docker-compose.prod.yml ps
               
               echo "📄 Recent logs:"
-              docker-compose -f docker-compose.prod.yml logs --tail=20 || echo "Could not fetch logs"
+              docker-compose -f docker-compose.prod.yml logs --tail=30 || echo "Could not fetch logs"
             else
               echo "🎉 All services healthy and responsive!"
             fi
 
-      - name: Comprehensive deployment verification
+      - name: Final verification and cleanup
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 300s
           script: |
             set -e
-            echo "🔬 Comprehensive deployment verification..."
+            echo "🔬 Final verification..."
             cd /opt/emergency
             
             # Final container status
             echo "📊 Final container status:"
             docker-compose -f docker-compose.prod.yml ps
-            
-            # Detailed health status
-            echo "❤️  Detailed health status:"
-            for service in backend frontend backoffice; do
-              if docker ps | grep -q $service; then
-                STATUS=$(docker inspect $service --format '{{.State.Health.Status}}' 2>/dev/null || echo "no-health-check")
-                UPTIME=$(docker inspect $service --format '{{.State.StartedAt}}' 2>/dev/null || echo "unknown")
-                echo "  $service: $STATUS (started: $UPTIME)"
-              else
-                echo "  $service: NOT RUNNING"
-              fi
-            done
             
             # Service connectivity tests
             echo "🌐 Service connectivity tests:"
@@ -342,41 +362,19 @@ jobs:
               fi
             done
             
-            # Resource usage
-            echo "📈 Resource usage:"
-            docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}" | head -5 || echo "  Could not fetch resource stats"
-            
-            echo "✅ Verification completed"
-
-      - name: Final cleanup and optimization
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.PRODUCTION_HOST }}
-          username: ${{ secrets.PRODUCTION_USER }}
-          key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          script: |
-            set -e
+            # Clean up old images and containers
             echo "🧹 Final cleanup..."
+            docker system prune -f || true
             
-            # Remove unused containers, networks, images
-            docker system prune -f
-            
-            # Clean up build cache
-            docker builder prune -f --all || true
-            
-            # Check disk space
-            echo "💾 Disk space after cleanup:"
-            df -h /var/lib/docker /opt/emergency 2>/dev/null || echo "Disk info not available"
-            
-            echo "✅ Cleanup completed"
+            echo "✅ Deployment completed"
 
       - name: Deployment summary
         run: |
-          echo "🔥 PRODUCTION DEPLOYMENT COMPLETED SUCCESSFULLY!"
+          echo "🔥 PRODUCTION DEPLOYMENT COMPLETED!"
           echo "📅 $(date)"
           echo "🔄 Services deployed:"
-          echo "   - Frontend: http://localhost:8000"
-          echo "   - Backend API: http://localhost:5000" 
-          echo "   - Backoffice: http://localhost:3001"
+          echo "   - Frontend: http://your-server:8000"
+          echo "   - Backend API: http://your-server:5000" 
+          echo "   - Backoffice: http://your-server:3001"
           echo "✅ All images built and pushed to GHCR"
           echo "🚀 Application running in production"

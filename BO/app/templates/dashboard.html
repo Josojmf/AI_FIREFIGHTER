@@ -1,9 +1,299 @@
-{% extends "bo_layout.html" %}
-{% block title %}BackOffice | Dashboard{% endblock %}
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Dashboard - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
 {% block content %}
-  <h1>Panel de administración</h1>
-  <p class="muted">Bienvenido al BackOffice de FirefighterAI.</p>
-  <div style="margin-top:16px;">
-    <a href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+<div class="dashboard">
+  <!-- Métricas principales -->
+  <div class="metrics-grid">
+    <div class="metric-card" data-metric="users">
+      <div class="metric-icon">👥</div>
+      <div class="metric-content">
+        <div class="metric-value">{{ stats.total_users or 0 }}</div>
+        <div class="metric-label">Total Usuarios</div>
+        <div class="metric-trend positive">
+          <span class="trend-icon">↗</span>
+          <span class="trend-value">+12%</span>
+        </div>
+      </div>
+      <div class="metric-chart">
+        <canvas id="usersChart" width="60" height="30"></canvas>
+      </div>
+    </div>
+
+    <div class="metric-card" data-metric="active">
+      <div class="metric-icon">✅</div>
+      <div class="metric-content">
+        <div class="metric-value">{{ stats.active_users or 0 }}</div>
+        <div class="metric-label">Usuarios Activos</div>
+        <div class="metric-trend positive">
+          <span class="trend-icon">↗</span>
+          <span class="trend-value">+8%</span>
+        </div>
+      </div>
+      <div class="metric-chart">
+        <canvas id="activeChart" width="60" height="30"></canvas>
+      </div>
+    </div>
+
+    <div class="metric-card" data-metric="cards">
+      <div class="metric-icon">🗃️</div>
+      <div class="metric-content">
+        <div class="metric-value">{{ stats.total_cards or 0 }}</div>
+        <div class="metric-label">Memory Cards</div>
+        <div class="metric-trend neutral">
+          <span class="trend-icon">→</span>
+          <span class="trend-value">0%</span>
+        </div>
+      </div>
+      <div class="metric-chart">
+        <canvas id="cardsChart" width="60" height="30"></canvas>
+      </div>
+    </div>
+
+    <div class="metric-card" data-metric="api">
+      <div class="metric-icon">🌐</div>
+      <div class="metric-content">
+        <div class="metric-value api-status-value">
+          {% if stats.api_status == 'online' %}Online
+          {% else %}Offline
+          {% endif %}
+        </div>
+        <div class="metric-label">Estado API</div>
+        <div class="metric-trend {% if stats.api_status == 'online' %}positive{% else %}negative{% endif %}">
+          <span class="trend-icon">{% if stats.api_status == 'online' %}✅{% else %}❌{% endif %}</span>
+          <span class="trend-value">{{ stats.api_status|title }}</span>
+        </div>
+      </div>
+      <div class="metric-actions">
+        <button class="metric-action-btn" onclick="checkApiHealth()" title="Verificar API">
+          <span>🔍</span>
+        </button>
+      </div>
+    </div>
   </div>
+
+  <!-- Widgets principales -->
+  <div class="widgets-grid">
+    <!-- Actividad reciente -->
+    <div class="widget">
+      <div class="widget-header">
+        <h3 class="widget-title">
+          <span class="widget-icon">📈</span>
+          Actividad Reciente
+        </h3>
+        <div class="widget-actions">
+          <button class="widget-btn" onclick="refreshActivity()" title="Actualizar">🔄</button>
+          <button class="widget-btn" onclick="expandWidget(this)" title="Expandir">⛶</button>
+        </div>
+      </div>
+      <div class="widget-content">
+        <div class="activity-list" id="activityList">
+          <div class="activity-item">
+            <div class="activity-icon">👤</div>
+            <div class="activity-content">
+              <div class="activity-text">Nuevo usuario registrado</div>
+              <div class="activity-time">Hace 15 minutos</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">🗃️</div>
+            <div class="activity-content">
+              <div class="activity-text">Memory card creada</div>
+              <div class="activity-time">Hace 1 hora</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">🔧</div>
+            <div class="activity-content">
+              <div class="activity-text">Sistema actualizado</div>
+              <div class="activity-time">Hace 3 horas</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="activity-icon">👥</div>
+            <div class="activity-content">
+              <div class="activity-text">5 usuarios conectados</div>
+              <div class="activity-time">Hace 5 horas</div>
+            </div>
+          </div>
+        </div>
+        <div class="widget-footer">
+          <a href="#" class="widget-link">Ver toda la actividad</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráfico de usuarios -->
+    <div class="widget">
+      <div class="widget-header">
+        <h3 class="widget-title">
+          <span class="widget-icon">📊</span>
+          Usuarios por Día
+        </h3>
+        <div class="widget-actions">
+          <select class="widget-select" onchange="updateUsersChart(this.value)">
+            <option value="7">Última semana</option>
+            <option value="30" selected>Último mes</option>
+            <option value="90">Últimos 3 meses</option>
+          </select>
+        </div>
+      </div>
+      <div class="widget-content">
+        <div class="chart-container">
+          <canvas id="usersLineChart" width="400" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Estado del sistema -->
+    <div class="widget">
+      <div class="widget-header">
+        <h3 class="widget-title">
+          <span class="widget-icon">⚙️</span>
+          Estado del Sistema
+        </h3>
+        <div class="widget-actions">
+          <span class="status-indicator status-online" id="systemStatus">🟢</span>
+        </div>
+      </div>
+      <div class="widget-content">
+        <div class="system-stats">
+          <div class="system-stat">
+            <div class="stat-label">API Principal</div>
+            <div class="stat-value">
+              <span class="status-dot status-{{ stats.api_status or 'offline' }}"></span>
+              {{ stats.api_status|title or 'Desconocido' }}
+            </div>
+          </div>
+          <div class="system-stat">
+            <div class="stat-label">Base de Datos</div>
+            <div class="stat-value">
+              <span class="status-dot status-online"></span>
+              Conectada
+            </div>
+          </div>
+          <div class="system-stat">
+            <div class="stat-label">Almacenamiento</div>
+            <div class="stat-value">
+              <span class="status-dot status-warning"></span>
+              75% usado
+            </div>
+          </div>
+          <div class="system-stat">
+            <div class="stat-label">Memoria</div>
+            <div class="stat-value">
+              <span class="status-dot status-online"></span>
+              512MB / 2GB
+            </div>
+          </div>
+        </div>
+        <div class="widget-footer">
+          <button class="btn-secondary" onclick="runSystemDiagnostics()">
+            <span>🔍</span> Diagnóstico
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acciones rápidas -->
+    <div class="widget">
+      <div class="widget-header">
+        <h3 class="widget-title">
+          <span class="widget-icon">⚡</span>
+          Acciones Rápidas
+        </h3>
+      </div>
+      <div class="widget-content">
+        <div class="quick-actions">
+          <a href="{{ url_for('users.user_list') }}" class="quick-action">
+            <div class="action-icon">👥</div>
+            <div class="action-content">
+              <div class="action-title">Gestionar Usuarios</div>
+              <div class="action-description">Ver y administrar cuentas</div>
+            </div>
+            <div class="action-arrow">→</div>
+          </a>
+
+          <a href="{{ url_for('memory_cards.card_list') }}" class="quick-action">
+            <div class="action-icon">🗃️</div>
+            <div class="action-content">
+              <div class="action-title">Memory Cards</div>
+              <div class="action-description">Crear y editar tarjetas</div>
+            </div>
+            <div class="action-arrow">→</div>
+          </a>
+
+          <a href="{{ url_for('auth.setup_mfa') }}" class="quick-action">
+            <div class="action-icon">🛡️</div>
+            <div class="action-content">
+              <div class="action-title">Configurar MFA</div>
+              <div class="action-description">Autenticación de dos factores</div>
+            </div>
+            <div class="action-arrow">→</div>
+          </a>
+
+          <button class="quick-action" onclick="exportData()">
+            <div class="action-icon">📥</div>
+            <div class="action-content">
+              <div class="action-title">Exportar Datos</div>
+              <div class="action-description">Descargar respaldo</div>
+            </div>
+            <div class="action-arrow">→</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs recientes -->
+  <div class="full-width-widget">
+    <div class="widget">
+      <div class="widget-header">
+        <h3 class="widget-title">
+          <span class="widget-icon">📋</span>
+          Logs del Sistema
+        </h3>
+        <div class="widget-actions">
+          <button class="widget-btn" onclick="refreshLogs()" title="Actualizar logs">🔄</button>
+          <button class="widget-btn" onclick="clearLogs()" title="Limpiar logs">🗑️</button>
+          <button class="widget-btn" onclick="exportLogs()" title="Exportar logs">📥</button>
+        </div>
+      </div>
+      <div class="widget-content">
+        <div class="logs-container" id="logsContainer">
+          <div class="log-entry log-info">
+            <span class="log-time">{{ moment().format('HH:mm:ss') }}</span>
+            <span class="log-level">INFO</span>
+            <span class="log-message">Sistema iniciado correctamente</span>
+          </div>
+          <div class="log-entry log-success">
+            <span class="log-time">{{ moment().subtract(5, 'minutes').format('HH:mm:ss') }}</span>
+            <span class="log-level">SUCCESS</span>
+            <span class="log-message">Usuario admin autenticado exitosamente</span>
+          </div>
+          <div class="log-entry log-warning">
+            <span class="log-time">{{ moment().subtract(10, 'minutes').format('HH:mm:ss') }}</span>
+            <span class="log-level">WARNING</span>
+            <span class="log-message">Uso de memoria alto: 75%</span>
+          </div>
+          <div class="log-entry log-info">
+            <span class="log-time">{{ moment().subtract(15, 'minutes').format('HH:mm:ss') }}</span>
+            <span class="log-level">INFO</span>
+            <span class="log-message">Backup automático completado</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}
