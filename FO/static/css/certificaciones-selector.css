@@ -1,0 +1,141 @@
+.selector-hero {
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.selector-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+
+.sites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.site-card {
+  background: var(--gradient-card);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  transition: all var(--transition-base);
+  text-decoration: none;
+  color: inherit;
+}
+
+.site-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(220, 38, 38, 0.15);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.site-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.site-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: .5rem;
+  color: var(--text-primary);
+}
+
+.site-description {
+  color: var(--text-secondary);
+  font-size: .95rem;
+  line-height: 1.4;
+}
+
+.site-badge {
+  display: inline-block;
+  padding: .25rem .5rem;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 600;
+  margin-top: .5rem;
+}
+
+.badge-main {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.badge-section {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.badge-info {
+  background: rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+}
+
+.badge-certification {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+/* Responsive enhancements */
+@media (max-width: 1200px) {
+  .sites-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .selector-hero {
+    padding: 1.5rem 0;
+  }
+  
+  .selector-title {
+    font-size: 1.75rem;
+    line-height: 1.3;
+  }
+  
+  .sites-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  
+  .site-card {
+    padding: 1.25rem;
+  }
+  
+  .site-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .site-name {
+    font-size: 1.1rem;
+  }
+  
+  .site-description {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .selector-hero {
+    padding: 1rem 0;
+  }
+  
+  .selector-title {
+    font-size: 1.5rem;
+  }
+  
+  .site-card {
+    padding: 1rem;
+  }
+  
+  .site-card:hover {
+    transform: translateY(-2px);
+  }
+}
