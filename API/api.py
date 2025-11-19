@@ -422,7 +422,7 @@ def api_get_memory_cards():
 
 @app.get("/api/memory-cards/<card_id>")
 def api_get_memory_card(card_id):
-    """Obtener una memory card específica"""
+    """Obtener una memory card específica - CORREGIDO ObjectId"""
     try:
         # Verificar autenticación
         auth_header = request.headers.get('Authorization')
@@ -434,8 +434,14 @@ def api_get_memory_card(card_id):
         if not valid:
             return jsonify({"ok": False, "detail": "Token inválido"}), 401
 
-        # Buscar card
-        card = memory_cards.find_one({"_id": card_id})
+        # CORREGIDO: Buscar tanto por string como por ObjectId
+        query = {"$or": [{"_id": card_id}]}
+        try:
+            query["$or"].append({"_id": ObjectId(card_id)})
+        except:
+            pass  # Si no es un ObjectId válido, solo buscar por string
+        
+        card = memory_cards.find_one(query)
         if not card:
             return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
 
@@ -454,7 +460,8 @@ def api_get_memory_card(card_id):
     except Exception as e:
         app.logger.error(f"Error obteniendo memory card: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
+    
+    
 @app.post("/api/memory-cards")
 def api_create_memory_card():
     """Crear una nueva memory card"""
@@ -510,9 +517,58 @@ def api_create_memory_card():
         app.logger.error(f"Error creando memory card: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
 
+
+@app.delete("/api/memory-cards/<card_id>")
+def api_delete_memory_card(card_id):
+    """Eliminar una memory card - CORREGIDO ObjectId"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        # CORREGIDO: Buscar tanto por string como por ObjectId
+        query = {"$or": [{"_id": card_id}]}
+        try:
+            query["$or"].append({"_id": ObjectId(card_id)})
+        except:
+            pass  # Si no es un ObjectId válido, solo buscar por string
+        
+        print(f"🔍 Buscando card con query: {query}")
+        
+        # Verificar si la card existe
+        existing_card = memory_cards.find_one(query)
+        if not existing_card:
+            print(f"❌ Card no encontrada: {card_id}")
+            return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
+
+        print(f"✅ Card encontrada: {existing_card['_id']}")
+        
+        # Eliminar usando el _id real encontrado
+        result = memory_cards.delete_one({"_id": existing_card["_id"]})
+        
+        if result.deleted_count == 1:
+            print(f"🗑️ Card eliminada exitosamente: {existing_card['_id']}")
+            return jsonify({
+                "ok": True, 
+                "detail": "Memory card eliminada correctamente"
+            })
+        else:
+            print(f"❌ Error al eliminar card: {existing_card['_id']}")
+            return jsonify({"ok": False, "detail": "Error al eliminar la memory card"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error eliminando memory card: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
 @app.put("/api/memory-cards/<card_id>")
 def api_update_memory_card(card_id):
-    """Actualizar una memory card existente"""
+    """Actualizar una memory card existente - CORREGIDO ObjectId"""
     try:
         # Verificar autenticación
         auth_header = request.headers.get('Authorization')
@@ -528,8 +584,15 @@ def api_update_memory_card(card_id):
         if not data:
             return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
 
+        # CORREGIDO: Buscar tanto por string como por ObjectId
+        query = {"$or": [{"_id": card_id}]}
+        try:
+            query["$or"].append({"_id": ObjectId(card_id)})
+        except:
+            pass
+        
         # Verificar si la card existe
-        existing_card = memory_cards.find_one({"_id": card_id})
+        existing_card = memory_cards.find_one(query)
         if not existing_card:
             return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
 
@@ -547,14 +610,14 @@ def api_update_memory_card(card_id):
         if not update_data:
             return jsonify({"ok": False, "detail": "No hay datos para actualizar"}), 400
 
-        # Actualizar
+        # Actualizar usando el _id real
         memory_cards.update_one(
-            {"_id": card_id},
+            {"_id": existing_card["_id"]},
             {"$set": update_data}
         )
 
         # Obtener card actualizada
-        updated_card = memory_cards.find_one({"_id": card_id})
+        updated_card = memory_cards.find_one({"_id": existing_card["_id"]})
         
         return jsonify({
             "ok": True, 
@@ -572,40 +635,6 @@ def api_update_memory_card(card_id):
 
     except Exception as e:
         app.logger.error(f"Error actualizando memory card: {e}")
-        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
-@app.delete("/api/memory-cards/<card_id>")
-def api_delete_memory_card(card_id):
-    """Eliminar una memory card"""
-    try:
-        # Verificar autenticación
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({"ok": False, "detail": "Token requerido"}), 401
-        
-        token = auth_header.split(' ')[1]
-        valid, payload = verify_jwt(token)
-        if not valid:
-            return jsonify({"ok": False, "detail": "Token inválido"}), 401
-
-        # Verificar si la card existe
-        existing_card = memory_cards.find_one({"_id": card_id})
-        if not existing_card:
-            return jsonify({"ok": False, "detail": "Memory card no encontrada"}), 404
-
-        # Eliminar
-        result = memory_cards.delete_one({"_id": card_id})
-        
-        if result.deleted_count == 1:
-            return jsonify({
-                "ok": True, 
-                "detail": "Memory card eliminada correctamente"
-            })
-        else:
-            return jsonify({"ok": False, "detail": "Error al eliminar la memory card"}), 500
-
-    except Exception as e:
-        app.logger.error(f"Error eliminando memory card: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
     
 # Añadir en api.py - después del endpoint GET /api/users/<user_id>
