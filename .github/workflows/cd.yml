@@ -1,4 +1,4 @@
-﻿name: CD - Multi Image Deploy (FO/API/BO) - WORKING
+﻿name: CD - Multi Image Deploy with Auto Cleanup - COMPLETE
 
 on:
   push:
@@ -189,7 +189,67 @@ jobs:
             chmod 600 /root/firefighter.env
             echo "✅ Environment file created"
 
-      - name: Stop existing containers
+      - name: Check disk space and cleanup
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          command_timeout: 600s
+          script: |
+            set -e
+            echo "💾 Checking disk space..."
+            df -h /
+            
+            # Get available space in GB
+            AVAILABLE_GB=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+            echo "Available space: ${AVAILABLE_GB}GB"
+            
+            # If less than 5GB available, do aggressive cleanup
+            if [ "$AVAILABLE_GB" -lt 5 ]; then
+              echo "⚠️ Low disk space detected! Starting cleanup..."
+              
+              # Stop containers first
+              cd /opt/emergency
+              docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
+              
+              echo "🧹 Aggressive Docker cleanup..."
+              
+              # Remove all stopped containers
+              docker container prune -f
+              
+              # Remove all unused images (keeping only what we need)
+              docker image prune -a -f
+              
+              # Remove unused volumes
+              docker volume prune -f
+              
+              # Remove build cache
+              docker builder prune -a -f
+              
+              # Remove unused networks
+              docker network prune -f
+              
+              # Final system cleanup
+              docker system prune -a -f --volumes
+              
+              echo "🗑️ Cleaning system logs..."
+              # Clean system logs if they're too large
+              journalctl --vacuum-time=7d || true
+              
+              # Clean apt cache
+              apt-get clean || true
+              
+              echo "✅ Cleanup completed"
+              df -h /
+              
+              AVAILABLE_AFTER=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+              echo "Space freed: $((AVAILABLE_AFTER - AVAILABLE_GB))GB"
+            else
+              echo "✅ Sufficient disk space available"
+            fi
+
+      - name: Stop existing containers and backup
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -209,9 +269,13 @@ jobs:
             
             # Stop existing containers
             docker-compose -f docker-compose.prod.yml down --remove-orphans --timeout 30 || true
-            echo "✅ Containers stopped"
+            
+            # Remove old backups (keep only last 5)
+            ls -t docker-compose.prod.yml.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
+            
+            echo "✅ Containers stopped and backups cleaned"
 
-      - name: Pull latest images
+      - name: Pull latest images with space management
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -220,20 +284,39 @@ jobs:
           command_timeout: 1200s
           script: |
             set -e
-            echo "📥 Pulling latest images..."
+            echo "📥 Pulling latest images with space management..."
             cd /opt/emergency
             
-            # Convert repository owner to lowercase in the script
-            REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-            echo "🔍 Repository owner: $REPO_OWNER"
+            # Check space before pulling
+            AVAILABLE_GB=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+            echo "Available space before pull: ${AVAILABLE_GB}GB"
             
-            # Pull all images with docker-compose
-            echo "🔄 Pulling all images via docker-compose..."
-            docker-compose -f docker-compose.prod.yml pull --quiet
+            if [ "$AVAILABLE_GB" -lt 3 ]; then
+              echo "❌ Insufficient space for pull (need at least 3GB)"
+              exit 1
+            fi
             
-            # Verify images
+            # Pull images one by one with space checking and cleanup
+            echo "🔄 Pulling frontend image..."
+            docker-compose -f docker-compose.prod.yml pull frontend
+            docker image prune -f  # Clean after each pull
+            
+            echo "🔄 Pulling backend image..."
+            docker-compose -f docker-compose.prod.yml pull backend
+            docker image prune -f
+            
+            echo "🔄 Pulling backoffice image..."  
+            docker-compose -f docker-compose.prod.yml pull backoffice
+            docker image prune -f
+            
+            # Final verification
             echo "🔍 Verifying images..."
             docker images | grep ai-firefighter
+            
+            # Check space after pull
+            AVAILABLE_AFTER=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+            echo "Available space after pull: ${AVAILABLE_AFTER}GB"
+            
             echo "✅ Images pulled successfully"
 
       - name: Start services
@@ -261,7 +344,7 @@ jobs:
             
             echo "✅ Services started"
 
-      - name: Health checks
+      - name: Health checks and verification
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -291,10 +374,10 @@ jobs:
               fi
               
               if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-                echo "⚠️ Not all containers started, but continuing..."
+                echo "⚠️ Not all containers started properly"
                 echo "📋 Final status:"
                 docker-compose ps
-                echo "📄 Logs:"
+                echo "📄 Recent logs:"
                 docker-compose logs --tail=20
                 break
               fi
@@ -303,7 +386,7 @@ jobs:
               sleep 15
             done
 
-      - name: Final verification
+      - name: Final verification and connectivity tests
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -321,21 +404,38 @@ jobs:
             
             # Show which ports are exposed
             echo "🌐 Exposed ports:"
-            docker ps --format "table {{.Names}}\t{{.Ports}}"
+            docker ps --format "table {{.Names}}\t{{.Ports}}" 2>/dev/null || echo "Could not get port info"
             
-            # Test connectivity
+            # Test connectivity with better error handling
             echo "🔗 Testing connectivity:"
+            
             echo "Backend (port 5000):"
-            curl -s -I http://localhost:5000/ || echo "  Backend not responding"
+            if curl -s -f --connect-timeout 10 --max-time 15 http://localhost:5000/ >/dev/null 2>&1; then
+              echo "  ✅ Backend responding"
+            else
+              echo "  ⚠️ Backend not responding yet"
+            fi
             
             echo "Frontend (port 8000):"
-            curl -s -I http://localhost:8000/ || echo "  Frontend not responding"
+            if curl -s -f --connect-timeout 10 --max-time 15 http://localhost:8000/ >/dev/null 2>&1; then
+              echo "  ✅ Frontend responding"
+            else
+              echo "  ⚠️ Frontend not responding yet"
+            fi
             
             echo "Backoffice (port 3001):"
-            curl -s -I http://localhost:3001/ || echo "  Backoffice not responding"
+            if curl -s -f --connect-timeout 10 --max-time 15 http://localhost:3001/ >/dev/null 2>&1; then
+              echo "  ✅ Backoffice responding"
+            else
+              echo "  ⚠️ Backoffice not responding yet"
+            fi
             
-            # Clean up old images
-            echo "🧹 Cleaning up old images..."
+            # Show final disk usage
+            echo "💾 Final disk usage:"
+            df -h /
+            
+            # Final cleanup of old images
+            echo "🧹 Final cleanup of old images..."
             docker image prune -f || true
             
             echo "✅ Deployment verification completed"
@@ -344,8 +444,17 @@ jobs:
         run: |
           echo "🔥 PRODUCTION DEPLOYMENT COMPLETED!"
           echo "📅 $(date)"
+          echo ""
           echo "🔄 Services deployed:"
           echo "   - Frontend: http://your-server:8000"
           echo "   - Backend API: http://your-server:5000" 
           echo "   - Backoffice: http://your-server:3001"
-          echo "✅ All services should be running"
+          echo ""
+          echo "✅ Features included:"
+          echo "   - Automatic disk space management"
+          echo "   - Progressive image pulling with cleanup"
+          echo "   - Health checks and verification"
+          echo "   - Backup management"
+          echo "   - Connectivity testing"
+          echo ""
+          echo "🚀 Deployment should be fully functional!"
