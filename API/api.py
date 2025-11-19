@@ -385,7 +385,7 @@ from bson import ObjectId
 
 # --- Routes para Memory Cards ---
 # --- Routes para Memory Cards ---
-memory_cards = db["memory_cards"]
+memory_cards = db["leitner_cards"]
 
 @app.get("/api/memory-cards")
 def api_get_memory_cards():
