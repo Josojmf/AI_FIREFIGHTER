@@ -218,7 +218,6 @@ def _ensure_user_has_cards(username, cards_col):
     return False
 
 @leitner_bp.route("/api/leitner/next", methods=["GET"])
-@login_required_bp
 def api_next_card():
     """
     Devuelve la siguiente tarjeta vencida priorizando la caja más baja y 'due' más antiguo.
