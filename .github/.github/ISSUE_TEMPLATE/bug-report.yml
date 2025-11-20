@@ -1,0 +1,119 @@
+name: 🐛 Bug Report
+description: Reportar un bug o error en la plataforma
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Reporte de Bug
+        Ayúdanos a entender y resolver el problema.
+
+  - type: dropdown
+    id: epic
+    attributes:
+      label: 🎯 Epic Afectado
+      description: ¿Qué área del sistema está afectada?
+      options:
+        - 🔐 AUTH - Autenticación
+        - 💬 CHAT - Chat AI
+        - 🎴 LEITNER - Sistema Leitner
+        - 🌐 EMBED - Integraciones externas
+        - ⚙️ BO - BackOffice
+        - 🚀 INFRA - DevOps
+        - 🤷 No estoy seguro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 🔥 Severidad
+      description: ¿Qué tan grave es el problema?
+      options:
+        - 🔴 Critical - Sistema caído o inutilizable
+        - 🟠 High - Funcionalidad importante rota
+        - 🟡 Medium - Problema menor pero molesto
+        - 🟢 Low - Problema cosmético
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 🌐 Entorno
+      description: ¿Dónde ocurre el problema?
+      options:
+        - 🚀 Production (firefighterai.com)
+        - 🧪 Staging
+        - 💻 Local Development
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📝 Descripción del Bug
+      description: Describe claramente qué está mal
+      placeholder: "Cuando intento... sucede que..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 🔄 Pasos para Reproducir
+      description: ¿Cómo podemos reproducir el problema?
+      placeholder: |
+        1. Ir a '...'
+        2. Click en '...'
+        3. Scroll hasta '...'
+        4. Ver error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: ✅ Comportamiento Esperado
+      description: ¿Qué debería pasar?
+      placeholder: "Debería mostrar..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: ❌ Comportamiento Actual
+      description: ¿Qué está pasando realmente?
+      placeholder: "En cambio muestra..."
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: 🌐 Navegador y Versión
+      description: Si es relevante
+      placeholder: "Chrome 120, Firefox 115, Safari 17, etc."
+
+  - type: input
+    id: device
+    attributes:
+      label: 📱 Dispositivo
+      description: Si es relevante
+      placeholder: "iPhone 14, Windows 11, macOS Sonoma, etc."
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 📸 Screenshots o Logs
+      description: Arrastra imágenes aquí o pega logs de consola
+      placeholder: "Arrastra imágenes o pega texto aquí..."
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 📎 Información Adicional
+      description: Cualquier otro detalle relevante
+```
