@@ -6,3 +6,15 @@ contact_links:
   - name: 💬 Discusiones y Preguntas
     url: https://github.com/Josojmf/AI_Firefighter/discussions
     about: Haz preguntas o participa en discusiones
+```
+
+---
+
+## 🎯 **Ubicación correcta de los archivos:**
+```
+.github/
+└── ISSUE_TEMPLATE/
+    ├── user-story.yml
+    ├── bug-report.yml
+    ├── task.yml
+    └── config.yml (opcional)
