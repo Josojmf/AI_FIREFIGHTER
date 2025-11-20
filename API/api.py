@@ -477,30 +477,37 @@ def api_create_memory_card():
             return jsonify({"ok": False, "detail": "Token inválido"}), 401
 
         data = request.get_json()
+        app.logger.info(f"Datos recibidos para memory card: {data}")
         if not data:
             return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
 
         # Validar campos requeridos
         required_fields = ["title", "content", "category"]
+        missing_fields = []
         for field in required_fields:
-            if not data.get(field):
-                return jsonify({"ok": False, "detail": f"Campo {field} es requerido"}), 400
+            if field not in data or not data[field] or str(data[field]).strip() == "":
+                missing_fields.append(field)
+        
+        if missing_fields:
+            app.logger.error(f"Campos faltantes o vacíos: {missing_fields}")
+            return jsonify({
+                "ok": False, 
+                "detail": f"Campos requeridos faltantes: {', '.join(missing_fields)}"
+            }), 400
 
         # Crear card
         card_doc = {
-            "_id": ObjectId(),
-            "user": payload.get("username", "admin"),  # Campo requerido por Leitner
-            "deck": data.get("category", "general"),    # Mapear category a deck
-            "front": data["title"],                      # Mapear title a front
-            "back": data["content"],                     # Mapear content a back
-            "box": 1,
-            "due": datetime.utcnow(),
+            "_id": str(ObjectId()),
+            "title": str(data["title"]).strip(),
+            "content": str(data["content"]).strip(),
+            "category": str(data["category"]).strip(),
+            "difficulty": data.get("difficulty", "medium") or "medium",
             "created_at": datetime.utcnow(),
-            "created_by": payload["username"],
-            "history": []
+            "created_by": payload.get("username", "unknown")
         }
 
-        memory_cards.insert_one(card_doc)
+        result = memory_cards.insert_one(card_doc)
+        app.logger.info(f"Memory card creada exitosamente: {result.inserted_id}")
         
         return jsonify({
             "ok": True, 
@@ -518,7 +525,9 @@ def api_create_memory_card():
 
     except Exception as e:
         app.logger.error(f"Error creando memory card: {e}")
-        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+        import traceback
+        app.logger.error(f"Traceback completo: {traceback.format_exc()}")
+        return jsonify({"ok": False, "detail": f"Error interno: {str(e)}"}), 500
 
 
 @app.delete("/api/memory-cards/<card_id>")
