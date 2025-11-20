@@ -1,0 +1,104 @@
+name: ⚙️ Tarea Técnica
+description: Tarea técnica, refactoring o mejora interna
+title: "[TASK] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚙️ Tarea Técnica
+        Para trabajo técnico, refactoring, mejoras de código, etc.
+
+  - type: dropdown
+    id: epic
+    attributes:
+      label: 🎯 Epic
+      description: ¿A qué área pertenece?
+      options:
+        - 🔐 AUTH - Autenticación
+        - 💬 CHAT - Chat AI
+        - 🎴 LEITNER - Sistema Leitner
+        - 🌐 EMBED - Integraciones externas
+        - ⚙️ BO - BackOffice
+        - 🚀 INFRA - DevOps
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: 📦 Tipo de Tarea
+      description: ¿Qué tipo de trabajo es?
+      options:
+        - 🔧 Refactoring - Mejorar código existente
+        - 📚 Documentación - Docs técnicas
+        - 🧪 Testing - Tests unitarios/integración
+        - 🚀 Performance - Optimización
+        - 🔒 Security - Mejoras de seguridad
+        - 🛠️ Tooling - Herramientas de desarrollo
+        - 📦 Dependencies - Actualizar dependencias
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: ⚡ Prioridad
+      options:
+        - 🔴 Critical
+        - 🟠 High
+        - 🟡 Medium
+        - 🟢 Low
+    validations:
+      required: true
+
+  - type: dropdown
+    id: story_points
+    attributes:
+      label: 📊 Story Points
+      description: Estimación de esfuerzo
+      options:
+        - "1 - Muy simple"
+        - "2 - Simple"
+        - "3 - Moderado"
+        - "5 - Complejo"
+        - "8 - Muy complejo"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📝 Descripción
+      description: ¿Qué hay que hacer?
+      placeholder: "Necesitamos refactorizar el módulo de..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: 🤔 ¿Por qué es necesario?
+      description: Justificación técnica o de negocio
+      placeholder: "Esta tarea es necesaria porque..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: subtasks
+    attributes:
+      label: ✅ Subtareas
+      description: Desglose de trabajo (opcional)
+      placeholder: |
+        - [ ] Analizar código actual
+        - [ ] Implementar cambios
+        - [ ] Actualizar tests
+        - [ ] Actualizar documentación
+
+  - type: textarea
+    id: technical_details
+    attributes:
+      label: 🔧 Detalles Técnicos
+      description: Consideraciones técnicas, arquitectura, etc.
+      placeholder: "Archivos afectados, dependencias, consideraciones..."
+```
