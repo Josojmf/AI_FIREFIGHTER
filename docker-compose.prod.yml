@@ -27,7 +27,7 @@ services:
 
   # BACKEND API
   backend:
-    image: ghcr.io/joso77/ai-firefighter-backend:latest
+    image: ghcr.io/josojmf/ai-firefighter-backend:latest
     container_name: firefighter_backend
     ports:
       - "5000:5000"
@@ -45,7 +45,7 @@ services:
 
   # 🔥 BACKOFFICE - Con configuración de sesión separada
   backoffice:
-    image: ghcr.io/joso77/ai-firefighter-backoffice:latest
+    image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
     container_name: firefighter_backoffice
     ports:
       - "3001:3001"
