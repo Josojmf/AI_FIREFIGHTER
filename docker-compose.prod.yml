@@ -4,7 +4,7 @@ version: '3.8'
 services:
   # 🔥 FRONTEND - Con configuración de sesión separada
   frontend:
-    image: ghcr.io/joso77/ai-firefighter-frontend:latest
+    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
     container_name: firefighter_frontend
     ports:
       - "8000:8000"
