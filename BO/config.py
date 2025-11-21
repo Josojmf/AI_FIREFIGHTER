@@ -40,4 +40,4 @@ class Config:
         print(f"   - Secret key: {cls.SECRET_KEY[:20]}...")
         print(f"   - Lifetime: {cls.PERMANENT_SESSION_LIFETIME}s")
         print(f"   - API URL: {cls.API_BASE_URL}")
-        print(f"   - Debug: {cls.DEBUG}")
+        print(f"   - Debug: {cls.DEBUG}") 
