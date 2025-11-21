@@ -54,6 +54,8 @@ jobs:
           build-args: |
             API_BASE_URL=http://backend:5000/api
           no-cache: true
+          provenance: false
+          sbom: false
 
       # BACKEND
       - name: Build + Push BACKEND
@@ -66,6 +68,8 @@ jobs:
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ github.sha }}
           no-cache: true
+          provenance: false
+          sbom: false
 
       # BACKOFFICE
       - name: Build + Push BACKOFFICE
@@ -78,6 +82,8 @@ jobs:
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ github.sha }}
           no-cache: true
+          provenance: false
+          sbom: false
 
   # -------------------------------------------------------------------
   # 2) DEPLOY TO DROPLET
@@ -178,7 +184,7 @@ jobs:
             FRONTEND_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
             BACKOFFICE_SECRET_KEY=${{ secrets.BACKOFFICE_SECRET_KEY }}
             
-            # Variables originales (mantener)
+            # Variables originales
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             JWT_EXPIRES_HOURS=${{ secrets.JWT_EXPIRES_HOURS }}
             MONGO_CLUSTER=${{ secrets.MONGO_CLUSTER }}
@@ -195,9 +201,9 @@ jobs:
             FRONTEND_SESSION_TIMEOUT=86400
             BACKOFFICE_SESSION_TIMEOUT=28800
             
-            # Admin y MFA
+            # Admin credentials
             ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            ADMIN_PASSWORD=admin123
             MFA_ISSUER=FirefighterAI
             
             # Configuración general
@@ -210,6 +216,7 @@ jobs:
             echo "📋 Environment variables configured:"
             echo "   - Frontend session: FRONTEND_SECRET_KEY (set)"
             echo "   - Backoffice session: BACKOFFICE_SECRET_KEY (set)"
+            echo "   - Admin credentials: ADMIN_USERNAME (set)"
             echo "   - Session timeouts configured"
 
       - name: Check disk space and cleanup
@@ -479,6 +486,7 @@ jobs:
           echo "   - Backoffice: http://your-server:3001"
           echo ""
           echo "✅ Features included:"
+          echo "   - ✅ SESIONES SEPARADAS CONFIGURADAS"
           echo "   - Automatic disk space management"
           echo "   - Progressive image pulling with cleanup"
           echo "   - Health checks and verification"
