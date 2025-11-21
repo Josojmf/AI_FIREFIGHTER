@@ -1,4 +1,4 @@
-# app/__init__.py (CORRECCIÓN CRÍTICA)
+# app/__init__.py - BACKOFFICE CON SESIONES SEPARADAS
 from flask import Flask, request, session
 from flask_login import LoginManager, current_user
 import logging
@@ -8,21 +8,30 @@ from datetime import datetime
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
     
-    # Configuración PRIMERO - CON SECRET_KEY CONSISTENTE
+    # 🔥 CONFIGURACIÓN PRIMERO - CON SECRET_KEY CONSISTENTE
     app.config.from_object(Config)
     
-    # Configuración de sesión MEJORADA
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SECURE'] = False  # True en producción
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['PERMANENT_SESSION_LIFETIME'] = 3600 * 24  # 24 horas
+    # 🔥 CONFIGURACIÓN COMPLETA DE SESIÓN USANDO Config
+    app.config.update({
+        'SESSION_COOKIE_NAME': Config.SESSION_COOKIE_NAME,
+        'SESSION_COOKIE_PATH': Config.SESSION_COOKIE_PATH,
+        'SESSION_COOKIE_HTTPONLY': Config.SESSION_COOKIE_HTTPONLY,
+        'SESSION_COOKIE_SECURE': Config.SESSION_COOKIE_SECURE,
+        'SESSION_COOKIE_SAMESITE': Config.SESSION_COOKIE_SAMESITE,
+        'SESSION_COOKIE_DOMAIN': Config.SESSION_COOKIE_DOMAIN,
+        'PERMANENT_SESSION_LIFETIME': Config.PERMANENT_SESSION_LIFETIME,
+        'SESSION_REFRESH_EACH_REQUEST': Config.SESSION_REFRESH_EACH_REQUEST
+    })
 
-    # Flask-Login
+    # Logging de configuración para debug
+    Config.log_config()
+
+    # Flask-Login con configuración mejorada
     login_manager = LoginManager()
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
-    login_manager.session_protection = "strong"  # Cambiado a strong
+    login_manager.session_protection = Config.SESSION_PROTECTION
 
     from app.models.user import BackofficeUser
 
@@ -102,9 +111,12 @@ def create_app():
     def log_request_info():
         if request.endpoint and not request.endpoint.startswith('static'):
             timestamp = datetime.now().strftime("%H:%M:%S")
-            print(f"🕒 [{timestamp}] 🔍 [{request.method}] {request.path} - User: {current_user.is_authenticated}")
+            session_info = f"Cookie: {request.cookies.get(Config.SESSION_COOKIE_NAME, 'None')[:10]}..."
+            print(f"🕒 [{timestamp}] 🌐 [{request.method}] {request.path} - User: {current_user.is_authenticated} | {session_info}")
 
     # Configurar logging
     logging.basicConfig(level=logging.INFO)
+    
+    print(f"🚀 BackOffice iniciado con sesión '{Config.SESSION_COOKIE_NAME}'")
     
     return app

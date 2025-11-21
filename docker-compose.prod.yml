@@ -1,66 +1,108 @@
-﻿version: '3.9'
+﻿# docker-compose.prod.yml - CONFIGURACIÓN CON SESIONES SEPARADAS
+version: '3.8'
 
 services:
-
+  # 🔥 FRONTEND - Con configuración de sesión separada
   frontend:
-    container_name: frontend
-    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
-    restart: unless-stopped
+    image: ghcr.io/joso77/ai-firefighter-frontend:latest
+    container_name: firefighter_frontend
     ports:
       - "8000:8000"
+    environment:
+      # 🔥 Variables específicas del FrontEnd
+      - FRONTEND_SECRET_KEY=${FRONTEND_SECRET_KEY}
+      - API_BASE_URL=http://backend:5000/api
+      - DEBUG=${DEBUG:-false}
+      
+      # MongoDB (si el frontend lo necesita)
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASS=${MONGO_PASS}
+      - MONGO_CLUSTER=${MONGO_CLUSTER}
+      - DB_NAME=${DB_NAME}
+      
+      # Variables adicionales
+      - FRONTEND_SESSION_TIMEOUT=${FRONTEND_SESSION_TIMEOUT:-86400}
     env_file:
       - /root/firefighter.env
-    environment:
-      API_BASE_URL: "http://backend:5000/api"
+    networks:
+      - firefighter_network
+    restart: unless-stopped
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 15s
       retries: 10
-      start_period: 240s
-    networks:
-      - firefighter
+      start_period: 30s
 
+  # BACKEND API (sin cambios)
   backend:
-    container_name: backend
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
-    restart: unless-stopped
+    image: ghcr.io/joso77/ai-firefighter-backend:latest
+    container_name: firefighter_backend
     ports:
       - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_EXPIRES_HOURS=${JWT_EXPIRES_HOURS}
+      - MONGO_USER=${MONGO_USER}
+      - MONGO_PASS=${MONGO_PASS}
+      - MONGO_CLUSTER=${MONGO_CLUSTER}
+      - DB_NAME=${DB_NAME}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
     env_file:
       - /root/firefighter.env
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 0"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     networks:
-      - firefighter
-
-  backoffice:
-    container_name: backoffice
-    image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
+      - firefighter_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+
+  # 🔥 BACKOFFICE - Con configuración de sesión separada
+  backoffice:
+    image: ghcr.io/joso77/ai-firefighter-backoffice:latest
+    container_name: firefighter_backoffice
     ports:
       - "3001:3001"
+    environment:
+      # 🔥 Variables específicas del BackOffice
+      - BACKOFFICE_SECRET_KEY=${BACKOFFICE_SECRET_KEY}
+      - API_BASE_URL=http://backend:5000
+      - DEBUG=${DEBUG:-false}
+      
+      # Credenciales de admin
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      
+      # Variables adicionales
+      - BACKOFFICE_SESSION_TIMEOUT=${BACKOFFICE_SESSION_TIMEOUT:-28800}
+      - MFA_ISSUER=${MFA_ISSUER:-FirefighterAI}
     env_file:
       - /root/firefighter.env
-    environment:
-      API_BASE_URL: "http://backend:5000"
+    networks:
+      - firefighter_network
+    restart: unless-stopped
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - firefighter
+      timeout: 15s
+      retries: 10
+      start_period: 30s
 
+# 🌐 CONFIGURACIÓN DE RED
 networks:
-  firefighter:
+  firefighter_network:
     driver: bridge
+    name: firefighter_network
+
+# 💾 CONFIGURACIÓN DE VOLÚMENES (si necesitas persistencia)
+volumes:
+  firefighter_data:
+    driver: local

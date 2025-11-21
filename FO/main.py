@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
-from leitner import get_cards_collection  # reutilizamos conexión
+from leitner import get_cards_collection  # reutilizamos conexiÃ³n
 import re 
 import warnings
 import numpy as np
@@ -23,15 +23,31 @@ def _safe_print(*a, **k):
         pass
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = os.getenv("SECRET_KEY", "sargento-secret-key")
+app.secret_key = os.getenv("FRONTEND_SECRET_KEY", "firefighter-frontend-secret-2024")
+
+# 🔥 CONFIGURACIÓN DE COOKIES ESPECÍFICA PARA FRONTEND
+app.config.update(
+    SESSION_COOKIE_NAME='firefighter_session',  # Nombre diferente al BackOffice
+    SESSION_COOKIE_PATH='/',
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=False,  # True en producción HTTPS
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=86400,  # 24 horas
+    SESSION_COOKIE_DOMAIN=None  # Para localhost
+)
+
+print(f"🔥 FrontEnd configurado con:")
+print(f"   - Session cookie: {app.config['SESSION_COOKIE_NAME']}")
+print(f"   - Secret key: {app.secret_key[:20]}...")
+print(f"   - Lifetime: {app.config['PERMANENT_SESSION_LIFETIME']}s")
 
 # --- Blueprints ---
 try:
     from leitner import leitner_bp
     app.register_blueprint(leitner_bp)
-    _safe_print("✅ Blueprint Leitner registrado")
+    _safe_print("âœ… Blueprint Leitner registrado")
 except Exception as e:
-    _safe_print(f"⚠️ No se pudo registrar el blueprint Leitner: {e}")
+    _safe_print(f"âš ï¸ No se pudo registrar el blueprint Leitner: {e}")
 
 # --- IA: carga perezosa (evita errores raros de stdout) ---
 chatbot_pipeline = None
@@ -42,27 +58,27 @@ def get_chatbot():
     try:
         from transformers import pipeline
         import torch
-        print("🔁 Cargando modelo de IA (DialoGPT-small)...")
+        print("ðŸ” Cargando modelo de IA (DialoGPT-small)...")
         chatbot_pipeline = pipeline(
             "text-generation",
             model="microsoft/DialoGPT-small",
             tokenizer="microsoft/DialoGPT-small",
             device=0 if torch.cuda.is_available() else -1
         )
-        print("✅ Modelo cargado (DialoGPT-small).")
+        print("âœ… Modelo cargado (DialoGPT-small).")
     except Exception as e:
-        print(f"⚠️ Error con DialoGPT-small: {e}. Probando distilgpt2…")
+        print(f"âš ï¸ Error con DialoGPT-small: {e}. Probando distilgpt2â€¦")
         try:
             from transformers import pipeline
             chatbot_pipeline = pipeline("text-generation", model="distilgpt2")
-            print("✅ Respaldo cargado (distilgpt2).")
+            print("âœ… Respaldo cargado (distilgpt2).")
         except Exception as e2:
-            print(f"❌ Sin modelos: {e2}")
+            print(f"âŒ Sin modelos: {e2}")
             chatbot_pipeline = None
     return chatbot_pipeline
 
 def _ensure_text_index(col):
-    # Creamos índice de texto una sola vez
+    # Creamos Ã­ndice de texto una sola vez
     try:
         col.create_index([("front", "text"), ("back", "text")], name="text_search")
     except Exception:
@@ -70,7 +86,7 @@ def _ensure_text_index(col):
 
 def find_relevant_cards(query: str, username: str, deck: str = "", limit: int = 6):
     """
-    Busca tarjetas relevantes por $text (si hay índice) y cae a regex si no.
+    Busca tarjetas relevantes por $text (si hay Ã­ndice) y cae a regex si no.
     """
     col = get_cards_collection()
     if not col:
@@ -82,7 +98,7 @@ def find_relevant_cards(query: str, username: str, deck: str = "", limit: int = 
     if deck:
         q_filter["deck"] = deck.strip().lower()
 
-    # 1) intenta búsqueda texto
+    # 1) intenta bÃºsqueda texto
     try:
         cursor = col.find(
             {**q_filter, "$text": {"$search": query}},
@@ -110,19 +126,19 @@ def find_relevant_cards(query: str, username: str, deck: str = "", limit: int = 
 
 def build_prompt(user_question: str, cards: list, strict: bool) -> str:
     """
-    Construye un prompt compacto para modelos pequeños, reforzando el uso del contexto.
+    Construye un prompt compacto para modelos pequeÃ±os, reforzando el uso del contexto.
     """
     ctx_lines = []
     for i, c in enumerate(cards, 1):
         f = str(c.get("front", "")).strip()
         b = str(c.get("back", "")).strip()
         if f or b:
-            ctx_lines.append(f"- {f} → {b}")
-    context_block = "\n".join(ctx_lines[:10]) if ctx_lines else "— (no se encontraron tarjetas relevantes) —"
+            ctx_lines.append(f"- {f} â†’ {b}")
+    context_block = "\n".join(ctx_lines[:10]) if ctx_lines else "â€” (no se encontraron tarjetas relevantes) â€”"
 
     policy = (
         "Responde COMO INSTRUCTOR DE BOMBEROS.\n"
-        "Usa SOLO el contexto si es suficiente. Si falta info, dilo claramente y sugiere qué repasar.\n"
+        "Usa SOLO el contexto si es suficiente. Si falta info, dilo claramente y sugiere quÃ© repasar.\n"
     )
     if strict:
         policy += "MODO ESTRICTO ACTIVADO: NO inventes nada fuera del contexto.\n"
@@ -142,7 +158,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
-            flash("Debes iniciar sesión para acceder a esta página.")
+            flash("Debes iniciar sesiÃ³n para acceder a esta pÃ¡gina.")
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -168,16 +184,16 @@ def register_local_fallback(username, password, email):
     def hash_password(pwd): return hashlib.sha256(pwd.encode()).hexdigest()
 
     if len(username.strip()) < 3:
-        flash('❌ El usuario debe tener al menos 3 caracteres.')
+        flash('âŒ El usuario debe tener al menos 3 caracteres.')
         return render_template('register.html')
     if len(password) < 8:
-        flash('❌ La contraseña debe tener al menos 8 caracteres.')
+        flash('âŒ La contraseÃ±a debe tener al menos 8 caracteres.')
         return render_template('register.html')
 
     users = load_users()
     key = username.strip().lower()
     if key in users:
-        flash('❌ El usuario ya existe.')
+        flash('âŒ El usuario ya existe.')
         return render_template('register.html')
 
     try:
@@ -188,10 +204,10 @@ def register_local_fallback(username, password, email):
             "active": True
         }
         save_users(users)
-        flash('✅ Registro exitoso (modo local). Ahora puedes iniciar sesión.')
+        flash('âœ… Registro exitoso (modo local). Ahora puedes iniciar sesiÃ³n.')
         return redirect(url_for('login'))
     except Exception as e:
-        flash(f'❌ Error guardando usuario: {str(e)}')
+        flash(f'âŒ Error guardando usuario: {str(e)}')
         return render_template('register.html')
 
 def login_local_fallback(username, password):
@@ -212,19 +228,19 @@ def login_local_fallback(username, password):
     users = load_users()
     key = username.strip().lower()
     if key not in users:
-        flash("❌ Credenciales incorrectas")
+        flash("âŒ Credenciales incorrectas")
         return render_template('login.html')
 
     data = users[key]
     if not data.get('active', True):
-        flash("❌ Usuario desactivado")
+        flash("âŒ Usuario desactivado")
         return render_template('login.html')
     if data['password'] != hash_password(password):
-        flash("❌ Credenciales incorrectas")
+        flash("âŒ Credenciales incorrectas")
         return render_template('login.html')
 
     session['user'] = key
-    flash('✅ Sesión iniciada (modo local)')
+    flash('âœ… SesiÃ³n iniciada (modo local)')
     return redirect(url_for('home'))
 
 from chat_model import chat_model
@@ -245,7 +261,7 @@ def chat_ask():
         if not data:
             return jsonify({
                 "error": "Empty JSON data",
-                "response": "Datos vacíos. Envía un mensaje.",
+                "response": "Datos vacÃ­os. EnvÃ­a un mensaje.",
                 "success": False
             }), 400
         
@@ -257,11 +273,11 @@ def chat_ask():
                 "success": False
             }), 400
         
-        print(f"💬 Chat: '{user_message}'")
+        print(f"ðŸ’¬ Chat: '{user_message}'")
         
         # Generar respuesta
         response_text = chat_model.generate_response(user_message)
-        print(f"✅ Respuesta: '{response_text}'")
+        print(f"âœ… Respuesta: '{response_text}'")
         
         # Respuesta exitosa
         return jsonify({
@@ -272,9 +288,9 @@ def chat_ask():
         })
         
     except Exception as e:
-        print(f"❌ ERROR CRÍTICO en /api/chat/ask: {str(e)}")
+        print(f"âŒ ERROR CRÃTICO en /api/chat/ask: {str(e)}")
         import traceback
-        traceback.print_exc()  # Esto mostrará el traceback completo
+        traceback.print_exc()  # Esto mostrarÃ¡ el traceback completo
         
         return jsonify({
             "error": str(e),
@@ -321,7 +337,7 @@ try:
     with open("data/questions/questions.json", "r", encoding="utf-8") as f:
         questions_data = json.load(f)
 except Exception as e:
-    _safe_print(f"⚠️ Error cargando questions.json: {e}")
+    _safe_print(f"âš ï¸ Error cargando questions.json: {e}")
     questions_data = {"preguntas": []}
 
 # --- Rutas Auth ---
@@ -334,23 +350,23 @@ def register():
         payload = {'username': username, 'password': password, 'email': email}
 
         try:
-            _safe_print(f"🔗 POST {API_BASE_URL}/register")
+            _safe_print(f"ðŸ”— POST {API_BASE_URL}/register")
             res = requests.post(f"{API_BASE_URL}/register", json=payload, timeout=10)
             data = res.json() if res.content else {}
             if res.status_code == 201:
-                flash('✅ Registro exitoso. Ahora puedes iniciar sesión.')
+                flash('âœ… Registro exitoso. Ahora puedes iniciar sesiÃ³n.')
                 return redirect(url_for('login'))
             elif res.status_code == 409:
-                flash(f'❌ {data.get("detail", "El usuario ya existe.")}')
+                flash(f'âŒ {data.get("detail", "El usuario ya existe.")}')
             else:
-                flash(f'❌ {data.get("detail", "Error durante el registro.")}')
+                flash(f'âŒ {data.get("detail", "Error durante el registro.")}')
         except requests.exceptions.ConnectionError:
-            flash('⚠️ API no disponible. Usando registro local.')
+            flash('âš ï¸ API no disponible. Usando registro local.')
             return register_local_fallback(username, password, email)
         except requests.exceptions.Timeout:
-            flash('❌ Tiempo de espera agotado. Inténtalo nuevamente.')
+            flash('âŒ Tiempo de espera agotado. IntÃ©ntalo nuevamente.')
         except Exception as e:
-            flash(f'❌ Error inesperado: {str(e)}')
+            flash(f'âŒ Error inesperado: {str(e)}')
             return register_local_fallback(username, password, email)
 
     return render_template('register.html')
@@ -362,24 +378,24 @@ def login():
         password = request.form['password']
 
         try:
-            _safe_print(f"🔗 POST {API_BASE_URL}/login")
+            _safe_print(f"ðŸ”— POST {API_BASE_URL}/login")
             res = requests.post(f"{API_BASE_URL}/login", json={"username": username, "password": password}, timeout=10)
             data = res.json() if res.content else {}
             if res.status_code == 200:
                 session['user'] = data['user']['username']
                 session['user_id'] = data['user']['id']
                 session['user_role'] = data['user'].get('role', 'user')
-                flash('✅ Sesión iniciada correctamente')
+                flash('âœ… SesiÃ³n iniciada correctamente')
                 return redirect(url_for('home'))
             else:
                 flash(data.get("detail", "Credenciales incorrectas"))
         except requests.exceptions.ConnectionError:
-            flash('⚠️ API no disponible. Usando autenticación local.')
+            flash('âš ï¸ API no disponible. Usando autenticaciÃ³n local.')
             return login_local_fallback(username, password)
         except requests.exceptions.Timeout:
-            flash('❌ Tiempo de espera agotado. Inténtalo nuevamente.')
+            flash('âŒ Tiempo de espera agotado. IntÃ©ntalo nuevamente.')
         except Exception as e:
-            flash(f'❌ Error de conexión: {str(e)}')
+            flash(f'âŒ Error de conexiÃ³n: {str(e)}')
             return login_local_fallback(username, password)
 
     return render_template('login.html')
@@ -406,24 +422,24 @@ def generate():
         question_text = data.get("question_text", "")
         correct_option = data.get("correct_option", "")
         if not all([user_answer, question_text, correct_option]):
-            return jsonify({"response": "❌ Datos incompletos para la evaluación."})
+            return jsonify({"response": "âŒ Datos incompletos para la evaluaciÃ³n."})
 
         prompt = (
-            f"Como experto en bomberos, evalúa esta respuesta:\n"
+            f"Como experto en bomberos, evalÃºa esta respuesta:\n"
             f"Pregunta: {question_text}\n"
             f"Respuesta del usuario: {user_answer}\n"
             f"Respuesta correcta: {correct_option}\n"
-            f"¿Es correcta? Explica brevemente:"
+            f"Â¿Es correcta? Explica brevemente:"
         )
         pipe = get_chatbot()
         if pipe is None:
-            return jsonify({"response": "✅ Revisa tu respuesta comparando con el material de estudio oficial."})
+            return jsonify({"response": "âœ… Revisa tu respuesta comparando con el material de estudio oficial."})
 
         result = pipe(prompt, max_length=150, num_return_sequences=1, temperature=0.7, do_sample=True)
         response = result[0]['generated_text'].replace(prompt, '').strip()
         return jsonify({"response": response})
     except Exception:
-        return jsonify({"response": "✅ Revisa tu respuesta con el material de estudio."})
+        return jsonify({"response": "âœ… Revisa tu respuesta con el material de estudio."})
 
 @app.route("/ask", methods=["POST"])
 @login_required
@@ -432,12 +448,12 @@ def ask():
         data = request.get_json()
         user_question = data.get("message", "").strip()
         if not user_question or len(user_question) < 3:
-            return jsonify({"response": "❌ Formula una pregunta más clara."})
+            return jsonify({"response": "âŒ Formula una pregunta mÃ¡s clara."})
 
         prompt = f"Como experto bombero, responde conciso: {user_question}\nRespuesta:"
         pipe = get_chatbot()
         if pipe is None:
-            return jsonify({"response": "⚠️ IA no disponible. Consulta el manual."})
+            return jsonify({"response": "âš ï¸ IA no disponible. Consulta el manual."})
 
         result = pipe(prompt, max_length=200, num_return_sequences=1, temperature=0.7, do_sample=True)
         response = result[0]['generated_text'].replace(prompt, '').strip()
@@ -456,7 +472,7 @@ def ask():
         session.modified = True
         return jsonify({"response": response})
     except Exception:
-        return jsonify({"response": "⚠️ Error al procesar tu pregunta."})
+        return jsonify({"response": "âš ï¸ Error al procesar tu pregunta."})
 
 @app.route("/clear-chat", methods=["POST"])
 @login_required
@@ -468,13 +484,13 @@ def clear_chat():
 @app.route("/certificaciones", methods=["GET"])
 @login_required
 def certificaciones():
-    """Página de certificaciones con múltiples opciones de carga"""
+    """PÃ¡gina de certificaciones con mÃºltiples opciones de carga"""
     
-    # URLs específicas que quieres embeber
+    # URLs especÃ­ficas que quieres embeber
     urls = {
         'main': '/onfire-academy/',  # https://www.onfireacademy.es/
-        'header': '/onfire-academy/index.html#header13-2w',  # Con fragmento específico
-        'examinadores': '/onfire-academy/examinadores.html',  # Página de examinadores
+        'header': '/onfire-academy/index.html#header13-2w',  # Con fragmento especÃ­fico
+        'examinadores': '/onfire-academy/examinadores.html',  # PÃ¡gina de examinadores
         'formacion': '/formacion-certificada/',  # https://www.formacioncertificadoprofesional.com/
         'direct_main': 'https://www.onfireacademy.es/',
         'direct_header': 'https://www.onfireacademy.es/index.html#header13-2w',
@@ -482,7 +498,7 @@ def certificaciones():
         'direct_formacion': 'https://www.formacioncertificadoprofesional.com/'
     }
     
-    # Detectar modo y URL específica
+    # Detectar modo y URL especÃ­fica
     mode = request.args.get('mode', 'main')
     proxy_type = request.args.get('proxy', 'internal')
     
@@ -516,9 +532,9 @@ def proxy_formacion(subpath=""):
     return _enhanced_proxy("https://www.formacioncertificadoprofesional.com", subpath)
 
 
-# FUNCIÓN CENTRALIZADA DE PROXY (DRY principle)
+# FUNCIÃ“N CENTRALIZADA DE PROXY (DRY principle)
 def _enhanced_proxy(base_url, subpath=""):
-    """Función centralizada para proxy con bypass completo"""
+    """FunciÃ³n centralizada para proxy con bypass completo"""
     import requests
     import re
     from urllib.parse import urlparse
@@ -531,7 +547,7 @@ def _enhanced_proxy(base_url, subpath=""):
             target_url = base_url + "/"
         
         domain = urlparse(base_url).netloc
-        print(f"🔗 Proxy request: {target_url} (domain: {domain})")
+        print(f"ðŸ”— Proxy request: {target_url} (domain: {domain})")
         
         # Headers realistas
         headers = {
@@ -584,28 +600,28 @@ def _enhanced_proxy(base_url, subpath=""):
             resp.headers['Content-Security-Policy'] = "frame-ancestors *; default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"
             resp.headers['X-Content-Type-Options'] = 'nosniff'
             
-            print(f"✅ Proxy success: {domain} - {response.status_code} - {len(content)} chars")
+            print(f"âœ… Proxy success: {domain} - {response.status_code} - {len(content)} chars")
             return resp
         else:
-            print(f"❌ Proxy failed: {response.status_code}")
+            print(f"âŒ Proxy failed: {response.status_code}")
             return redirect(target_url, code=302)
             
     except requests.exceptions.Timeout:
-        print(f"⚠️ Proxy timeout: {domain}")
+        print(f"âš ï¸ Proxy timeout: {domain}")
         return redirect(base_url, code=302)
     except Exception as e:
-        print(f"⚠️ Proxy error: {domain} - {e}")
+        print(f"âš ï¸ Proxy error: {domain} - {e}")
         return redirect(base_url, code=302)
 
 
-# VERSIÓN FINAL CORREGIDA - FILTRA CORRECTAMENTE
+# VERSIÃ“N FINAL CORREGIDA - FILTRA CORRECTAMENTE
 
 
 def _process_html_content(content, base_url, domain, proxy_path):
-    """Procesa HTML para assets - VERSIÓN LIMPIA Y FINAL"""
+    """Procesa HTML para assets - VERSIÃ“N LIMPIA Y FINAL"""
     import re
     
-    print(f"🔧 Processing HTML for {domain} with proxy_path: {proxy_path}")
+    print(f"ðŸ”§ Processing HTML for {domain} with proxy_path: {proxy_path}")
     
     # PASO 1: Eliminar meta tags restrictivos
     patterns_to_remove = [
@@ -634,7 +650,7 @@ def _process_html_content(content, base_url, domain, proxy_path):
     # PASO 3: Procesamiento de assets
     replacements_made = 0
     
-    # Helper function para verificar si es un asset válido
+    # Helper function para verificar si es un asset vÃ¡lido
     def is_valid_asset(url):
         if not url:
             return False
@@ -662,7 +678,7 @@ def _process_html_content(content, base_url, domain, proxy_path):
         else:
             new_path = proxy_path + original
             
-        print(f"🎨 CSS: {original} → {new_path}")
+        print(f"ðŸŽ¨ CSS: {original} â†’ {new_path}")
         replacements_made += 1
         return f'href="{new_path}"'
     
@@ -685,7 +701,7 @@ def _process_html_content(content, base_url, domain, proxy_path):
         else:
             new_path = proxy_path + original
             
-        print(f"📜 JS: {original} → {new_path}")
+        print(f"ðŸ“œ JS: {original} â†’ {new_path}")
         replacements_made += 1
         return f'src="{new_path}"'
     
@@ -705,7 +721,7 @@ def _process_html_content(content, base_url, domain, proxy_path):
         else:
             new_path = proxy_path + original
             
-        print(f"🖼️ IMG: {original} → {new_path}")
+        print(f"ðŸ–¼ï¸ IMG: {original} â†’ {new_path}")
         replacements_made += 1
         return f'src="{new_path}"'
     
@@ -716,12 +732,12 @@ def _process_html_content(content, base_url, domain, proxy_path):
     domain_pattern = f'https?://{re.escape(domain)}/'
     content = re.sub(domain_pattern, proxy_path, content)
     
-    print(f"✅ Made {replacements_made} path replacements")
+    print(f"âœ… Made {replacements_made} path replacements")
     
     # PASO 5: JavaScript bypass
     bypass_js = f'''
     <script>
-    console.log('🔥 FirefighterAI Proxy v7.0 - Clean Processing');
+    console.log('ðŸ”¥ FirefighterAI Proxy v7.0 - Clean Processing');
     
     // Frame busting protection
     if (window.top !== window.self) {{
@@ -729,8 +745,8 @@ def _process_html_content(content, base_url, domain, proxy_path):
         window.parent = window.self;
         
         // Disable problematic methods
-        window.location.replace = function() {{ console.log('🔥 Blocked location.replace'); }};
-        window.location.assign = function() {{ console.log('🔥 Blocked location.assign'); }};
+        window.location.replace = function() {{ console.log('ðŸ”¥ Blocked location.replace'); }};
+        window.location.assign = function() {{ console.log('ðŸ”¥ Blocked location.assign'); }};
     }}
     
     // Remove any remaining restrictive meta tags
@@ -740,7 +756,7 @@ def _process_html_content(content, base_url, domain, proxy_path):
             'meta[http-equiv*="Content-Security-Policy"], meta[name*="Content-Security-Policy"]'
         );
         restrictiveMetas.forEach(meta => {{
-            console.log('🔥 Removing:', meta.outerHTML);
+            console.log('ðŸ”¥ Removing:', meta.outerHTML);
             meta.remove();
         }});
     }});
@@ -759,25 +775,25 @@ def _process_html_content(content, base_url, domain, proxy_path):
 @app.route("/certificaciones/selector")
 @login_required
 def certificaciones_selector():
-    """Página de selección de sitios de certificación"""
+    """PÃ¡gina de selecciÃ³n de sitios de certificaciÃ³n"""
     sites = {
         'onfireacademy_main': {
             'name': 'OnFire Academy - Principal',
             'url': '/certificaciones?mode=main',
-            'description': 'Plataforma principal de formación'
+            'description': 'Plataforma principal de formaciÃ³n'
         },
         'onfireacademy_header': {
-            'name': 'OnFire Academy - Sección Header',
+            'name': 'OnFire Academy - SecciÃ³n Header',
             'url': '/certificaciones?mode=header',
-            'description': 'Acceso directo a sección específica'
+            'description': 'Acceso directo a secciÃ³n especÃ­fica'
         },
         'onfireacademy_examinadores': {
             'name': 'OnFire Academy - Examinadores',
             'url': '/certificaciones?mode=examinadores',
-            'description': 'Información sobre examinadores'
+            'description': 'InformaciÃ³n sobre examinadores'
         },
         'formacion_profesional': {
-            'name': 'Formación Certificado Profesional',
+            'name': 'FormaciÃ³n Certificado Profesional',
             'url': '/certificaciones?mode=formacion',
             'description': 'Certificaciones profesionales oficiales'
         }
@@ -797,7 +813,7 @@ def debug_html():
         response = requests.get("https://www.onfireacademy.es/", timeout=15)
         original_html = response.text
         
-        # Procesarlo con tu función
+        # Procesarlo con tu funciÃ³n
         processed_html = _process_html_content(
             original_html, 
             "https://www.onfireacademy.es", 
@@ -805,21 +821,21 @@ def debug_html():
             "/onfire-academy/"
         )
         
-        # Mostrar comparación
+        # Mostrar comparaciÃ³n
         debug_output = f"""
-        <h1>🔧 Debug HTML Processing</h1>
+        <h1>ðŸ”§ Debug HTML Processing</h1>
         
-        <h2>📄 Original HTML (primeras 500 chars):</h2>
+        <h2>ðŸ“„ Original HTML (primeras 500 chars):</h2>
         <pre style="background:#f0f0f0;padding:10px;overflow:auto;max-height:200px;">
 {original_html[:500]}...
         </pre>
         
-        <h2>🔧 Processed HTML (primeras 500 chars):</h2>
+        <h2>ðŸ”§ Processed HTML (primeras 500 chars):</h2>
         <pre style="background:#e0f0e0;padding:10px;overflow:auto;max-height:200px;">
 {processed_html[:500]}...
         </pre>
         
-        <h2>🔗 Link tags encontrados en HTML original:</h2>
+        <h2>ðŸ”— Link tags encontrados en HTML original:</h2>
         """
         
         import re
@@ -828,12 +844,12 @@ def debug_html():
         
         debug_output += "<ul>"
         for link in links[:10]:  # Primeros 10
-            debug_output += f"<li>📄 {link}</li>"
+            debug_output += f"<li>ðŸ“„ {link}</li>"
         debug_output += "</ul>"
         
-        debug_output += "<h2>🔗 Script tags encontrados:</h2><ul>"
+        debug_output += "<h2>ðŸ”— Script tags encontrados:</h2><ul>"
         for script in scripts[:10]:  # Primeros 10
-            debug_output += f"<li>📄 {script}</li>"
+            debug_output += f"<li>ðŸ“„ {script}</li>"
         debug_output += "</ul>"
         
         return debug_output
@@ -858,7 +874,7 @@ def proxy_assets(subpath):
     
     try:
         target_url = f"{base_url}/{subpath}"
-        print(f"🔗 Asset request: {target_url}")  # Debug
+        print(f"ðŸ”— Asset request: {target_url}")  # Debug
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -868,7 +884,7 @@ def proxy_assets(subpath):
         }
         
         response = requests.get(target_url, headers=headers, timeout=10)
-        print(f"📄 Asset response: {response.status_code}")  # Debug
+        print(f"ðŸ“„ Asset response: {response.status_code}")  # Debug
         
         if response.status_code == 200:
             resp = make_response(response.content)
@@ -882,27 +898,27 @@ def proxy_assets(subpath):
             
             return resp
         else:
-            print(f"❌ Asset not found: {response.status_code}")
+            print(f"âŒ Asset not found: {response.status_code}")
             return "Asset not found", 404
     except Exception as e:
-        print(f"⚠️ Asset error: {e}")
+        print(f"âš ï¸ Asset error: {e}")
         return "Asset error", 500
 
 
 if __name__ == "__main__":
-    _safe_print("🚀 Frontend iniciando...")
-    _safe_print(f"🔗 API configurada en: {API_BASE_URL}")
+    _safe_print("ðŸš€ Frontend iniciando...")
+    _safe_print(f"ðŸ”— API configurada en: {API_BASE_URL}")
     try:
-        _safe_print("🔄 Verificando conexión con API...")
+        _safe_print("ðŸ”„ Verificando conexiÃ³n con API...")
         r = requests.get(f"{API_BASE_URL.replace('/api', '/api/health')}", timeout=5)
         if r.status_code == 200:
             data = r.json()
-            _safe_print("✅ API disponible")
-            _safe_print(f"📊 Usuarios en BD: {data.get('users_count', 'N/A')}")
+            _safe_print("âœ… API disponible")
+            _safe_print(f"ðŸ“Š Usuarios en BD: {data.get('users_count', 'N/A')}")
         else:
-            _safe_print("⚠️ API responde pero con errores")
+            _safe_print("âš ï¸ API responde pero con errores")
     except Exception as e:
-        _safe_print(f"⚠️ API no disponible: {e}")
-        _safe_print("🔄 Funcionando en modo fallback (local)")
-    _safe_print("🌐 Frontend corriendo en http://localhost:8000")
+        _safe_print(f"âš ï¸ API no disponible: {e}")
+        _safe_print("ðŸ”„ Funcionando en modo fallback (local)")
+    _safe_print("ðŸŒ Frontend corriendo en http://localhost:8000")
     app.run(host="0.0.0.0", port=8000, debug=False)
