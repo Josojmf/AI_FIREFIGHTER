@@ -1,0 +1,35 @@
+name: Validate Config Files
+
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate BO config.py
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'BO')
+          from config import Config
+          
+          # Verificar que TODAS las propiedades existen
+          required = [
+              'SESSION_COOKIE_NAME',
+              'SESSION_COOKIE_PATH', 
+              'SESSION_COOKIE_HTTPONLY',
+              'SESSION_COOKIE_SECURE',
+              'SESSION_COOKIE_SAMESITE',
+              'SESSION_COOKIE_DOMAIN',
+              'PERMANENT_SESSION_LIFETIME',
+              'SESSION_PROTECTION',
+              'SESSION_REFRESH_EACH_REQUEST'
+          ]
+          
+          for attr in required:
+              assert hasattr(Config, attr), f'Config missing: {attr}'
+          
+          print('✅ Config válido')
+          "
