@@ -973,3 +973,4 @@ Este proyecto no sería posible sin estas increíbles tecnologías y recursos:
 <sub>© 2025 FirefighterAI. Todos los derechos reservados.</sub>
 
 </div>
+# Force build
