@@ -2,7 +2,7 @@
 from flask import Flask, request, session
 from flask_login import LoginManager, current_user
 import logging
-from app.config import Config
+from config import Config
 from datetime import datetime
 
 def create_app():
