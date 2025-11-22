@@ -12,6 +12,11 @@ from pymongo import MongoClient, ASCENDING
 from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 
+import pyotp
+import qrcode
+import io
+import base64
+
 load_dotenv()
 
 # --- Config ---
@@ -211,21 +216,31 @@ def api_login():
             "role": u.get("role", "user")
         })
         
+        # 🔥 SOLUCIÓN: Incluir SIEMPRE los campos MFA (para BO) sin afectar FO
+        user_response = {
+            "id": u["_id"], 
+            "username": u["username"], 
+            "email": u["email"],
+            "role": u.get("role", "user"),
+            # ✅ CAMPOS MFA - El FO los ignorará, el BO los usará
+            "mfa_enabled": u.get("mfa_enabled", False),
+            "mfa_secret": u.get("mfa_secret", "")
+        }
+        
+        # 📝 Log para debug (opcional)
+        print(f"🔍 Login exitoso para: {u['username']}")
+        print(f"   - mfa_enabled: {user_response['mfa_enabled']}")
+        print(f"   - FO ignorará MFA, BO lo usará")
+        
         return jsonify({
             "ok": True,
             "access_token": token,
-            "user": {
-                "id": u["_id"], 
-                "username": u["username"], 
-                "email": u["email"],
-                "role": u.get("role", "user")
-            }
+            "user": user_response
         })
 
     except Exception as e:
         app.logger.error(f"Error en login: {e}")
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
 @app.post("/api/forgot-password")
 def api_forgot_password():
     try:
@@ -738,6 +753,241 @@ def api_health():
             "database": "disconnected",
             "error": str(e)
         }), 503
+        
+        
+        
+#MFA endpoints
+
+@app.route("/api/users/<user_id>/mfa/generate", methods=["POST"])
+def generate_mfa_secret(user_id):
+    """Generar secreto MFA y QR code"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Generar secreto
+        secret = pyotp.random_base32()
+        
+        # Obtener issuer desde request o usar default
+        data = request.get_json() or {}
+        issuer = data.get('issuer', 'OnFire')
+        
+        # Crear URI TOTP
+        totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+            name=user_doc.get('email', user_doc.get('username')),
+            issuer_name=issuer
+        )
+        
+        # Generar QR code
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(totp_uri)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        qr_code_data_uri = f"data:image/png;base64,{img_str}"
+        
+        return jsonify({
+            "ok": True,
+            "secret": secret,
+            "qr_code": qr_code_data_uri,
+            "manual_entry_key": secret
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error generating MFA: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
+@app.route("/api/users/<user_id>/mfa/verify", methods=["POST"])
+def verify_mfa_code(user_id):
+    """Verificar código MFA para usuario existente"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        data = request.get_json()
+        mfa_code = data.get('code', '').strip()
+        
+        if not mfa_code or len(mfa_code) != 6:
+            return jsonify({"ok": False, "detail": "Código MFA inválido"}), 400
+
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Verificar si MFA está habilitado
+        if not user_doc.get('mfa_enabled'):
+            return jsonify({"ok": False, "detail": "MFA no está habilitado"}), 400
+
+        # Verificar código
+        secret = user_doc.get('mfa_secret')
+        if not secret:
+            return jsonify({"ok": False, "detail": "Secret MFA no encontrado"}), 400
+
+        totp = pyotp.TOTP(secret)
+        is_valid = totp.verify(mfa_code, valid_window=2)
+        
+        return jsonify({
+            "ok": True,
+            "valid": is_valid
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error verifying MFA: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
+@app.route("/api/users/<user_id>/mfa/verify-setup", methods=["POST"])
+def verify_mfa_setup(user_id):
+    """Verificar código MFA durante setup inicial"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        data = request.get_json()
+        mfa_code = data.get('code', '').strip()
+        secret = data.get('secret', '').strip()
+        
+        if not mfa_code or len(mfa_code) != 6:
+            return jsonify({"ok": False, "detail": "Código MFA inválido"}), 400
+        
+        if not secret:
+            return jsonify({"ok": False, "detail": "Secret requerido"}), 400
+
+        # Verificar código con el secret proporcionado
+        totp = pyotp.TOTP(secret)
+        is_valid = totp.verify(mfa_code, valid_window=2)
+        
+        return jsonify({
+            "ok": True,
+            "valid": is_valid
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error verifying MFA setup: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
+@app.route("/api/users/<user_id>/mfa/enable", methods=["POST"])
+def enable_user_mfa(user_id):
+    """Habilitar MFA para usuario"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        data = request.get_json()
+        secret = data.get('secret', '').strip()
+        
+        if not secret:
+            return jsonify({"ok": False, "detail": "Secret requerido"}), 400
+
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Actualizar usuario con MFA habilitado
+        result = users.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "mfa_enabled": True,
+                    "mfa_secret": secret,
+                    "mfa_enabled_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            return jsonify({
+                "ok": True,
+                "message": "MFA habilitado correctamente"
+            })
+        else:
+            return jsonify({"ok": False, "detail": "Error al actualizar usuario"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error enabling MFA: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+
+@app.route("/api/users/<user_id>/mfa/disable", methods=["POST"])
+def disable_user_mfa(user_id):
+    """Deshabilitar MFA para usuario"""
+    try:
+        # Verificar autenticación
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({"ok": False, "detail": "Token requerido"}), 401
+        
+        token = auth_header.split(' ')[1]
+        valid, payload = verify_jwt(token)
+        if not valid:
+            return jsonify({"ok": False, "detail": "Token inválido"}), 401
+
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
+        if not user_doc:
+            return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
+
+        # Actualizar usuario deshabilitando MFA
+        result = users.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "mfa_enabled": False,
+                    "mfa_disabled_at": datetime.utcnow()
+                },
+                "$unset": {
+                    "mfa_secret": ""
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            return jsonify({
+                "ok": True,
+                "message": "MFA deshabilitado correctamente"
+            })
+        else:
+            return jsonify({"ok": False, "detail": "Error al actualizar usuario"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error disabling MFA: {e}")
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
 
 @app.get("/ready")
 def ready():
