@@ -21,4 +21,9 @@ requests==2.31.0
 gunicorn==21.2.0
 
 # JWT for authentication
-flask-jwt-extended==4.4.4
+PyJWT==2.8.0          # Cambiado de flask-jwt-extended a PyJWT (que es lo que usas)
+
+# MFA Dependencies
+pyotp==2.9.0          # Para generar y verificar códigos TOTP
+qrcode[pil]==7.4.2     # Para generar códigos QR
+Pillow==10.1.0         # Para procesamiento de imágenes QR
