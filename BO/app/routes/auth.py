@@ -1,9 +1,13 @@
-# app/routes/auth.py (VERSIÓN CORREGIDA CON TOKEN ANTES DE LOGIN)
+# app/routes/auth.py - VERSIÓN COMPLETA CON MFA INTEGRADO
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models.user import BackofficeUser
 import time
 import requests
+import pyotp
+import qrcode
+import io
+import base64
 from config import Config
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -15,7 +19,6 @@ def get_auth_headers():
         return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
     return {'Content-Type': 'application/json'}
 
-# app/routes/auth.py (CORRECCIÓN CRÍTICA - PARTE LOGIN)
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     print(f"🔍 Login endpoint - Method: {request.method}, User authenticated: {current_user.is_authenticated}")
@@ -160,27 +163,23 @@ def setup_mfa():
         action = request.form.get('action')
         
         if action == 'generate':
-            # Generar nuevo secreto MFA via API (CON AUTENTICACIÓN)
-            try:
-                headers = get_auth_headers()
-                response = requests.post(
-                    f"{Config.API_BASE_URL}/api/users/{current_user.id}/mfa/generate",
-                    headers=headers,
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get('ok'):
-                        session['mfa_secret'] = data.get('secret')
-                        session['mfa_qr_code'] = data.get('qr_code')
-                        flash('✅ Secreto MFA generado correctamente. Escanea el código QR.', 'success')
-                    else:
-                        flash(f'❌ {data.get("detail", "Error al generar el secreto MFA")}', 'error')
-                else:
-                    flash('❌ Error de conexión con la API', 'error')
-            except Exception as e:
-                current_app.logger.error(f"Error generando secreto MFA: {e}")
-                flash('❌ Error al generar el secreto MFA', 'error')
+            # Generar secreto MFA vía API
+            print(f"🔐 Generando secreto MFA para usuario: {current_user.id}")
+            mfa_data = generate_mfa_secret_api(current_user.id)
+            
+            if mfa_data:
+                # Guardar datos en sesión
+                session['mfa_secret'] = mfa_data['secret']
+                session['mfa_qr_code'] = mfa_data['qr_code']
+                session['manual_entry_key'] = mfa_data['manual_entry_key']
+                
+                print(f"✅ QR code generado y guardado en sesión")
+                print(f"🔑 Secret: {mfa_data['secret']}")
+                flash('✅ Código QR generado correctamente', 'success')
+            else:
+                print(f"❌ Error generando QR code")
+                flash('❌ Error generando código QR. Intenta nuevamente.', 'error')
+            
             return redirect(url_for('auth.setup_mfa'))
         
         elif action == 'enable':
@@ -192,19 +191,38 @@ def setup_mfa():
             elif not session.get('mfa_secret'):
                 flash('❌ Primero debes generar un secreto MFA', 'error')
             else:
-                # Verificar código via API (CON AUTENTICACIÓN)
-                if verify_mfa_setup(current_user.id, mfa_code, session.get('mfa_secret')):
-                    # Habilitar MFA via API (CON AUTENTICACIÓN)
-                    if enable_mfa_for_user(current_user.id, session.get('mfa_secret')):
-                        # Actualizar estado local del usuario
-                        current_user.mfa_enabled = True
-                        session['mfa_verified'] = True
-                        session.pop('mfa_secret', None)
-                        session.pop('mfa_qr_code', None)
-                        
-                        flash('✅ MFA habilitado correctamente. Tu cuenta ahora está más segura.', 'success')
-                        return redirect(url_for('dashboard.index'))
-                    else:
+                # Verificar código localmente primero
+                secret = session.get('mfa_secret')
+                totp = pyotp.TOTP(secret)
+                
+                if totp.verify(mfa_code, valid_window=2):  # Permitir ventana de tiempo
+                    # Habilitar MFA via API
+                    try:
+                        if enable_mfa_for_user(current_user.id, secret):
+                            # 🔥 CRÍTICO: ACTUALIZAR ESTADO LOCAL DEL USUARIO
+                            current_user.mfa_enabled = True
+                            
+                            # 🔥 ACTUALIZAR session['user_data'] TAMBIÉN
+                            user_data = session.get('user_data', {})
+                            user_data['mfa_enabled'] = True
+                            user_data['mfa_secret'] = secret
+                            session['user_data'] = user_data
+                            
+                            session['mfa_verified'] = True
+                            session.pop('mfa_secret', None)
+                            session.pop('mfa_qr_code', None)
+                            session.pop('manual_entry_key', None)
+                            
+                            print(f"🔥 MFA HABILITADO - Estado actualizado:")
+                            print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
+                            print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
+                            
+                            flash('✅ MFA habilitado correctamente. Tu cuenta ahora está más segura.', 'success')
+                            return redirect(url_for('dashboard.index'))
+                        else:
+                            flash('❌ Error al habilitar MFA en el servidor', 'error')
+                    except Exception as e:
+                        current_app.logger.error(f"Error habilitando MFA: {e}")
                         flash('❌ Error al habilitar MFA', 'error')
                 else:
                     flash('❌ Código incorrecto. Verifica el código e intenta nuevamente.', 'error')
@@ -220,9 +238,21 @@ def setup_mfa():
                 user = BackofficeUser.authenticate(current_user.username, password)
                 if user and user.id == current_user.id:
                     if disable_mfa_for_user(current_user.id):
-                        # Actualizar estado local del usuario
+                        # 🔥 ACTUALIZAR ESTADO LOCAL DEL USUARIO
                         current_user.mfa_enabled = False
+                        
+                        # 🔥 ACTUALIZAR session['user_data'] TAMBIÉN
+                        user_data = session.get('user_data', {})
+                        user_data['mfa_enabled'] = False
+                        user_data['mfa_secret'] = ''
+                        session['user_data'] = user_data
+                        
                         session.pop('mfa_verified', None)
+                        
+                        print(f"🔥 MFA DESHABILITADO - Estado actualizado:")
+                        print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
+                        print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
+                        
                         flash('✅ MFA deshabilitado correctamente', 'success')
                         return redirect(url_for('dashboard.index'))
                     else:
@@ -230,16 +260,82 @@ def setup_mfa():
                 else:
                     flash('❌ Contraseña incorrecta', 'error')
     
-    # Obtener estado MFA actual (CON AUTENTICACIÓN)
+    # Obtener estado MFA actual SIEMPRE DESDE LA API
     mfa_status = check_user_mfa_status(current_user.id)
     mfa_enabled = mfa_status.get('mfa_enabled', False)
     qr_code = session.get('mfa_qr_code') if not mfa_enabled else None
+    manual_entry_key = session.get('manual_entry_key') if not mfa_enabled else None
+    
+    # 🔥 DEBUG: Mostrar estado actual
+    print(f"🔍 Estado MFA actual:")
+    print(f"   - API mfa_enabled: {mfa_enabled}")
+    print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
+    print(f"   - session user_data: {session.get('user_data', {}).get('mfa_enabled')}")
     
     return render_template('auth/setup_mfa.html', 
                          qr_code=qr_code,
-                         mfa_enabled=mfa_enabled)
+                         mfa_enabled=mfa_enabled,
+                         manual_entry_key=manual_entry_key,
+                         user_email=current_user.email or current_user.username)
 
-# FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API (CON AUTENTICACIÓN)
+# FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API
+
+def generate_mfa_secret_api(user_id, issuer="OnFire"):
+    """Generar secreto MFA a través de la API"""
+    try:
+        api_url = current_app.config['API_BASE_URL']
+        token = session.get('api_token')
+        
+        if not token:
+            print("❌ No hay token de API disponible")
+            return None
+            
+        print(f"🔐 Generando MFA secret para usuario: {user_id}")
+        print(f"🌐 API URL: {api_url}/api/users/{user_id}/mfa/generate")
+        
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {'issuer': issuer}
+        
+        response = requests.post(
+            f"{api_url}/api/users/{user_id}/mfa/generate",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        
+        print(f"📡 Respuesta API: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('ok'):
+                print("✅ MFA secret generado exitosamente")
+                return {
+                    'secret': data.get('secret'),
+                    'qr_code': data.get('qr_code'),
+                    'manual_entry_key': data.get('manual_entry_key')
+                }
+            else:
+                print(f"❌ Error en respuesta API: {data.get('detail')}")
+                return None
+        else:
+            print(f"❌ Error HTTP: {response.status_code}")
+            try:
+                error_data = response.json()
+                print(f"❌ Detalle del error: {error_data.get('detail')}")
+            except:
+                print(f"❌ Respuesta no JSON: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error generando MFA secret: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def check_user_mfa_status(user_id):
     """Verificar estado MFA del usuario via API"""
     try:
@@ -295,7 +391,14 @@ def verify_mfa_setup(user_id, mfa_code, secret):
             return data.get('valid', False)
     except Exception as e:
         current_app.logger.error(f"Error verifying MFA setup: {e}")
-    return False
+    
+    # Fallback: verificar localmente
+    try:
+        totp = pyotp.TOTP(secret)
+        return totp.verify(mfa_code, valid_window=2)
+    except Exception as e:
+        current_app.logger.error(f"Error en verificación local: {e}")
+        return False
 
 def enable_mfa_for_user(user_id, secret):
     """Habilitar MFA para usuario via API"""
@@ -358,7 +461,6 @@ def clear_session():
     flash('🧹 Sesión limpiada correctamente', 'info')
     return redirect(url_for('auth.login'))
 
-# Añadir en app/routes/auth.py
 @bp.route('/debug-session')
 def debug_session():
     """Endpoint de diagnóstico"""
@@ -367,7 +469,8 @@ def debug_session():
         'current_user': {
             'is_authenticated': current_user.is_authenticated,
             'id': getattr(current_user, 'id', None),
-            'username': getattr(current_user, 'username', None)
+            'username': getattr(current_user, 'username', None),
+            'mfa_enabled': getattr(current_user, 'mfa_enabled', None)
         } if current_user else None,
         'cookies': dict(request.cookies)
     }

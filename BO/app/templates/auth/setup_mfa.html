@@ -1,818 +1,735 @@
-<!DOCTYPE html>
-<html lang="es">
+{% extends "backoffice_layout.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuración MFA</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --dark: #1f2937;
-            --light: #f9fafb;
-            --gray: #6b7280;
-            --gray-light: #e5e7eb;
-            --transition: all 0.3s ease;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
+{% block title %}Configuración MFA - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Configuración MFA{% endblock %}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    .mfa-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            color: var(--dark);
-            line-height: 1.6;
-        }
+    .mfa-card {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 32px;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
 
-        .container {
-            max-width: 800px;
-            width: 100%;
-            background: white;
-            border-radius: 16px;
-            box-shadow: var(--shadow-lg);
-            overflow: hidden;
-            animation: fadeIn 0.8s ease-out;
-            position: relative;
-        }
+    .mfa-header {
+        text-align: center;
+        margin-bottom: 32px;
+    }
 
-        .container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--primary), var(--success));
-        }
+    .mfa-icon {
+        font-size: 64px;
+        color: #3b82f6;
+        margin-bottom: 16px;
+        animation: pulse 2s infinite;
+    }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
 
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+    .mfa-title {
+        color: #f8fafc;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
 
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-            }
+    .mfa-subtitle {
+        color: #94a3b8;
+        font-size: 16px;
+        line-height: 1.5;
+    }
 
-            50% {
-                transform: scale(1.05);
-            }
+    .status-alert {
+        display: flex;
+        align-items: center;
+        padding: 16px 20px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        font-weight: 500;
+    }
 
-            100% {
-                transform: scale(1);
-            }
-        }
+    .status-alert i {
+        font-size: 20px;
+        margin-right: 12px;
+    }
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-20px);
-            }
+    .status-alert.enabled {
+        background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+        border: 1px solid #10b981;
+        color: #d1fae5;
+    }
 
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
+    .status-alert.disabled {
+        background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
+        border: 1px solid #60a5fa;
+        color: #dbeafe;
+    }
 
-        @keyframes bounce {
+    .step-indicator {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 32px 0;
+        position: relative;
+    }
 
-            0%,
-            20%,
-            50%,
-            80%,
-            100% {
-                transform: translateY(0);
-            }
+    .step {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 18px;
+        margin: 0 8px;
+        position: relative;
+        z-index: 2;
+        transition: all 0.3s ease;
+    }
 
-            40% {
-                transform: translateY(-10px);
-            }
+    .step.active {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
 
-            60% {
-                transform: translateY(-5px);
-            }
-        }
+    .step.completed {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
 
-        h2 {
-            text-align: center;
-            color: var(--dark);
-            margin-bottom: 24px;
-            font-weight: 600;
-            position: relative;
-            padding-bottom: 12px;
-        }
+    .step.inactive {
+        background: #475569;
+        color: #94a3b8;
+    }
 
-        h2::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80px;
-            height: 3px;
-            background: var(--primary);
-            border-radius: 3px;
-        }
+    .step-line {
+        position: absolute;
+        top: 50%;
+        left: 56px;
+        right: 56px;
+        height: 2px;
+        background: #475569;
+        z-index: 1;
+    }
 
-        .alert {
+    .step-line-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+        transition: width 0.5s ease;
+    }
+
+    .mfa-section {
+        margin-bottom: 32px;
+    }
+
+    .section-title {
+        color: #f8fafc;
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+    }
+
+    .section-title i {
+        margin-right: 12px;
+        color: #3b82f6;
+    }
+
+    .section-description {
+        color: #94a3b8;
+        margin-bottom: 24px;
+        line-height: 1.6;
+    }
+
+    .qr-section {
+        text-align: center;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        margin: 24px 0;
+    }
+
+    .qr-container {
+        display: inline-block;
+        padding: 16px;
+        background: white;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .qr-container img {
+        display: block;
+        width: 200px;
+        height: 200px;
+    }
+
+    .qr-instructions {
+        color: #94a3b8;
+        margin-bottom: 16px;
+    }
+
+    .manual-config {
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 24px;
+        text-align: left;
+    }
+
+    .manual-config h6 {
+        color: #f8fafc;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+    }
+
+    .manual-config h6 i {
+        margin-right: 8px;
+        color: #3b82f6;
+    }
+
+    .manual-config p {
+        color: #94a3b8;
+        margin: 8px 0;
+        font-size: 14px;
+    }
+
+    .manual-config code {
+        background: #0f172a;
+        color: #f8fafc;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        border: 1px solid #334155;
+        word-break: break-all;
+    }
+
+    .mfa-code-section {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 24px;
+        margin: 24px 0;
+        text-align: center;
+    }
+
+    .mfa-digit-inputs {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin: 20px 0;
+    }
+
+    .mfa-digit {
+        width: 50px;
+        height: 60px;
+        background: #0f172a;
+        border: 2px solid #334155;
+        border-radius: 12px;
+        color: #f8fafc;
+        font-size: 24px;
+        font-weight: 700;
+        text-align: center;
+        transition: all 0.3s ease;
+        outline: none;
+    }
+
+    .mfa-digit:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        transform: scale(1.05);
+    }
+
+    .mfa-digit.filled {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 24px;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 8px;
+    }
+
+    .btn i {
+        margin-right: 8px;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        text-decoration: none;
+        color: white;
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-success:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        text-decoration: none;
+        color: white;
+    }
+
+    .btn-danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+        text-decoration: none;
+        color: white;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none !important;
+    }
+
+    .disable-section {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 12px;
+        padding: 24px;
+        margin-top: 24px;
+    }
+
+    .password-input {
+        width: 100%;
+        max-width: 300px;
+        padding: 12px 16px;
+        background: #0f172a;
+        border: 2px solid #334155;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-size: 16px;
+        margin: 16px auto;
+        display: block;
+        outline: none;
+        transition: all 0.3s ease;
+    }
+
+    .password-input:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    @media (max-width: 768px) {
+        .mfa-container {
+            margin: 10px;
             padding: 16px;
-            border-radius: 10px;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            animation: slideIn 0.5s ease-out;
         }
 
-        .alert-success {
-            background-color: rgba(16, 185, 129, 0.1);
-            border-left: 4px solid var(--success);
-            color: #065f46;
-        }
-
-        .alert-warning {
-            background-color: rgba(245, 158, 11, 0.1);
-            border-left: 4px solid var(--warning);
-            color: #92400e;
-        }
-
-        .alert-info {
-            background-color: rgba(59, 130, 246, 0.1);
-            border-left: 4px solid var(--primary);
-            color: #1e40af;
-        }
-
-        .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            margin-bottom: 24px;
-            overflow: hidden;
-            transition: var(--transition);
-            border: 1px solid var(--gray-light);
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .card-body {
-            padding: 24px;
-        }
-
-        h5 {
-            color: var(--dark);
-            margin-bottom: 16px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        h5 i {
-            color: var(--primary);
-        }
-
-        h6 {
-            color: var(--dark);
-            margin-bottom: 12px;
-            font-weight: 500;
-        }
-
-        p {
-            margin-bottom: 16px;
-            color: var(--gray);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--dark);
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid var(--gray-light);
-            border-radius: 8px;
-            font-size: 16px;
-            transition: var(--transition);
-            background-color: #f9fafb;
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-            background-color: white;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            text-decoration: none;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .btn::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            transition: width 0.3s, height 0.3s, top 0.3s, left 0.3s;
-        }
-
-        .btn:active::after {
-            width: 300px;
-            height: 300px;
-            top: -150px;
-            left: -150px;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #0da271;
-            transform: translateY(-2px);
-        }
-
-        .btn-warning {
-            background: var(--warning);
-            color: white;
-        }
-
-        .btn-warning:hover {
-            background: #e59409;
-            transform: translateY(-2px);
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-muted {
-            color: var(--gray);
-            font-size: 14px;
-        }
-
-        .mb-3 {
-            margin-bottom: 16px;
-        }
-
-        .mt-2 {
-            margin-top: 8px;
-        }
-
-        .mt-4 {
-            margin-top: 24px;
-        }
-
-        .manual-config {
-            background: #f8fafc;
-            padding: 16px;
-            border-radius: 8px;
-            border-left: 4px solid var(--primary);
-            margin-top: 16px;
-        }
-
-        .manual-config p {
-            margin-bottom: 8px;
-        }
-
-        code {
-            background: #1f2937;
-            color: #f9fafb;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            word-break: break-all;
-        }
-
-        .qr-container {
-            padding: 20px;
-            background: white;
-            border-radius: 12px;
-            display: inline-block;
-            box-shadow: var(--shadow);
-            animation: pulse 2s infinite;
-            margin-bottom: 16px;
-        }
-
-        .qr-container img {
-            max-width: 200px;
-            height: auto;
-            display: block;
-        }
-
-        .step-indicator {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 24px;
-            position: relative;
-        }
-
-        .step {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: var(--gray-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            color: var(--gray);
-            position: relative;
-            z-index: 2;
-            transition: var(--transition);
-        }
-
-        .step.active {
-            background: var(--primary);
-            color: white;
-            animation: bounce 0.5s;
-        }
-
-        .step.completed {
-            background: var(--success);
-            color: white;
-        }
-
-        .step-line {
-            position: absolute;
-            top: 50%;
-            left: 50px;
-            right: 50px;
-            height: 2px;
-            background: var(--gray-light);
-            transform: translateY(-50%);
-            z-index: 1;
-        }
-
-        .step-line-fill {
-            height: 100%;
-            background: var(--primary);
-            width: 0%;
-            transition: width 0.5s ease;
+        .mfa-card {
+            padding: 24px 16px;
         }
 
         .mfa-digit-inputs {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-bottom: 20px;
+            gap: 8px;
         }
 
         .mfa-digit {
-            width: 50px;
-            height: 60px;
-            text-align: center;
-            font-size: 24px;
-            font-weight: 600;
-            border: 2px solid var(--gray-light);
-            border-radius: 8px;
-            background: #f9fafb;
-            transition: var(--transition);
+            width: 40px;
+            height: 50px;
+            font-size: 20px;
         }
 
-        .mfa-digit:focus {
-            border-color: var(--primary) !important;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
-            outline: none;
-            transform: scale(1.05);
+        .step {
+            width: 40px;
+            height: 40px;
+            font-size: 16px;
+        }
+        
+        .step-line {
+            left: 48px;
+            right: 48px;
         }
 
-        .mfa-digit.filled {
-            border-color: var(--success) !important;
-            background: rgba(16, 185, 129, 0.1) !important;
-            animation: pulse 0.5s;
+        .qr-container img {
+            width: 160px;
+            height: 160px;
         }
+    }
+</style>
+{% endblock %}
 
-        #verifyBtn:not(:disabled) {
-            opacity: 1 !important;
-        }
+{% block content %}
+<div class="mfa-container" data-has-qr="{{ 'true' if qr_code else 'false' }}">
+    <div class="mfa-header">
+        <div class="mfa-icon">
+            <i class="fas fa-shield-alt"></i>
+        </div>
+        <h1 class="mfa-title">Configuración de Autenticación en Dos Pasos (MFA)</h1>
+        <p class="mfa-subtitle">
+            Protege tu cuenta con un código de verificación adicional desde tu aplicación authenticator.
+        </p>
+    </div>
 
-        #verifyBtn:not(:disabled):hover {
-            filter: brightness(1.1);
-            transform: translateY(-2px);
-        }
-
-        .security-icon {
-            font-size: 48px;
-            color: var(--primary);
-            margin-bottom: 16px;
-            animation: pulse 2s infinite;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-                border-radius: 12px;
-            }
-
-            .card-body {
-                padding: 20px;
-            }
-
-            .mfa-digit-inputs {
-                gap: 8px;
-            }
-
-            .mfa-digit {
-                width: 40px;
-                height: 50px;
-                font-size: 20px;
-            }
-
-            .step-line {
-                left: 30px;
-                right: 30px;
-            }
-
-            h2 {
-                font-size: 24px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .mfa-digit-inputs {
-                gap: 6px;
-            }
-
-            .mfa-digit {
-                width: 35px;
-                height: 45px;
-                font-size: 18px;
-            }
-
-            .btn {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .step {
-                width: 30px;
-                height: 30px;
-                font-size: 14px;
-            }
-
-            .step-line {
-                left: 20px;
-                right: 20px;
-            }
-        }
-    </style>
-</head>
-
-<body>
-    <div class="container">
-        <div class="card-body">
-            <div class="text-center">
-                <div class="security-icon">
-                    <i class="fas fa-shield-alt"></i>
-                </div>
-                <h2>Configuración de Autenticación en Dos Pasos (MFA)</h2>
-            </div>
-
-            <!-- Indicador de estado MFA -->
-            <div id="mfaEnabledAlert" class="alert alert-success hidden">
+    <div class="mfa-card">
+        {% if mfa_enabled %}
+            <div class="status-alert enabled">
                 <i class="fas fa-check-circle"></i>
                 <div>
                     <strong>MFA está habilitado</strong> para tu cuenta.
-                    <div class="text-muted">Tu cuenta está protegida con autenticación de dos factores.</div>
+                    <div style="font-weight: normal; margin-top: 4px;">Tu cuenta está protegida con autenticación de dos factores.</div>
                 </div>
             </div>
-
-            <div id="mfaDisabledAlert" class="alert alert-info">
+        {% else %}
+            <div class="status-alert disabled">
                 <i class="fas fa-info-circle"></i>
                 <div>
                     <strong>MFA no está habilitado</strong> para tu cuenta.
-                    <div class="text-muted">Configura la autenticación en dos pasos para mayor seguridad.</div>
+                    <div style="font-weight: normal; margin-top: 4px;">Configura la autenticación en dos pasos para mayor seguridad.</div>
                 </div>
             </div>
+        {% endif %}
 
-            <!-- Indicador de pasos (solo visible cuando se está configurando MFA) -->
-            <div id="stepIndicator" class="step-indicator hidden">
-                <div class="step active">1</div>
-                <div class="step">2</div>
-                <div class="step-line">
-                    <div class="step-line-fill" style="width: 33%;"></div>
-                </div>
-            </div>
-
-            <!-- Sección para generar/habilitar MFA (solo visible si MFA no está habilitado) -->
+        {% if not mfa_enabled %}
             <div id="setupMfaSection">
-                <div class="card">
-                    <div class="card-body">
-                        <h5><i class="fas fa-qrcode"></i> Paso 1: Generar Secreto MFA</h5>
-                        <p>Haz clic en el botón para generar un nuevo secreto MFA.</p>
-
-                        <form id="generateForm" method="POST" class="text-center">
-                            <input type="hidden" name="action" value="generate">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-key"></i> Generar Código QR
-                            </button>
-                        </form>
+                <div class="step-indicator">
+                    <div class="step {% if not qr_code %}active{% else %}completed{% endif %}" id="step1">1</div>
+                    <div class="step {% if qr_code %}active{% else %}inactive{% endif %}" id="step2">2</div>
+                    <div class="step-line">
+                        <div class="step-line-fill" style="width: {% if qr_code %}100{% else %}0{% endif %}%;"></div>
                     </div>
                 </div>
 
-                <!-- Código QR y configuración manual (solo visible después de generar el secreto) -->
-                <div id="qrSection" class="card hidden">
-                    <div class="card-body">
-                        <h5><i class="fas fa-check-circle"></i> Secreto MFA generado</h5>
-                        <p>Escanea el código QR con tu app authenticator.</p>
+                <div class="mfa-section" id="generateSection" {% if qr_code %}style="display: none;"{% endif %}>
+                    <h3 class="section-title">
+                        <i class="fas fa-key"></i>
+                        Paso 1: Generar Código QR
+                    </h3>
+                    <p class="section-description">
+                        Haz clic en el botón para generar un nuevo código QR que podrás escanear con tu aplicación authenticator.
+                    </p>
 
-                        <div class="text-center mb-3">
+                    <form method="POST" style="text-align: center;">
+                        <input type="hidden" name="action" value="generate">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-qrcode"></i>
+                            Generar Código QR
+                        </button>
+                    </form>
+                </div>
+
+                <div class="mfa-section" id="qrSection" {% if not qr_code %}style="display: none;"{% endif %}>
+                    <h3 class="section-title">
+                        <i class="fas fa-mobile-alt"></i>
+                        Paso 2: Configurar tu Aplicación Authenticator
+                    </h3>
+                    
+                    {% if qr_code %}
+                        <div class="qr-section">
                             <div class="qr-container">
-                                <img id="qrImage" src="" alt="Código QR MFA">
+                                <img src="{{ qr_code }}" alt="Código QR MFA para OnFire">
                             </div>
-                            <p class="text-muted mt-2">Escanea este código con Google Authenticator, Microsoft
-                                Authenticator, etc.</p>
+                            <div class="qr-instructions">
+                                <strong>Escanea este código con tu aplicación authenticator:</strong><br>
+                                Microsoft Authenticator, Google Authenticator, Authy, etc.
+                            </div>
+
+                            <div class="manual-config">
+                                <h6>
+                                    <i class="fas fa-cog"></i>
+                                    Configuración Manual (si no puedes escanear):
+                                </h6>
+                                <p><strong>Cuenta:</strong> {{ user_email }}</p>
+                                <p><strong>Clave secreta:</strong> <code id="secretKey">{{ manual_entry_key or 'Generando...' }}</code></p>
+                                <p><strong>Emisor:</strong> OnFire</p>
+                                <p><strong>Tipo:</strong> TOTP (Time-based)</p>
+                            </div>
                         </div>
+                    {% endif %}
 
-                        <div class="manual-config">
-                            <h6><i class="fas fa-cog"></i> Configuración Manual:</h6>
-                            <p><strong>Cuenta:</strong> <span id="accountEmail">user@example.com</span></p>
-                            <p><strong>Secreto:</strong> <code id="mfaSecret">JBSWY3DPEHPK3PXP</code></p>
-                            <p><strong>Tipo:</strong> TOTP (Time-based)</p>
-                        </div>
+                    <div class="mfa-code-section">
+                        <h4 style="color: #f8fafc; margin-bottom: 16px;">
+                            <i class="fas fa-check-circle" style="color: #10b981; margin-right: 8px;"></i>
+                            Verificar Código
+                        </h4>
+                        <p style="color: #94a3b8; margin-bottom: 20px;">
+                            Ingresa el código de 6 dígitos que aparece en tu aplicación authenticator:
+                        </p>
 
-                        <h5 class="mt-4"><i class="fas fa-check-circle"></i> Paso 2: Verificar Código</h5>
-                        <p>Ingresa el código de 6 dígitos generado por tu aplicación:</p>
-
-                        <div class="mfa-digit-inputs">
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                            <input type="text" class="mfa-digit" maxlength="1" pattern="\d" required>
-                        </div>
-
-                        <form id="enableForm" method="POST">
+                        <form method="POST" id="verifyMfaForm">
                             <input type="hidden" name="action" value="enable">
-                            <div class="form-group">
-                                <label for="mfa_code">O ingresa el código completo:</label>
-                                <input type="text" id="mfa_code" name="mfa_code" class="form-control"
-                                    placeholder="123456" maxlength="6" pattern="\d{6}" required>
+                            <input type="hidden" name="mfa_code" id="mfaCodeHidden">
+
+                            <div class="mfa-digit-inputs">
+                                {% for i in range(6) %}
+                                    <input type="text" 
+                                           class="mfa-digit" 
+                                           maxlength="1" 
+                                           data-index="{{ i }}" 
+                                           autocomplete="off"
+                                           inputmode="numeric"
+                                           pattern="[0-9]">
+                                {% endfor %}
                             </div>
-                            <button type="submit" class="btn btn-success" id="verifyBtn">
-                                <i class="fas fa-shield-alt"></i> Habilitar MFA
+
+                            <button type="submit" class="btn btn-success" id="verifyBtn" disabled>
+                                <i class="fas fa-check"></i>
+                                Verificar y Habilitar MFA
                             </button>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- Sección para deshabilitar MFA (solo visible si MFA está habilitado) -->
-            <div id="disableMfaSection" class="card hidden">
-                <div class="card-body">
-                    <h5><i class="fas fa-times-circle"></i> Deshabilitar MFA</h5>
-                    <p>Si deseas deshabilitar MFA, ingresa tu contraseña:</p>
-                    <form id="disableForm" method="POST">
+        {% else %}
+            <div class="mfa-section">
+                <h3 class="section-title">
+                    <i class="fas fa-shield-check"></i>
+                    MFA Activo
+                </h3>
+                <p class="section-description">
+                    Tu cuenta está protegida con autenticación de dos factores. Si quieres deshabilitar MFA, 
+                    ingresa tu contraseña actual para confirmar la acción.
+                </p>
+
+                <div class="disable-section">
+                    <h4 style="color: #f8fafc; text-align: center; margin-bottom: 16px;">
+                        <i class="fas fa-exclamation-triangle" style="color: #fbbf24; margin-right: 8px;"></i>
+                        Deshabilitar MFA
+                    </h4>
+                    
+                    <form method="POST" id="disableMfaForm" style="text-align: center;">
                         <input type="hidden" name="action" value="disable">
-                        <div class="form-group">
-                            <label for="password">Contraseña:</label>
-                            <input type="password" id="password" name="password" class="form-control" required>
-                        </div>
-                        <button type="submit" class="btn btn-warning">
-                            <a href="{{ url_for('auth.login') }}" class="fas fa-lock-open"></a> Login
-                        </button>
-                        <button type="submit" class="btn btn-warning">
-                            <i class="fas fa-lock-open"></i> Deshabilitar MFA
+                        <input type="password" 
+                               name="password" 
+                               class="password-input" 
+                               placeholder="Ingresa tu contraseña actual"
+                               required>
+                        <br>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-shield-slash"></i>
+                            Deshabilitar MFA
                         </button>
                     </form>
                 </div>
             </div>
+        {% endif %}
+
+        <div class="mfa-section" style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #334155;">
+            <p style="color: #94a3b8; margin-bottom: 16px;">
+                <i class="fas fa-question-circle" style="margin-right: 8px;"></i>
+                ¿Necesitas ayuda?
+            </p>
+            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                <a href="{{ url_for('dashboard.index') }}" class="btn" style="background: #475569; color: #f8fafc;">
+                    <i class="fas fa-arrow-left"></i>
+                    Volver al Dashboard
+                </a>
+            </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <script>
-        // Estado inicial (simulado)
-        let mfaEnabled = false; // Cambiar a true para simular MFA habilitado
-        let mfaSecretGenerated = false; // Cambiar a true para simular secreto generado
+{% block scripts %}
+<script>
+// Variables from template - safely rendered
+const HAS_QR_CODE = (function() {
+    const root = document.querySelector('.mfa-container');
+    return root ? root.dataset.hasQr === 'true' : false;
+})();
 
-        // Inicializar la página según el estado
-        document.addEventListener('DOMContentLoaded', function () {
-            initializePage();
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔐 Setup MFA página cargada');
+    
+    initializeMfaCodeInput();
+    
+    // Check if we should show QR section
+    if (HAS_QR_CODE) {
+        showQrSection();
+    }
+});
 
-            // Configurar eventos de los formularios
-            setupFormEvents();
+function initializeMfaCodeInput() {
+    const digits = document.querySelectorAll('.mfa-digit');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const hiddenInput = document.getElementById('mfaCodeHidden');
 
-            // Configurar eventos para los dígitos del código MFA
-            setupMfaDigits();
+    if (!digits.length) return;
+
+    digits.forEach((digit, index) => {
+        digit.addEventListener('input', function(e) {
+            const value = e.target.value;
+            
+            if (!/^\d$/.test(value)) {
+                e.target.value = '';
+                return;
+            }
+
+            e.target.classList.add('filled');
+            
+            if (index < digits.length - 1 && value !== '') {
+                digits[index + 1].focus();
+            }
+            
+            updateHiddenInput();
+            checkFormCompletion();
         });
 
-        function initializePage() {
-            // Mostrar/ocultar secciones según el estado MFA
-            if (mfaEnabled) {
-                document.getElementById('mfaEnabledAlert').classList.remove('hidden');
-                document.getElementById('mfaDisabledAlert').classList.add('hidden');
-                document.getElementById('setupMfaSection').classList.add('hidden');
-                document.getElementById('disableMfaSection').classList.remove('hidden');
-            } else {
-                document.getElementById('mfaEnabledAlert').classList.add('hidden');
-                document.getElementById('mfaDisabledAlert').classList.remove('hidden');
-                document.getElementById('setupMfaSection').classList.remove('hidden');
-                document.getElementById('disableMfaSection').classList.add('hidden');
-
-                // Si ya se generó el secreto, mostrar la sección QR
-                if (mfaSecretGenerated) {
-                    document.getElementById('stepIndicator').classList.remove('hidden');
-                    document.getElementById('qrSection').classList.remove('hidden');
-                }
+        digit.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                digits[index - 1].focus();
+                digits[index - 1].value = '';
+                digits[index - 1].classList.remove('filled');
+                updateHiddenInput();
+                checkFormCompletion();
             }
-        }
-
-        function setupFormEvents() {
-            // Formulario para generar código QR
-            document.getElementById('generateForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                // Simular generación de código QR (en una aplicación real, esto sería una solicitud al servidor)
-                mfaSecretGenerated = true;
-
-                // Actualizar la página para mostrar el código QR
-                document.getElementById('stepIndicator').classList.remove('hidden');
-                document.getElementById('qrSection').classList.remove('hidden');
-
-                // Simular datos del servidor
-                document.getElementById('qrImage').src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth://totp/TuApp:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=TuApp";
-                document.getElementById('accountEmail').textContent = "user@example.com";
-                document.getElementById('mfaSecret').textContent = "JBSWY3DPEHPK3PXP";
-            });
-
-            // Formulario para habilitar MFA
-            document.getElementById('enableForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                // Obtener el código MFA
-                const mfaCode = document.getElementById('mfa_code').value;
-
-                // Validar que sea un código de 6 dígitos
-                if (!/^\d{6}$/.test(mfaCode)) {
-                    alert('Por favor, ingresa un código válido de 6 dígitos.');
-                    return;
-                }
-
-                // Simular verificación exitosa (en una aplicación real, esto sería una solicitud al servidor)
-                // Aquí normalmente enviarías el código al servidor para verificación
-                mfaEnabled = true;
-
-                // Mostrar mensaje de éxito
-                alert('¡MFA habilitado correctamente!');
-
-                // Recargar la página para mostrar el nuevo estado
-                initializePage();
-            });
-
-            // Formulario para deshabilitar MFA
-            document.getElementById('disableForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                // Obtener la contraseña
-                const password = document.getElementById('password').value;
-
-                // Validar que se haya ingresado una contraseña
-                if (!password) {
-                    alert('Por favor, ingresa tu contraseña.');
-                    return;
-                }
-
-                // Simular deshabilitación exitosa (en una aplicación real, esto sería una solicitud al servidor)
-                mfaEnabled = false;
-                mfaSecretGenerated = false;
-
-                // Mostrar mensaje de éxito
-                alert('MFA deshabilitado correctamente.');
-
-                // Recargar la página para mostrar el nuevo estado
-                initializePage();
-            });
-        }
-
-        function setupMfaDigits() {
-            const digits = document.querySelectorAll('.mfa-digit');
-            const fullCodeInput = document.getElementById('mfa_code');
-
-            digits.forEach((digit, index) => {
-                digit.addEventListener('input', function () {
-                    if (this.value.length === 1) {
-                        this.classList.add('filled');
-
-                        // Mover al siguiente campo si existe
-                        if (index < digits.length - 1) {
-                            digits[index + 1].focus();
-                        }
-                    } else {
-                        this.classList.remove('filled');
-                    }
-
-                    // Actualizar el campo de código completo
-                    updateFullCode();
-                });
-
-                digit.addEventListener('keydown', function (e) {
-                    // Permitir navegación con flechas
-                    if (e.key === 'ArrowLeft' && index > 0) {
-                        digits[index - 1].focus();
-                    } else if (e.key === 'ArrowRight' && index < digits.length - 1) {
-                        digits[index + 1].focus();
-                    } else if (e.key === 'Backspace' && this.value === '' && index > 0) {
-                        digits[index - 1].focus();
-                    }
-                });
-            });
-
-            // Actualizar campos individuales cuando cambia el campo completo
-            fullCodeInput.addEventListener('input', function () {
-                const code = this.value;
-
-                digits.forEach((digit, index) => {
-                    if (index < code.length) {
-                        digit.value = code[index];
-                        digit.classList.add('filled');
-                    } else {
-                        digit.value = '';
-                        digit.classList.remove('filled');
-                    }
-                });
-            });
-
-            function updateFullCode() {
-                let code = '';
-                digits.forEach(digit => {
-                    code += digit.value;
-                });
-                fullCodeInput.value = code;
+            
+            if (e.key === 'Enter' && verifyBtn && !verifyBtn.disabled) {
+                document.getElementById('verifyMfaForm').submit();
             }
-        }
-    </script>
-</body>
+        });
 
-</html>
+        digit.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').substring(0, 6);
+            
+            for (let i = 0; i < pasteData.length && (index + i) < digits.length; i++) {
+                digits[index + i].value = pasteData[i];
+                digits[index + i].classList.add('filled');
+            }
+            
+            updateHiddenInput();
+            checkFormCompletion();
+            
+            const nextEmpty = Array.from(digits).findIndex(d => !d.value);
+            if (nextEmpty !== -1 && nextEmpty < digits.length) {
+                digits[nextEmpty].focus();
+            }
+        });
+    });
+
+    function updateHiddenInput() {
+        const code = Array.from(digits).map(d => d.value).join('');
+        if (hiddenInput) {
+            hiddenInput.value = code;
+        }
+    }
+
+    function checkFormCompletion() {
+        const code = Array.from(digits).map(d => d.value).join('');
+        if (verifyBtn) {
+            verifyBtn.disabled = code.length !== 6;
+        }
+    }
+
+    if (digits.length > 0) {
+        digits[0].focus();
+    }
+}
+
+function showQrSection() {
+    const generateSection = document.getElementById('generateSection');
+    const qrSection = document.getElementById('qrSection');
+    const step1 = document.getElementById('step1');
+    const step2 = document.getElementById('step2');
+    const stepFill = document.querySelector('.step-line-fill');
+
+    if (generateSection) generateSection.style.display = 'none';
+    if (qrSection) qrSection.style.display = 'block';
+    
+    if (step1) {
+        step1.classList.remove('active');
+        step1.classList.add('completed');
+    }
+    
+    if (step2) {
+        step2.classList.remove('inactive');
+        step2.classList.add('active');
+    }
+    
+    if (stepFill) {
+        stepFill.style.width = '100%';
+    }
+}
+
+// Auto-submit when 6 digits are entered
+document.addEventListener('input', function(e) {
+    if (e.target.classList.contains('mfa-digit')) {
+        const digits = document.querySelectorAll('.mfa-digit');
+        const code = Array.from(digits).map(d => d.value).join('');
+        
+        if (code.length === 6) {
+            setTimeout(() => {
+                const verifyBtn = document.getElementById('verifyBtn');
+                if (verifyBtn && !verifyBtn.disabled) {
+                    console.log('🔐 Auto-enviando código MFA:', code);
+                    document.getElementById('verifyMfaForm').submit();
+                }
+            }, 300);
+        }
+    }
+});
+
+// Form validation
+const verifyForm = document.getElementById('verifyMfaForm');
+if (verifyForm) {
+    verifyForm.addEventListener('submit', function(e) {
+        const hiddenInput = document.getElementById('mfaCodeHidden');
+        const code = hiddenInput ? hiddenInput.value : '';
+        if (code.length !== 6) {
+            e.preventDefault();
+            alert('Por favor ingresa un código de 6 dígitos');
+            return false;
+        }
+        console.log('✅ Enviando verificación MFA');
+    });
+}
+
+const disableForm = document.getElementById('disableMfaForm');
+if (disableForm) {
+    disableForm.addEventListener('submit', function(e) {
+        if (!confirm('¿Estás seguro de que quieres deshabilitar MFA? Tu cuenta será menos segura.')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+}
+</script>
+{% endblock %}
