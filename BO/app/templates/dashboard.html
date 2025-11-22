@@ -14,60 +14,66 @@
     <div class="metric-card" data-metric="users">
       <div class="metric-icon">👥</div>
       <div class="metric-content">
-        <div class="metric-value">{{ stats.total_users or 0 }}</div>
+        <div class="metric-value" id="totalUsers">{{ stats.total_users or 0 }}</div>
         <div class="metric-label">Total Usuarios</div>
-        <div class="metric-trend positive">
+        <div class="metric-trend" id="usersTrend">
           <span class="trend-icon">↗</span>
-          <span class="trend-value">+12%</span>
+          <span class="trend-value">Cargando...</span>
         </div>
       </div>
-      <div class="metric-chart">
-        <canvas id="usersChart" width="60" height="30"></canvas>
+      <div class="metric-actions">
+        <button class="metric-action-btn" onclick="refreshMetric('users')" title="Actualizar">
+          <span>🔄</span>
+        </button>
       </div>
     </div>
 
     <div class="metric-card" data-metric="active">
       <div class="metric-icon">✅</div>
       <div class="metric-content">
-        <div class="metric-value">{{ stats.active_users or 0 }}</div>
+        <div class="metric-value" id="activeUsers">{{ stats.active_users or 0 }}</div>
         <div class="metric-label">Usuarios Activos</div>
-        <div class="metric-trend positive">
+        <div class="metric-trend" id="activeTrend">
           <span class="trend-icon">↗</span>
-          <span class="trend-value">+8%</span>
+          <span class="trend-value">Cargando...</span>
         </div>
       </div>
-      <div class="metric-chart">
-        <canvas id="activeChart" width="60" height="30"></canvas>
+      <div class="metric-actions">
+        <button class="metric-action-btn" onclick="refreshMetric('active')" title="Actualizar">
+          <span>🔄</span>
+        </button>
       </div>
     </div>
 
     <div class="metric-card" data-metric="cards">
       <div class="metric-icon">🗃️</div>
       <div class="metric-content">
-        <div class="metric-value">{{ stats.total_cards or 0 }}</div>
+        <div class="metric-value" id="totalCards">{{ stats.total_cards or 0 }}</div>
         <div class="metric-label">Memory Cards</div>
-        <div class="metric-trend neutral">
-          <span class="trend-icon">→</span>
-          <span class="trend-value">0%</span>
+        <div class="metric-trend" id="cardsTrend">
+          <span class="trend-icon">↗</span>
+          <span class="trend-value">Cargando...</span>
         </div>
       </div>
-      <div class="metric-chart">
-        <canvas id="cardsChart" width="60" height="30"></canvas>
+      <div class="metric-actions">
+        <button class="metric-action-btn" onclick="refreshMetric('cards')" title="Actualizar">
+          <span>🔄</span>
+        </button>
       </div>
     </div>
 
     <div class="metric-card" data-metric="api">
       <div class="metric-icon">🌐</div>
       <div class="metric-content">
-        <div class="metric-value api-status-value">
+        <div class="metric-value api-status-value" id="apiStatus">
           {% if stats.api_status == 'online' %}Online
           {% else %}Offline
           {% endif %}
         </div>
         <div class="metric-label">Estado API</div>
-        <div class="metric-trend {% if stats.api_status == 'online' %}positive{% else %}negative{% endif %}">
+        <div class="metric-trend" id="apiTrend">
           <span class="trend-icon">{% if stats.api_status == 'online' %}✅{% else %}❌{% endif %}</span>
-          <span class="trend-value">{{ stats.api_status|title }}</span>
+          <span class="trend-value">{{ stats.api_status|title or 'Offline' }}</span>
         </div>
       </div>
       <div class="metric-actions">
@@ -80,7 +86,7 @@
 
   <!-- Widgets principales -->
   <div class="widgets-grid">
-    <!-- Actividad reciente -->
+    <!-- Actividad reciente REAL -->
     <div class="widget">
       <div class="widget-header">
         <h3 class="widget-title">
@@ -94,64 +100,71 @@
       </div>
       <div class="widget-content">
         <div class="activity-list" id="activityList">
+          {% if stats.recent_activity %}
+          {% for activity in stats.recent_activity %}
           <div class="activity-item">
-            <div class="activity-icon">👤</div>
+            <div class="activity-icon">{{ activity.icon }}</div>
             <div class="activity-content">
-              <div class="activity-text">Nuevo usuario registrado</div>
-              <div class="activity-time">Hace 15 minutos</div>
+              <div class="activity-text">{{ activity.text }}</div>
+              <div class="activity-time">{{ activity.time }}</div>
             </div>
           </div>
+          {% endfor %}
+          {% else %}
           <div class="activity-item">
-            <div class="activity-icon">🗃️</div>
+            <div class="activity-icon">⏳</div>
             <div class="activity-content">
-              <div class="activity-text">Memory card creada</div>
-              <div class="activity-time">Hace 1 hora</div>
+              <div class="activity-text">Cargando actividad...</div>
+              <div class="activity-time">Espere por favor</div>
             </div>
           </div>
-          <div class="activity-item">
-            <div class="activity-icon">🔧</div>
-            <div class="activity-content">
-              <div class="activity-text">Sistema actualizado</div>
-              <div class="activity-time">Hace 3 horas</div>
-            </div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-icon">👥</div>
-            <div class="activity-content">
-              <div class="activity-text">5 usuarios conectados</div>
-              <div class="activity-time">Hace 5 horas</div>
-            </div>
-          </div>
+          {% endif %}
         </div>
         <div class="widget-footer">
-          <a href="#" class="widget-link">Ver toda la actividad</a>
+          <a href="{{ url_for('users.user_list') }}" class="widget-link">Ver todos los usuarios</a>
         </div>
       </div>
     </div>
 
-    <!-- Gráfico de usuarios -->
+    <!-- Gráfico de usuarios (placeholder para datos reales) -->
     <div class="widget">
       <div class="widget-header">
         <h3 class="widget-title">
           <span class="widget-icon">📊</span>
-          Usuarios por Día
+          Resumen del Sistema
         </h3>
         <div class="widget-actions">
-          <select class="widget-select" onchange="updateUsersChart(this.value)">
-            <option value="7">Última semana</option>
-            <option value="30" selected>Último mes</option>
-            <option value="90">Últimos 3 meses</option>
-          </select>
+          <button class="widget-btn" onclick="refreshCharts()" title="Actualizar gráficos">🔄</button>
         </div>
       </div>
       <div class="widget-content">
-        <div class="chart-container">
-          <canvas id="usersLineChart" width="400" height="200"></canvas>
+        <div class="stats-summary">
+          <div class="stat-item">
+            <span class="stat-label">Usuarios registrados:</span>
+            <span class="stat-value" id="summaryUsers">{{ stats.total_users }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Tarjetas creadas:</span>
+            <span class="stat-value" id="summaryCards">{{ stats.total_cards }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Tasa de actividad:</span>
+            <span class="stat-value">
+              {% if stats.total_users > 0 %}
+              {{ ((stats.active_users / stats.total_users) * 100)|round(1) }}%
+              {% else %}
+              0%
+              {% endif %}
+            </span>
+          </div>
+        </div>
+        <div class="simple-chart">
+          <canvas id="systemChart" width="400" height="150"></canvas>
         </div>
       </div>
     </div>
 
-    <!-- Estado del sistema -->
+    <!-- Estado del sistema REAL -->
     <div class="widget">
       <div class="widget-header">
         <h3 class="widget-title">
@@ -159,7 +172,11 @@
           Estado del Sistema
         </h3>
         <div class="widget-actions">
-          <span class="status-indicator status-online" id="systemStatus">🟢</span>
+          <span
+            class="status-indicator {% if stats.api_status == 'online' %}status-online{% else %}status-offline{% endif %}"
+            id="systemStatusIndicator">
+            {% if stats.api_status == 'online' %}🟢{% else %}🔴{% endif %}
+          </span>
         </div>
       </div>
       <div class="widget-content">
@@ -168,34 +185,37 @@
             <div class="stat-label">API Principal</div>
             <div class="stat-value">
               <span class="status-dot status-{{ stats.api_status or 'offline' }}"></span>
-              {{ stats.api_status|title or 'Desconocido' }}
+              <span id="apiStatusText">{{ stats.api_status|title or 'Offline' }}</span>
             </div>
           </div>
           <div class="system-stat">
             <div class="stat-label">Base de Datos</div>
             <div class="stat-value">
               <span class="status-dot status-online"></span>
-              Conectada
+              <span id="dbStatus">Conectada</span>
             </div>
           </div>
           <div class="system-stat">
-            <div class="stat-label">Almacenamiento</div>
-            <div class="stat-value">
-              <span class="status-dot status-warning"></span>
-              75% usado
-            </div>
-          </div>
-          <div class="system-stat">
-            <div class="stat-label">Memoria</div>
+            <div class="stat-label">Usuarios en DB</div>
             <div class="stat-value">
               <span class="status-dot status-online"></span>
-              512MB / 2GB
+              <span id="dbUsersCount">{{ stats.users_count or 'N/A' }}</span>
+            </div>
+          </div>
+          <div class="system-stat">
+            <div class="stat-label">Última actualización</div>
+            <div class="stat-value">
+              <span class="status-dot status-online"></span>
+              <span id="lastUpdate">{{ now.strftime('%H:%M:%S') if now else 'N/A' }}</span>
             </div>
           </div>
         </div>
         <div class="widget-footer">
           <button class="btn-secondary" onclick="runSystemDiagnostics()">
             <span>🔍</span> Diagnóstico
+          </button>
+          <button class="btn-secondary" onclick="refreshAllData()">
+            <span>🔄</span> Actualizar
           </button>
         </div>
       </div>
@@ -251,41 +271,54 @@
     </div>
   </div>
 
-  <!-- Logs recientes -->
+  <!-- Logs del sistema en tiempo real -->
   <div class="full-width-widget">
     <div class="widget">
       <div class="widget-header">
         <h3 class="widget-title">
-          <span class="widget-icon">📋</span>
-          Logs del Sistema
+          <span class="widget-icon">🐳</span>
+          Logs de Contenedores Docker - Tiempo Real
         </h3>
         <div class="widget-actions">
-          <button class="widget-btn" onclick="refreshLogs()" title="Actualizar logs">🔄</button>
-          <button class="widget-btn" onclick="clearLogs()" title="Limpiar logs">🗑️</button>
-          <button class="widget-btn" onclick="exportLogs()" title="Exportar logs">📥</button>
+          <div class="log-controls">
+            <span class="log-stats">
+              <span class="stat-item">
+                <span class="stat-label">Total:</span>
+                <span class="stat-value" id="logsCount">0</span>
+              </span>
+              <span class="stat-item">
+                <span class="stat-label">INFO:</span>
+                <span class="stat-value info-count" id="infoCount">0</span>
+              </span>
+              <span class="stat-item">
+                <span class="stat-label">WARN:</span>
+                <span class="stat-value warning-count" id="warningCount">0</span>
+              </span>
+              <span class="stat-item">
+                <span class="stat-label">ERROR:</span>
+                <span class="stat-value error-count" id="errorCount">0</span>
+              </span>
+            </span>
+            <button class="widget-btn btn-success" onclick="startLiveLogs()" title="Iniciar logs en vivo"
+              id="startLogsBtn">
+              <span>▶️</span> Iniciar
+            </button>
+            <button class="widget-btn btn-warning" onclick="stopLiveLogs()" title="Pausar logs" id="stopLogsBtn">
+              <span>⏸️</span> Pausar
+            </button>
+            <button class="widget-btn" onclick="refreshLogs()" title="Actualizar logs">🔄</button>
+            <button class="widget-btn" onclick="clearLogs()" title="Limpiar logs">🗑️</button>
+            <button class="widget-btn btn-info" onclick="exportLogs()" title="Exportar logs">📥</button>
+          </div>
         </div>
       </div>
       <div class="widget-content">
         <div class="logs-container" id="logsContainer">
           <div class="log-entry log-info">
-            <span class="log-time">16:24:59</span>
+            <span class="log-time">--:--:--</span>
+            <span class="log-container">system</span>
             <span class="log-level">INFO</span>
-            <span class="log-message">Sistema iniciado correctamente</span>
-          </div>
-          <div class="log-entry log-success">
-            <span class="log-time">16:19:59</span>
-            <span class="log-level">SUCCESS</span>
-            <span class="log-message">Usuario admin autenticado exitosamente</span>
-          </div>
-          <div class="log-entry log-warning">
-            <span class="log-time">16:14:59</span>
-            <span class="log-level">WARNING</span>
-            <span class="log-message">Uso de memoria alto: 75%</span>
-          </div>
-          <div class="log-entry log-info">
-            <span class="log-time">16:09:59</span>
-            <span class="log-level">INFO</span>
-            <span class="log-message">Backup automático completado</span>
+            <span class="log-message">Inicializando sistema de logs Docker...</span>
           </div>
         </div>
       </div>
@@ -296,4 +329,139 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+  // Inicializar dashboard con datos reales
+  document.addEventListener('DOMContentLoaded', function () {
+    initializeRealTimeUpdates();
+    loadRealData();
+  });
+
+  function initializeRealTimeUpdates() {
+    // Actualizar cada 30 segundos
+    setInterval(loadRealData, 30000);
+
+    // Actualizar hora actual cada segundo
+    setInterval(updateCurrentTime, 1000);
+  }
+
+  function loadRealData() {
+    fetch('/api/dashboard/stats')
+      .then(response => response.json())
+      .then(data => {
+        updateDashboardData(data);
+      })
+      .catch(error => {
+        console.error('Error loading real data:', error);
+        addLog('ERROR', 'Error cargando datos del dashboard');
+      });
+  }
+
+  function updateDashboardData(data) {
+    // Actualizar métricas
+    if (data.total_users !== undefined) {
+      document.getElementById('totalUsers').textContent = data.total_users;
+      document.getElementById('summaryUsers').textContent = data.total_users;
+    }
+
+    if (data.active_users !== undefined) {
+      document.getElementById('activeUsers').textContent = data.active_users;
+    }
+
+    if (data.total_cards !== undefined) {
+      document.getElementById('totalCards').textContent = data.total_cards;
+      document.getElementById('summaryCards').textContent = data.total_cards;
+    }
+
+    // Actualizar estado API
+    const apiStatusElement = document.getElementById('apiStatus');
+    const apiStatusText = document.getElementById('apiStatusText');
+    const apiTrend = document.getElementById('apiTrend');
+    const systemStatusIndicator = document.getElementById('systemStatusIndicator');
+
+    if (data.api_status) {
+      const isOnline = data.api_status === 'online';
+      apiStatusElement.textContent = isOnline ? 'Online' : 'Offline';
+      apiStatusElement.className = `metric-value api-status-value ${isOnline ? 'online' : 'offline'}`;
+      apiStatusText.textContent = isOnline ? 'Online' : 'Offline';
+      systemStatusIndicator.textContent = isOnline ? '🟢' : '🔴';
+      systemStatusIndicator.className = `status-indicator ${isOnline ? 'status-online' : 'status-offline'}`;
+
+      apiTrend.innerHTML = isOnline ?
+        '<span class="trend-icon">✅</span><span class="trend-value">Online</span>' :
+        '<span class="trend-icon">❌</span><span class="trend-value">Offline</span>';
+    }
+
+    // Actualizar actividad
+    if (data.recent_activity && data.recent_activity.length > 0) {
+      updateActivityList(data.recent_activity);
+    }
+
+    // Agregar log de actualización
+    addLog('INFO', 'Datos del dashboard actualizados');
+  }
+
+  function updateActivityList(activities) {
+    const activityList = document.getElementById('activityList');
+    activityList.innerHTML = '';
+
+    activities.forEach(activity => {
+      const activityItem = document.createElement('div');
+      activityItem.className = 'activity-item';
+      activityItem.innerHTML = `
+                <div class="activity-icon">${activity.icon}</div>
+                <div class="activity-content">
+                    <div class="activity-text">${activity.text}</div>
+                    <div class="activity-time">${activity.time}</div>
+                </div>
+            `;
+      activityList.appendChild(activityItem);
+    });
+  }
+
+  function updateCurrentTime() {
+    const now = new Date();
+    const timeString = now.toTimeString().split(' ')[0];
+    document.getElementById('currentTime').textContent = timeString;
+  }
+
+  function addLog(level, message) {
+    const logsContainer = document.getElementById('logsContainer');
+    const now = new Date();
+    const timeString = now.toTimeString().split(' ')[0];
+
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${level.toLowerCase()}`;
+    logEntry.innerHTML = `
+            <span class="log-time">${timeString}</span>
+            <span class="log-level">${level}</span>
+            <span class="log-message">${message}</span>
+        `;
+
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+
+    // Mantener máximo 50 logs
+    if (logsContainer.children.length > 50) {
+      logsContainer.removeChild(logsContainer.lastChild);
+    }
+  }
+
+  // Funciones globales para los botones
+  function refreshAllData() {
+    addLog('INFO', 'Actualizando todos los datos...');
+    loadRealData();
+  }
+
+  function checkApiHealth() {
+    addLog('INFO', 'Verificando salud de la API...');
+    fetch('/api/dashboard/health')
+      .then(response => response.json())
+      .then(data => {
+        if (data.ok) {
+          addLog('SUCCESS', 'API saludable y funcionando');
+        } else {
+          addLog('ERROR', 'API no responde correctamente');
+        }
+      });
+  }
+</script>
 {% endblock %}
