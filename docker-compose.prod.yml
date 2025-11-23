@@ -11,8 +11,8 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # Sobrescribir solo lo específico del frontend
-      - API_BASE_URL= http://localhost:5000
+      # ✅ CORREGIDO: usar nombre del backend
+      - API_BASE_URL=http://firefighter_backend:5000
     networks:
       - firefighter_network
     restart: unless-stopped
@@ -52,8 +52,8 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # Sobrescribir solo lo específico del backoffice
-      - API_BASE_URL=http://localhost:5000
+      # ✅ CORRECTO: usar nombre del backend
+      - API_BASE_URL=http://firefighter_backend:5000
     networks:
       - firefighter_network
     restart: unless-stopped
