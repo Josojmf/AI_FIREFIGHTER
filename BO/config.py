@@ -9,7 +9,7 @@ class Config:
     SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY', 'firefighter-backoffice-secret-2024')
     
     # API y configuración general
-    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:5000')
+    API_BASE_URL = 'http://localhost:5000'
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
     
     # 🔥 CONFIGURACIÓN DE COOKIES ESPECÍFICA PARA BACKOFFICE

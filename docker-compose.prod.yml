@@ -12,7 +12,7 @@ services:
       - /root/firefighter.env
     environment:
       # Sobrescribir solo lo específico del frontend
-      - API_BASE_URL=http://backend:5000/api
+      - API_BASE_URL= http://localhost:5000
     networks:
       - firefighter_network
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
       - /root/firefighter.env
     environment:
       # Sobrescribir solo lo específico del backoffice
-      - API_BASE_URL=http://backend:5000
+      - API_BASE_URL=http://localhost:5000
     networks:
       - firefighter_network
     restart: unless-stopped
