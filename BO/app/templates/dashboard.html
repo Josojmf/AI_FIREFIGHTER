@@ -281,34 +281,26 @@
         </h3>
         <div class="widget-actions">
           <div class="log-controls">
-            <span class="log-stats">
-              <span class="stat-item">
-                <span class="stat-label">Total:</span>
-                <span class="stat-value" id="logsCount">0</span>
+            <div class="log-controls-top">
+              <span class="log-stats">
+                <span class="stat-item">
+                  <span class="stat-label">Total:</span>
+                  <span class="stat-value" id="logsCount">0</span>
+                </span>
+                <span class="stat-item">
+                  <span class="stat-label">INFO:</span>
+                  <span class="stat-value info-count" id="infoCount">0</span>
+                </span>
+                <span class="stat-item">
+                  <span class="stat-label">WARN:</span>
+                  <span class="stat-value warning-count" id="warningCount">0</span>
+                </span>
+                <span class="stat-item">
+                  <span class="stat-label">ERROR:</span>
+                  <span class="stat-value error-count" id="errorCount">0</span>
+                </span>
               </span>
-              <span class="stat-item">
-                <span class="stat-label">INFO:</span>
-                <span class="stat-value info-count" id="infoCount">0</span>
-              </span>
-              <span class="stat-item">
-                <span class="stat-label">WARN:</span>
-                <span class="stat-value warning-count" id="warningCount">0</span>
-              </span>
-              <span class="stat-item">
-                <span class="stat-label">ERROR:</span>
-                <span class="stat-value error-count" id="errorCount">0</span>
-              </span>
-            </span>
-            <button class="widget-btn btn-success" onclick="startLiveLogs()" title="Iniciar logs en vivo"
-              id="startLogsBtn">
-              <span>▶️</span> Iniciar
-            </button>
-            <button class="widget-btn btn-warning" onclick="stopLiveLogs()" title="Pausar logs" id="stopLogsBtn">
-              <span>⏸️</span> Pausar
-            </button>
-            <button class="widget-btn" onclick="refreshLogs()" title="Actualizar logs">🔄</button>
-            <button class="widget-btn" onclick="clearLogs()" title="Limpiar logs">🗑️</button>
-            <button class="widget-btn btn-info" onclick="exportLogs()" title="Exportar logs">📥</button>
+            </div>
           </div>
         </div>
       </div>
@@ -328,7 +320,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 <script>
   // Inicializar dashboard con datos reales
   document.addEventListener('DOMContentLoaded', function () {
@@ -345,7 +336,7 @@
   }
 
   function loadRealData() {
-    fetch('/api/dashboard/stats')
+    fetch('http://localhost:5000/api/dashboard/stats')    // URL CORREGIDA
       .then(response => response.json())
       .then(data => {
         updateDashboardData(data);
@@ -391,6 +382,17 @@
         '<span class="trend-icon">❌</span><span class="trend-value">Offline</span>';
     }
 
+    // ✅ ACTUALIZAR TREND VALUES - SOLUCION AGREGADA
+    const usersTrend = document.querySelector('#usersTrend .trend-value');
+    const activeTrend = document.querySelector('#activeTrend .trend-value');
+    const cardsTrend = document.querySelector('#cardsTrend .trend-value');
+    
+    if (usersTrend) usersTrend.textContent = `${data.total_users || 0} usuarios`;
+    if (activeTrend) activeTrend.textContent = `${data.active_users || 0} activos`;
+    if (cardsTrend) cardsTrend.textContent = `${data.total_cards || 0} tarjetas`;
+    
+    console.log('✅ Trend values actualizados desde HTML inline');
+
     // Actualizar actividad
     if (data.recent_activity && data.recent_activity.length > 0) {
       updateActivityList(data.recent_activity);
@@ -421,7 +423,10 @@
   function updateCurrentTime() {
     const now = new Date();
     const timeString = now.toTimeString().split(' ')[0];
-    document.getElementById('currentTime').textContent = timeString;
+    const lastUpdateElement = document.getElementById('lastUpdate');
+    if (lastUpdateElement) {
+      lastUpdateElement.textContent = timeString;
+    }
   }
 
   function addLog(level, message) {
@@ -453,7 +458,7 @@
 
   function checkApiHealth() {
     addLog('INFO', 'Verificando salud de la API...');
-    fetch('/api/dashboard/health')
+    fetch('http://localhost:5000/api/dashboard/health')    // URL CORREGIDA
       .then(response => response.json())
       .then(data => {
         if (data.ok) {

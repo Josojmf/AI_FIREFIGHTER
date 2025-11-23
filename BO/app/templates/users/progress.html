@@ -1,0 +1,754 @@
+<!-- app/templates/users/progress.html - NUEVA VISTA DE PROGRESO DETALLADO -->
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Progreso de {{ user.username }} - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Progreso Detallado{% endblock %}
+
+{% block content %}
+<div class="progress-detail">
+  <div class="back-button">
+    <a href="{{ url_for('users.user_detail', user_id=user.id) }}" class="btn btn-secondary">
+      <span class="btn-icon">←</span>
+      Volver a Usuario
+    </a>
+  </div>
+
+  <div class="progress-header">
+    <div class="user-info">
+      <div class="user-avatar">
+        {{ user.username[0]|upper }}
+      </div>
+      <div class="user-details">
+        <h1>{{ user.username }}</h1>
+        <p>{{ user.email }}</p>
+        <span class="role-badge role-{{ user.role }}">{{ user.role|title }}</span>
+      </div>
+    </div>
+    
+    {% if progress %}
+    <div class="progress-overview">
+      <div class="overview-stat">
+        <h3>{{ progress.general_stats.total_cards }}</h3>
+        <p>Total Cards</p>
+      </div>
+      <div class="overview-stat">
+        <h3>{{ progress.general_stats.accuracy_rate }}%</h3>
+        <p>Precisión</p>
+      </div>
+      <div class="overview-stat">
+        <h3>{{ progress.general_stats.study_streak }}</h3>
+        <p>Racha</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if progress %}
+  <div class="progress-content">
+    
+    <!-- Estadísticas principales -->
+    <section class="stats-section">
+      <h2>📊 Estadísticas Generales</h2>
+      <div class="stats-grid-large">
+        <div class="stat-card-large primary">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-data">
+            <h3>{{ progress.general_stats.total_cards }}</h3>
+            <p>Total de Cards Estudiadas</p>
+          </div>
+        </div>
+        
+        <div class="stat-card-large success">
+          <div class="stat-icon">✅</div>
+          <div class="stat-data">
+            <h3>{{ progress.general_stats.correct_answers }}</h3>
+            <p>Respuestas Correctas</p>
+          </div>
+        </div>
+        
+        <div class="stat-card-large warning">
+          <div class="stat-icon">❌</div>
+          <div class="stat-data">
+            <h3>{{ progress.general_stats.incorrect_answers }}</h3>
+            <p>Respuestas Incorrectas</p>
+          </div>
+        </div>
+        
+        <div class="stat-card-large info">
+          <div class="stat-icon">📝</div>
+          <div class="stat-data">
+            <h3>{{ progress.general_stats.total_reviews }}</h3>
+            <p>Total de Reviews</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Progreso de precisión -->
+    <section class="accuracy-section">
+      <h2>🎯 Análisis de Precisión</h2>
+      <div class="accuracy-container">
+        <div class="accuracy-chart">
+          <div class="chart-circle">
+            <svg viewBox="0 0 36 36" class="circular-chart">
+              <path class="circle-bg" d="M18 2.0845
+                a 15.9155 15.9155 0 0 1 0 31.831
+                a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path class="circle" stroke-dasharray="{{ progress.general_stats.accuracy_rate }}, 100" d="M18 2.0845
+                a 15.9155 15.9155 0 0 1 0 31.831
+                a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <text x="18" y="20.35" class="percentage">{{ progress.general_stats.accuracy_rate }}%</text>
+            </svg>
+          </div>
+          <div class="accuracy-legend">
+            <div class="legend-item correct">
+              <span class="legend-dot"></span>
+              <span>Correctas: {{ progress.general_stats.correct_answers }}</span>
+            </div>
+            <div class="legend-item incorrect">
+              <span class="legend-dot"></span>
+              <span>Incorrectas: {{ progress.general_stats.incorrect_answers }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Distribución Leitner -->
+    {% if progress.box_distribution %}
+    <section class="leitner-section">
+      <h2>📦 Sistema Leitner - Distribución por Boxes</h2>
+      <div class="leitner-explanation">
+        <p>El sistema Leitner organiza las cards en 5 boxes según el nivel de dominio. Cards difíciles se revisan más frecuentemente.</p>
+      </div>
+      <div class="leitner-boxes">
+        {% for box_key, count in progress.box_distribution.items() %}
+        {% set box_num = box_key.split('_')[1] %}
+        <div class="leitner-box box-{{ box_num }}">
+          <div class="box-header">
+            <h3>Box {{ box_num }}</h3>
+            <span class="box-frequency">
+              {% if box_num == '1' %}Diario{% endif %}
+              {% if box_num == '2' %}Cada 2 días{% endif %}
+              {% if box_num == '3' %}Semanal{% endif %}
+              {% if box_num == '4' %}Bisemanal{% endif %}
+              {% if box_num == '5' %}Mensual{% endif %}
+            </span>
+          </div>
+          <div class="box-count">{{ count }}</div>
+          <div class="box-bar">
+            <div class="bar-fill" style="height: {{ (count / progress.general_stats.total_cards * 100) if progress.general_stats.total_cards > 0 else 0 }}%"></div>
+          </div>
+          <div class="box-percentage">
+            {{ "%.1f"|format((count / progress.general_stats.total_cards * 100) if progress.general_stats.total_cards > 0 else 0) }}%
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Progreso por categorías -->
+    {% if progress.category_progress %}
+    <section class="categories-section">
+      <h2>📚 Rendimiento por Categorías</h2>
+      <div class="categories-detailed">
+        {% for category, stats in progress.category_progress.items() %}
+        <div class="category-card">
+          <div class="category-header">
+            <h3>{{ category|title }}</h3>
+            <span class="category-accuracy {{ 'excellent' if stats.accuracy >= 90 else 'good' if stats.accuracy >= 75 else 'needs-improvement' }}">
+              {{ stats.accuracy }}%
+            </span>
+          </div>
+          
+          <div class="category-progress-bar">
+            <div class="progress-track">
+              <div class="progress-fill" style="width: {{ stats.accuracy }}%"></div>
+            </div>
+          </div>
+          
+          <div class="category-breakdown">
+            <div class="breakdown-item">
+              <span class="icon">📊</span>
+              <span class="label">Total:</span>
+              <span class="value">{{ stats.total }}</span>
+            </div>
+            <div class="breakdown-item success">
+              <span class="icon">✅</span>
+              <span class="label">Correctas:</span>
+              <span class="value">{{ stats.correct }}</span>
+            </div>
+            <div class="breakdown-item error">
+              <span class="icon">❌</span>
+              <span class="label">Incorrectas:</span>
+              <span class="value">{{ stats.incorrect }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Actividad temporal -->
+    {% if progress.recent_activity %}
+    <section class="activity-section">
+      <h2>📈 Actividad de Estudio (Últimos 7 días)</h2>
+      <div class="activity-timeline">
+        {% for activity in progress.recent_activity[:7] %}
+        <div class="activity-day {{ 'active' if activity.cards_studied > 0 else 'inactive' }}">
+          <div class="day-header">
+            <span class="day-name">{{ activity.date }}</span>
+          </div>
+          <div class="day-chart">
+            <div class="study-bar" style="height: {{ (activity.cards_studied / 25 * 100) if activity.cards_studied > 0 else 2 }}%">
+              <span class="bar-value">{{ activity.cards_studied }}</span>
+            </div>
+          </div>
+          <div class="day-accuracy">
+            {% if activity.cards_studied > 0 %}
+              {{ activity.accuracy }}%
+            {% else %}
+              Sin estudio
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Configuración de estudio -->
+    {% if progress.study_settings %}
+    <section class="settings-section">
+      <h2>⚙️ Configuración de Estudio</h2>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <span class="setting-label">Objetivo Diario:</span>
+          <span class="setting-value">{{ progress.study_settings.daily_goal or 20 }} cards</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Notificaciones:</span>
+          <span class="setting-value">{{ 'Activadas' if progress.study_settings.notification_enabled else 'Desactivadas' }}</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Recordatorios:</span>
+          <span class="setting-value">{{ progress.study_settings.study_reminders or 'No configurado' }}</span>
+        </div>
+        <div class="setting-item">
+          <span class="setting-label">Avance Automático:</span>
+          <span class="setting-value">{{ 'Sí' if progress.study_settings.auto_advance else 'No' }}</span>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+  </div>
+  {% else %}
+  <div class="no-progress">
+    <div class="no-progress-icon">📊</div>
+    <h2>Sin Datos de Progreso</h2>
+    <p>Este usuario aún no ha comenzado a estudiar o no tiene datos de progreso disponibles.</p>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.progress-detail {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.back-button {
+  margin-bottom: 30px;
+}
+
+.progress-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 40px;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+.user-details h1 {
+  margin: 0 0 5px 0;
+  font-size: 1.8rem;
+}
+
+.user-details p {
+  margin: 0 0 10px 0;
+  opacity: 0.9;
+}
+
+.role-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  background: rgba(255,255,255,0.2);
+}
+
+.progress-overview {
+  display: flex;
+  gap: 30px;
+}
+
+.overview-stat {
+  text-align: center;
+}
+
+.overview-stat h3 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.overview-stat p {
+  margin: 5px 0 0 0;
+  opacity: 0.9;
+  font-size: 0.875rem;
+}
+
+.progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+section {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+section h2 {
+  margin: 0 0 25px 0;
+  color: #1e293b;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.stats-grid-large {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.stat-card-large {
+  padding: 25px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.stat-card-large.primary { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; }
+.stat-card-large.success { background: linear-gradient(135deg, #10b981, #047857); color: white; }
+.stat-card-large.warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.stat-card-large.info { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; }
+
+.stat-icon {
+  font-size: 2.5rem;
+}
+
+.stat-data h3 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-data p {
+  margin: 5px 0 0 0;
+  opacity: 0.9;
+}
+
+/* Circular Chart */
+.accuracy-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.accuracy-chart {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.chart-circle {
+  width: 200px;
+  height: 200px;
+}
+
+.circular-chart {
+  display: block;
+  margin: 10px auto;
+  max-width: 80%;
+  max-height: 250px;
+}
+
+.circle-bg {
+  fill: none;
+  stroke: #e5e7eb;
+  stroke-width: 3.8;
+}
+
+.circle {
+  fill: none;
+  stroke: #10b981;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  animation: progress 1s ease-out forwards;
+}
+
+.percentage {
+  fill: #1e293b;
+  font-family: sans-serif;
+  font-size: 0.8em;
+  text-anchor: middle;
+  font-weight: bold;
+}
+
+.accuracy-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.legend-item.correct .legend-dot { background: #10b981; }
+.legend-item.incorrect .legend-dot { background: #ef4444; }
+
+/* Leitner Boxes */
+.leitner-explanation {
+  margin-bottom: 25px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  color: #64748b;
+}
+
+.leitner-boxes {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px;
+}
+
+.leitner-box {
+  text-align: center;
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 2px solid;
+}
+
+.leitner-box.box-1 { border-color: #ef4444; }
+.leitner-box.box-2 { border-color: #f59e0b; }
+.leitner-box.box-3 { border-color: #eab308; }
+.leitner-box.box-4 { border-color: #22c55e; }
+.leitner-box.box-5 { border-color: #10b981; }
+
+.box-header h3 {
+  margin: 0 0 5px 0;
+  font-size: 1.1rem;
+}
+
+.box-frequency {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.box-count {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 15px 0;
+  color: #1e293b;
+}
+
+.box-bar {
+  height: 60px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  display: flex;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.bar-fill {
+  width: 100%;
+  background: linear-gradient(to top, #10b981, #22c55e);
+  border-radius: 4px;
+  min-height: 4px;
+}
+
+.box-percentage {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Categories */
+.categories-detailed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.category-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.category-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.category-accuracy {
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.category-accuracy.excellent { background: #dcfce7; color: #16a34a; }
+.category-accuracy.good { background: #fef3c7; color: #d97706; }
+.category-accuracy.needs-improvement { background: #fee2e2; color: #dc2626; }
+
+.category-progress-bar {
+  margin-bottom: 15px;
+}
+
+.progress-track {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  transition: width 0.5s ease;
+}
+
+.category-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.875rem;
+}
+
+.breakdown-item.success { color: #059669; }
+.breakdown-item.error { color: #dc2626; }
+
+/* Activity Timeline */
+.activity-timeline {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.activity-day {
+  flex: 1;
+  text-align: center;
+}
+
+.activity-day.active .study-bar {
+  background: linear-gradient(to top, #10b981, #22c55e);
+}
+
+.activity-day.inactive .study-bar {
+  background: #e5e7eb;
+}
+
+.day-header {
+  margin-bottom: 10px;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.day-chart {
+  height: 100px;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.study-bar {
+  width: 30px;
+  min-height: 4px;
+  border-radius: 4px 4px 2px 2px;
+  display: flex;
+  align-items: start;
+  justify-content: center;
+  padding-top: 5px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.day-accuracy {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Settings */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.setting-label {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.setting-value {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* No progress state */
+.no-progress {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 16px;
+}
+
+.no-progress-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.no-progress h2 {
+  margin: 0 0 15px 0;
+  color: #64748b;
+}
+
+.no-progress p {
+  color: #9ca3af;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .progress-header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  
+  .progress-overview {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .leitner-boxes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .activity-timeline {
+    flex-direction: column;
+  }
+  
+  .accuracy-chart {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #4b5563;
+}
+
+@keyframes progress {
+  0% {
+    stroke-dasharray: 0 100;
+  }
+}
+</style>
+{% endblock %}

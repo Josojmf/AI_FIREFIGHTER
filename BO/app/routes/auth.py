@@ -156,50 +156,67 @@ def verify_mfa():
 @bp.route('/setup-mfa', methods=['GET', 'POST'])
 @login_required
 def setup_mfa():
-    """Configuración de MFA integrada con API"""
-    print(f"🔍 Setup MFA - User: {current_user.username}")
+    """Configuración de MFA integrada con API - VERSIÓN CORREGIDA SIN FALLBACKS"""
+    print(f"🔍 Setup MFA - User: {current_user.username}, ID: {current_user.id}")
+    
+    # 🔥 VALIDACIÓN CRÍTICA: Verificar que el ID es REAL
+    if not current_user.id or current_user.id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID ficticio detectado: {current_user.id}")
+        flash('❌ Error: ID de usuario no válido para MFA', 'error')
+        return redirect(url_for('dashboard.index'))
+    
+    real_user_id = current_user.id
+    print(f"🎯 Usando ID REAL para MFA: {real_user_id}")
     
     if request.method == 'POST':
         action = request.form.get('action')
         
         if action == 'generate':
-            # Generar secreto MFA vía API
-            print(f"🔐 Generando secreto MFA para usuario: {current_user.id}")
-            mfa_data = generate_mfa_secret_api(current_user.id)
+            # Generar secreto MFA vía API con ID REAL
+            print(f"🔐 Generando secreto MFA para usuario REAL: {real_user_id}")
+            mfa_data = generate_mfa_secret_api(real_user_id)
             
             if mfa_data:
-                # Guardar datos en sesión
+                # Guardar datos en sesión con ID REAL
                 session['mfa_secret'] = mfa_data['secret']
                 session['mfa_qr_code'] = mfa_data['qr_code']
                 session['manual_entry_key'] = mfa_data['manual_entry_key']
+                session['mfa_pending_user_id'] = real_user_id  # 🔥 Guardar ID real para verificación
                 
-                print(f"✅ QR code generado y guardado en sesión")
+                print(f"✅ QR code generado y guardado en sesión para usuario REAL")
                 print(f"🔑 Secret: {mfa_data['secret']}")
                 flash('✅ Código QR generado correctamente', 'success')
             else:
-                print(f"❌ Error generando QR code")
+                print(f"❌ Error generando QR code para usuario REAL")
                 flash('❌ Error generando código QR. Intenta nuevamente.', 'error')
             
             return redirect(url_for('auth.setup_mfa'))
         
         elif action == 'enable':
-            # Verificar código y habilitar MFA
+            # Verificar código y habilitar MFA con ID REAL
             mfa_code = request.form.get('mfa_code', '').strip()
+            secret = session.get('mfa_secret')
+            pending_user_id = session.get('mfa_pending_user_id')
+            
+            # 🔥 VALIDAR que estamos usando el ID correcto
+            if pending_user_id != real_user_id:
+                print(f"❌ ID de sesión no coincide: {pending_user_id} vs {real_user_id}")
+                flash('❌ Error de sesión: ID de usuario no coincide', 'error')
+                return redirect(url_for('auth.setup_mfa'))
             
             if not mfa_code:
                 flash('❌ Por favor ingresa el código de verificación', 'error')
-            elif not session.get('mfa_secret'):
+            elif not secret:
                 flash('❌ Primero debes generar un secreto MFA', 'error')
             else:
-                # Verificar código localmente primero
-                secret = session.get('mfa_secret')
-                totp = pyotp.TOTP(secret)
+                # Verificar código con la API usando ID REAL
+                print(f"🔐 Verificando código MFA para usuario REAL: {real_user_id}")
                 
-                if totp.verify(mfa_code, valid_window=2):  # Permitir ventana de tiempo
-                    # Habilitar MFA via API
+                if verify_mfa_setup(real_user_id, mfa_code, secret):
+                    # Habilitar MFA via API con ID REAL
                     try:
-                        if enable_mfa_for_user(current_user.id, secret):
-                            # 🔥 CRÍTICO: ACTUALIZAR ESTADO LOCAL DEL USUARIO
+                        if enable_mfa_for_user(real_user_id, secret):
+                            # 🔥 ACTUALIZAR ESTADO LOCAL DEL USUARIO
                             current_user.mfa_enabled = True
                             
                             # 🔥 ACTUALIZAR session['user_data'] TAMBIÉN
@@ -209,11 +226,13 @@ def setup_mfa():
                             session['user_data'] = user_data
                             
                             session['mfa_verified'] = True
+                            # Limpiar datos temporales
                             session.pop('mfa_secret', None)
                             session.pop('mfa_qr_code', None)
                             session.pop('manual_entry_key', None)
+                            session.pop('mfa_pending_user_id', None)
                             
-                            print(f"🔥 MFA HABILITADO - Estado actualizado:")
+                            print(f"🔥 MFA HABILITADO - Estado actualizado para usuario REAL:")
                             print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
                             print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
                             
@@ -228,16 +247,16 @@ def setup_mfa():
                     flash('❌ Código incorrecto. Verifica el código e intenta nuevamente.', 'error')
         
         elif action == 'disable':
-            # Deshabilitar MFA via API
+            # Deshabilitar MFA via API con ID REAL
             password = request.form.get('password', '')
             
             if not password:
                 flash('❌ Por favor ingresa tu contraseña para deshabilitar MFA', 'error')
             else:
-                # Re-autenticar usuario
+                # Re-autenticar usuario con ID REAL
                 user = BackofficeUser.authenticate(current_user.username, password)
-                if user and user.id == current_user.id:
-                    if disable_mfa_for_user(current_user.id):
+                if user and user.id == real_user_id:  # 🔥 Validar ID real
+                    if disable_mfa_for_user(real_user_id):
                         # 🔥 ACTUALIZAR ESTADO LOCAL DEL USUARIO
                         current_user.mfa_enabled = False
                         
@@ -249,7 +268,7 @@ def setup_mfa():
                         
                         session.pop('mfa_verified', None)
                         
-                        print(f"🔥 MFA DESHABILITADO - Estado actualizado:")
+                        print(f"🔥 MFA DESHABILITADO - Estado actualizado para usuario REAL:")
                         print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
                         print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
                         
@@ -260,29 +279,36 @@ def setup_mfa():
                 else:
                     flash('❌ Contraseña incorrecta', 'error')
     
-    # Obtener estado MFA actual SIEMPRE DESDE LA API
-    mfa_status = check_user_mfa_status(current_user.id)
+    # Obtener estado MFA actual SIEMPRE DESDE LA API usando ID REAL
+    mfa_status = check_user_mfa_status(real_user_id)
     mfa_enabled = mfa_status.get('mfa_enabled', False)
     qr_code = session.get('mfa_qr_code') if not mfa_enabled else None
     manual_entry_key = session.get('manual_entry_key') if not mfa_enabled else None
     
-    # 🔥 DEBUG: Mostrar estado actual
-    print(f"🔍 Estado MFA actual:")
+    # 🔥 DEBUG: Mostrar estado actual con ID REAL
+    print(f"🔍 Estado MFA actual (usuario REAL {real_user_id}):")
     print(f"   - API mfa_enabled: {mfa_enabled}")
     print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
     print(f"   - session user_data: {session.get('user_data', {}).get('mfa_enabled')}")
+    print(f"   - ID en sesión: {session.get('mfa_pending_user_id')}")
     
     return render_template('auth/setup_mfa.html', 
                          qr_code=qr_code,
                          mfa_enabled=mfa_enabled,
                          manual_entry_key=manual_entry_key,
-                         user_email=current_user.email or current_user.username)
+                         user_email=current_user.email or current_user.username,
+                         real_user_id=real_user_id)  # 🔥 Pasar ID real al template
 
-# FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API
+# FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API - VERSIÓN CORREGIDA
 
-def generate_mfa_secret_api(user_id, issuer="OnFire"):
-    """Generar secreto MFA a través de la API"""
+def generate_mfa_secret_api(user_id, issuer="FirefighterAI"):
+    """Generar secreto MFA a través de la API - VERSIÓN CORREGIDA"""
     try:
+        # 🔥 VALIDAR ID primero
+        if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+            print(f"❌ ID inválido para generar MFA: {user_id}")
+            return None
+            
         api_url = current_app.config['API_BASE_URL']
         token = session.get('api_token')
         
@@ -290,7 +316,7 @@ def generate_mfa_secret_api(user_id, issuer="OnFire"):
             print("❌ No hay token de API disponible")
             return None
             
-        print(f"🔐 Generando MFA secret para usuario: {user_id}")
+        print(f"🔐 Generando MFA secret para usuario REAL: {user_id}")
         print(f"🌐 API URL: {api_url}/api/users/{user_id}/mfa/generate")
         
         headers = {
@@ -312,7 +338,7 @@ def generate_mfa_secret_api(user_id, issuer="OnFire"):
         if response.status_code == 200:
             data = response.json()
             if data.get('ok'):
-                print("✅ MFA secret generado exitosamente")
+                print("✅ MFA secret generado exitosamente para usuario REAL")
                 return {
                     'secret': data.get('secret'),
                     'qr_code': data.get('qr_code'),
@@ -337,7 +363,12 @@ def generate_mfa_secret_api(user_id, issuer="OnFire"):
         return None
 
 def check_user_mfa_status(user_id):
-    """Verificar estado MFA del usuario via API"""
+    """Verificar estado MFA del usuario via API - VERSIÓN CORREGIDA"""
+    # 🔥 VALIDAR ID primero
+    if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID inválido para verificar MFA: {user_id}")
+        return {'mfa_enabled': False, 'mfa_secret': ''}
+        
     try:
         headers = get_auth_headers()
         response = requests.get(
@@ -358,7 +389,12 @@ def check_user_mfa_status(user_id):
     return {'mfa_enabled': False, 'mfa_secret': ''}
 
 def verify_mfa_with_api(user_id, mfa_code):
-    """Verificar código MFA via API"""
+    """Verificar código MFA via API - VERSIÓN CORREGIDA"""
+    # 🔥 VALIDAR ID primero
+    if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID inválido para verificar MFA: {user_id}")
+        return False
+        
     try:
         headers = get_auth_headers()
         response = requests.post(
@@ -377,7 +413,12 @@ def verify_mfa_with_api(user_id, mfa_code):
     return False
 
 def verify_mfa_setup(user_id, mfa_code, secret):
-    """Verificar código durante setup MFA"""
+    """Verificar código durante setup MFA - VERSIÓN CORREGIDA"""
+    # 🔥 VALIDAR ID primero
+    if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID inválido para verificar setup MFA: {user_id}")
+        return False
+        
     try:
         headers = get_auth_headers()
         response = requests.post(
@@ -392,7 +433,7 @@ def verify_mfa_setup(user_id, mfa_code, secret):
     except Exception as e:
         current_app.logger.error(f"Error verifying MFA setup: {e}")
     
-    # Fallback: verificar localmente
+    # Fallback: verificar localmente (solo si la API falla)
     try:
         totp = pyotp.TOTP(secret)
         return totp.verify(mfa_code, valid_window=2)
@@ -401,7 +442,12 @@ def verify_mfa_setup(user_id, mfa_code, secret):
         return False
 
 def enable_mfa_for_user(user_id, secret):
-    """Habilitar MFA para usuario via API"""
+    """Habilitar MFA para usuario via API - VERSIÓN CORREGIDA"""
+    # 🔥 VALIDAR ID primero
+    if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID inválido para habilitar MFA: {user_id}")
+        return False
+        
     try:
         headers = get_auth_headers()
         response = requests.post(
@@ -418,7 +464,12 @@ def enable_mfa_for_user(user_id, secret):
     return False
 
 def disable_mfa_for_user(user_id):
-    """Deshabilitar MFA para usuario via API"""
+    """Deshabilitar MFA para usuario via API - VERSIÓN CORREGIDA"""
+    # 🔥 VALIDAR ID primero
+    if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+        print(f"❌ ID inválido para deshabilitar MFA: {user_id}")
+        return False
+        
     try:
         headers = get_auth_headers()
         response = requests.post(
@@ -432,6 +483,8 @@ def disable_mfa_for_user(user_id):
     except Exception as e:
         current_app.logger.error(f"Error disabling MFA: {e}")
     return False
+
+# LAS SIGUIENTES RUTAS NO NECESITAN CAMBIOS (SE MANTIENEN IGUAL):
 
 @bp.route('/logout')
 @login_required

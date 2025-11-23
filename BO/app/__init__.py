@@ -38,17 +38,20 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         print(f"🔍 User loader llamado para user_id: {user_id}")
-        print(f"📋 Sesión actual: {dict(session)}")
+        
+        # 🔥 VALIDACIÓN: Rechazar IDs ficticios inmediatamente
+        if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
+            print(f"❌ ID ficticio en user_loader: {user_id}")
+            return None
         
         try:
-            # ✅ SOLUCIÓN MEJORADA: Buscar usuario en múltiples fuentes
             token = session.get('api_token')
             user_data = session.get('user_data')
             
             print(f"🔑 Token en sesión: {'✅' if token else '❌'}")
             print(f"📦 User data en sesión: {'✅' if user_data else '❌'}")
             
-            # PRIMERO: Intentar cargar desde user_data de sesión
+            # PRIMERO: Intentar cargar desde user_data de sesión (si el ID coincide)
             if user_data and user_data.get('id') == user_id:
                 print("🔄 Cargando usuario desde session['user_data']")
                 user = BackofficeUser.from_dict(user_data)
@@ -66,22 +69,7 @@ def create_app():
                     print(f"✅ Usuario cargado desde API: {user.username}")
                     return user
             
-            # TERCERO: Fallback a admin local
-            if user_id == "admin-local":
-                print("🔄 Cargando admin local")
-                user = BackofficeUser(
-                    id="admin-local",
-                    username=Config.ADMIN_USERNAME,
-                    email="admin@local",
-                    role="admin",
-                    mfa_enabled=False,
-                    mfa_secret="",
-                    token="local-admin-token"
-                )
-                session['user_data'] = user.to_dict()
-                return user
-                
-            print(f"❌ No se pudo cargar usuario {user_id}")
+            print(f"❌ No se pudo cargar usuario REAL {user_id}")
             return None
                 
         except Exception as e:
