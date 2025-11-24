@@ -288,7 +288,7 @@ function showNotification(message, type = 'info', duration = 5000) {
 function checkAuth() {
   const token = localStorage.getItem('authToken');
   if (!token && !window.location.pathname.includes('login')) {
-    window.location.href = '/login';
+    window.location.href = '/auth/login';
     return false;
   }
   
