@@ -26,8 +26,8 @@ def login():
     
     if current_user.is_authenticated:
         print("✅ Usuario ya autenticado, redirigiendo a dashboard")
-        return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
-        
+        return redirect('/dashboard')  # ✅ CORREGIDO
+    
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password') or ''
@@ -62,7 +62,7 @@ def login():
                 session['pending_username'] = user.username
                 session['mfa_start_time'] = time.time()
                 session['mfa_attempts'] = 0
-                return redirect('/auth/verify-mfa')  # ✅ CORREGIDO: url_for → ruta directa
+                return redirect('/auth/verify-mfa')  # ✅ CORREGIDO
             else:
                 # ✅ LOGIN DIRECTO SIN MFA
                 print(f"🔓 Login directo SIN MFA para: {user.username}")
@@ -75,7 +75,7 @@ def login():
                 if current_user.is_authenticated:
                     session['mfa_verified'] = True
                     flash('✅ ¡Bienvenido/a!', 'success')
-                    return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
+                    return redirect('/dashboard')  # ✅ CORREGIDO
                 else:
                     print("❌ CRÍTICO: login_user no estableció autenticación")
                     flash('❌ Error interno de autenticación', 'error')
@@ -94,13 +94,13 @@ def verify_mfa():
     
     if not pending_user_id:
         flash('⏰ Sesión expirada. Por favor inicia sesión nuevamente.', 'warning')
-        return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+        return redirect('/auth/login')  # ✅ CORREGIDO
     
     # Verificar tiempo de sesión (30 minutos)
     if time.time() - session.get('mfa_start_time', 0) > 1800:
         session.clear()
         flash('⏰ Tiempo de sesión agotado. Por favor inicia sesión nuevamente.', 'warning')
-        return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+        return redirect('/auth/login')  # ✅ CORREGIDO
     
     if request.method == 'POST':
         mfa_code = request.form.get('mfa_code', '').strip().replace(' ', '')
@@ -116,7 +116,7 @@ def verify_mfa():
         if mfa_attempts > 5:
             session.clear()
             flash('🚫 Demasiados intentos fallidos. Sesión cerrada por seguridad.', 'error')
-            return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+            return redirect('/auth/login')  # ✅ CORREGIDO
         
         # Verificar código MFA con la API (CON AUTENTICACIÓN)
         if verify_mfa_with_api(pending_user_id, mfa_code):
@@ -138,7 +138,7 @@ def verify_mfa():
                 
                 print(f"✅ MFA verificado exitosamente para: {user.username}")
                 flash('✅ ¡Verificación exitosa! Bienvenido/a.', 'success')
-                return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
+                return redirect('/dashboard')  # ✅ CORREGIDO
             else:
                 flash('❌ Error al cargar usuario después de MFA', 'error')
         else:
@@ -163,7 +163,7 @@ def setup_mfa():
     if not current_user.id or current_user.id in ['None', 'admin-fallback', 'admin-local']:
         print(f"❌ ID ficticio detectado: {current_user.id}")
         flash('❌ Error: ID de usuario no válido para MFA', 'error')
-        return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
+        return redirect('/dashboard')  # ✅ CORREGIDO
     
     real_user_id = current_user.id
     print(f"🎯 Usando ID REAL para MFA: {real_user_id}")
@@ -190,7 +190,7 @@ def setup_mfa():
                 print(f"❌ Error generando QR code para usuario REAL")
                 flash('❌ Error generando código QR. Intenta nuevamente.', 'error')
             
-            return redirect('/auth/setup-mfa')  # ✅ CORREGIDO: url_for → ruta directa
+            return redirect('/auth/setup-mfa')  # ✅ CORREGIDO
         
         elif action == 'enable':
             # Verificar código y habilitar MFA con ID REAL
@@ -202,7 +202,7 @@ def setup_mfa():
             if pending_user_id != real_user_id:
                 print(f"❌ ID de sesión no coincide: {pending_user_id} vs {real_user_id}")
                 flash('❌ Error de sesión: ID de usuario no coincide', 'error')
-                return redirect('/auth/setup-mfa')  # ✅ CORREGIDO: url_for → ruta directa
+                return redirect('/auth/setup-mfa')  # ✅ CORREGIDO
             
             if not mfa_code:
                 flash('❌ Por favor ingresa el código de verificación', 'error')
@@ -237,7 +237,7 @@ def setup_mfa():
                             print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
                             
                             flash('✅ MFA habilitado correctamente. Tu cuenta ahora está más segura.', 'success')
-                            return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
+                            return redirect('/dashboard')  # ✅ CORREGIDO
                         else:
                             flash('❌ Error al habilitar MFA en el servidor', 'error')
                     except Exception as e:
@@ -273,7 +273,7 @@ def setup_mfa():
                         print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
                         
                         flash('✅ MFA deshabilitado correctamente', 'success')
-                        return redirect('/dashboard')  # ✅ CORREGIDO: url_for → ruta directa
+                        return redirect('/dashboard')  # ✅ CORREGIDO
                     else:
                         flash('❌ Error al deshabilitar MFA', 'error')
                 else:
@@ -297,7 +297,7 @@ def setup_mfa():
                          mfa_enabled=mfa_enabled,
                          manual_entry_key=manual_entry_key,
                          user_email=current_user.email or current_user.username,
-                         real_user_id=real_user_id)  # 🔥 Pasar ID real al template
+                         real_user_id=real_user_id)
 
 # FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API - VERSIÓN CORREGIDA
 
@@ -493,7 +493,7 @@ def logout():
     session.clear()
     logout_user()
     flash('👋 Sesión cerrada correctamente. ¡Vuelve pronto!', 'success')
-    return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+    return redirect('/auth/login')  # ✅ CORREGIDO
 
 @bp.route('/mfa-recovery')
 def mfa_recovery():
@@ -502,7 +502,7 @@ def mfa_recovery():
     
     if not pending_user_id:
         flash('Sesión expirada', 'error')
-        return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+        return redirect('/auth/login')  # ✅ CORREGIDO
     
     return render_template('auth/mfa_recovery.html', 
                          username=session.get('pending_username'))
@@ -512,7 +512,7 @@ def clear_session():
     """Ruta temporal para limpiar sesiones - SOLO DESARROLLO"""
     session.clear()
     flash('🧹 Sesión limpiada correctamente', 'info')
-    return redirect('/auth/login')  # ✅ CORREGIDO: url_for → ruta directa
+    return redirect('/auth/login')  # ✅ CORREGIDO
 
 @bp.route('/debug-session')
 def debug_session():
