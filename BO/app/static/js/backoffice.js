@@ -3,10 +3,64 @@
 document.addEventListener('DOMContentLoaded', function() {
   console.log('🔥 FirefighterAI BackOffice - Inicializado');
   
+  // VERIFICAR AUTENTICACIÓN PRIMERO
+  if (!checkAuth()) {
+    return; // Detener si no está autenticado
+  }
+  
   initializeLayout();
   initializeDashboard();
   setupGlobalHandlers();
 });
+
+// === CONFIGURACIÓN API ===
+const API_CONFIG = {
+  BASE_URL: 'http://167.71.63.108:5000',
+  TIMEOUT: 10000,
+  RETRY_ATTEMPTS: 3
+};
+
+// === FUNCIÓN DE FETCH MEJORADA CON MANEJO DE ERRORES ===
+async function apiFetch(endpoint, options = {}) {
+  const url = `${API_CONFIG.BASE_URL}${endpoint}`;
+  
+  console.log(`📡 API Call: ${url}`);
+  
+  const fetchOptions = {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers
+    },
+    mode: 'cors',
+    credentials: 'omit',
+    ...options
+  };
+
+  try {
+    const response = await fetch(url, fetchOptions);
+    
+    console.log(`📊 Response for ${endpoint}:`, response.status, response.statusText);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+    
+  } catch (error) {
+    console.error(`❌ API Error for ${endpoint}:`, error);
+    
+    // MANEJO ESPECÍFICO DE CORS Y ERRORES DE CONEXIÓN
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      showNotification('Error de conexión con el servidor', 'error');
+      throw new Error('No se pudo conectar con el servidor. Verifique la conexión.');
+    }
+    
+    throw error;
+  }
+}
 
 // === INICIALIZACIÓN PRINCIPAL ===
 function initializeLayout() {
@@ -230,10 +284,87 @@ function showNotification(message, type = 'info', duration = 5000) {
   return notification;
 }
 
+// === SISTEMA DE AUTENTICACIÓN ===
+function checkAuth() {
+  const token = localStorage.getItem('authToken');
+  if (!token && !window.location.pathname.includes('login')) {
+    window.location.href = '/login';
+    return false;
+  }
+  
+  // Si hay token, verificar que sea válido
+  if (token) {
+    // Aquí podrías agregar validación JWT si es necesario
+    console.log('✅ Usuario autenticado');
+  }
+  
+  return true;
+}
+
+// === MANEJO OFFLINE ===
+function setupOfflineHandler() {
+  window.addEventListener('online', () => {
+    showNotification('Conexión restaurada', 'success');
+    loadRealTimeData();
+    
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('SUCCESS', 'Conexión a internet restaurada');
+    }
+  });
+  
+  window.addEventListener('offline', () => {
+    showNotification('Conexión perdida - Modo offline', 'warning');
+    
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('WARNING', 'Conexión a internet perdida');
+    }
+  });
+}
+
+// === ESTADOS DE CARGA ===
+function showLoadingState(containerId) {
+  const container = document.getElementById(containerId);
+  if (container) {
+    const existingLoader = container.querySelector('.loading-spinner');
+    if (!existingLoader) {
+      container.innerHTML += '<div class="loading-spinner">Cargando...</div>';
+    }
+  }
+}
+
+function hideLoadingState(containerId) {
+  const container = document.getElementById(containerId);
+  if (container) {
+    const loadingElement = container.querySelector('.loading-spinner');
+    if (loadingElement) {
+      loadingElement.remove();
+    }
+  }
+}
+
+// === VALIDACIÓN DE RESPUESTAS API ===
+function validateApiResponse(data, expectedFields = []) {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Respuesta API inválida');
+  }
+  
+  for (const field of expectedFields) {
+    if (!(field in data)) {
+      console.warn(`Campo esperado faltante: ${field}`);
+    }
+  }
+  
+  return true;
+}
+
 // === DASHBOARD DATA FUNCTIONS ===
 async function loadRealTimeData() {
   try {
     console.log('📊 Cargando datos en tiempo real...');
+    
+    // Mostrar estados de carga
+    showLoadingState('dashboardStats');
+    showLoadingState('systemInfo');
     
     // Cargar estadísticas principales
     await loadDashboardStats();
@@ -244,10 +375,19 @@ async function loadRealTimeData() {
     // Verificar salud de la API
     await checkSystemHealth();
     
+    // Ocultar estados de carga
+    hideLoadingState('dashboardStats');
+    hideLoadingState('systemInfo');
+    
     console.log('✅ Datos cargados correctamente');
     
   } catch (error) {
     console.warn('⚠️ Advertencia cargando datos en tiempo real:', error.message);
+    
+    // Ocultar estados de carga incluso en error
+    hideLoadingState('dashboardStats');
+    hideLoadingState('systemInfo');
+    
     showFallbackData();
   }
 }
@@ -256,17 +396,11 @@ async function loadDashboardStats() {
   try {
     console.log('🔍 Cargando estadísticas del dashboard...');
     
-    // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://167.71.63.108:5000/api/dashboard/stats');
-    
-    console.log('📡 Response status:', response.status);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
+    const data = await apiFetch('/api/dashboard/stats');
     console.log('📊 Datos recibidos:', data);
+    
+    // Validar respuesta
+    validateApiResponse(data, ['ok', 'total_users', 'active_users', 'total_cards']);
     
     if (data.ok) {
       updateDashboardData(data);
@@ -286,17 +420,11 @@ async function updateSystemInfo() {
   try {
     console.log('🔍 Cargando información del sistema...');
     
-    // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://167.71.63.108:5000/api/dashboard/system-info');
-    
-    console.log('📡 System info response status:', response.status);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
+    const data = await apiFetch('/api/dashboard/system-info');
     console.log('🔧 Info sistema recibida:', data);
+    
+    // Validar respuesta
+    validateApiResponse(data, ['ok', 'db_users_count', 'db_status']);
     
     if (data.ok) {
       // Actualizar usuarios en DB
@@ -481,21 +609,19 @@ async function checkSystemHealth() {
   try {
     console.log('🔍 Verificando salud de la API...');
     
-    // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://167.71.63.108:5000/api/dashboard/health');
+    const startTime = performance.now();
+    const data = await apiFetch('/api/dashboard/health');
+    const endTime = performance.now();
+    const responseTime = Math.round(endTime - startTime);
     
-    console.log('📡 Health check response status:', response.status);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
     console.log('🏥 Health data recibida:', data);
+    
+    // Track performance
+    trackPerformance('Health Check', responseTime);
     
     if (window.dockerLogsManager) {
       if (data.ok) {
-        window.dockerLogsManager.addSystemLog('SUCCESS', `API saludable - Tiempo respuesta: ${data.response_time || '< 100'}ms`);
+        window.dockerLogsManager.addSystemLog('SUCCESS', `API saludable - Tiempo respuesta: ${responseTime}ms`);
       } else {
         window.dockerLogsManager.addSystemLog('WARNING', 'API reporta problemas en health check');
       }
@@ -556,284 +682,7 @@ function showSystemInfoFallback() {
   updateLastUpdateTime();
 }
 
-// Función para debug - probar todos los endpoints
-async function debugAllEndpoints() {
-  console.log('🔍 === DEBUGGING ENDPOINTS ===');
-  
-  const endpoints = [
-    'http://167.71.63.108:5000/api/dashboard/stats',
-    'http://167.71.63.108:5000/api/dashboard/system-info',
-    'http://167.71.63.108:5000/api/dashboard/health'
-  ];
-  
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`🧪 Probando endpoint: ${endpoint}`);
-      
-      const response = await fetch(endpoint);
-      console.log(`📡 ${endpoint} - Status: ${response.status}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ ${endpoint} - Data:`, data);
-      } else {
-        const errorText = await response.text();
-        console.error(`❌ ${endpoint} - Error:`, errorText);
-      }
-    } catch (error) {
-      console.error(`🚫 ${endpoint} - Exception:`, error);
-    }
-  }
-  
-  console.log('🔍 === DEBUG COMPLETADO ===');
-}
-
-// Ejecutar debug automáticamente si está en desarrollo
-if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-  setTimeout(debugAllEndpoints, 3000);
-}
-
-// === FUNCIONES GLOBALES PARA BOTONES ===
-function refreshAllData() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando todos los datos...');
-  }
-  
-  // Mostrar indicador de carga en el botón
-  const refreshBtn = event?.target;
-  if (refreshBtn) {
-    const originalContent = refreshBtn.innerHTML;
-    refreshBtn.innerHTML = '<span>🔄</span> Actualizando...';
-    refreshBtn.disabled = true;
-    
-    // Restaurar botón después de la actualización
-    setTimeout(() => {
-      refreshBtn.innerHTML = originalContent;
-      refreshBtn.disabled = false;
-    }, 2000);
-  }
-  
-  // Actualizar datos
-  loadRealTimeData();
-  
-  // Simular verificación de componentes
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 'Verificando estado de la API...');
-    }
-  }, 500);
-  
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 'Verificando conexión a la base de datos...');
-    }
-  }, 1000);
-  
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('SUCCESS', 'Actualización completa finalizada');
-    }
-  }, 2000);
-}
-
-function runSystemDiagnostics() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Iniciando diagnóstico completo del sistema...');
-  }
-  
-  // Mostrar indicador de carga en el botón
-  const diagnosticBtn = event?.target;
-  if (diagnosticBtn) {
-    const originalContent = diagnosticBtn.innerHTML;
-    diagnosticBtn.innerHTML = '<span>⚡</span> Ejecutando...';
-    diagnosticBtn.disabled = true;
-    
-    // Restaurar botón al final
-    setTimeout(() => {
-      diagnosticBtn.innerHTML = originalContent;
-      diagnosticBtn.disabled = false;
-    }, 4000);
-  }
-  
-  let diagnosticSteps = [
-    { step: 'Verificando API principal', delay: 500, status: 'INFO' },
-    { step: 'Comprobando conexión a base de datos', delay: 1000, status: 'INFO' },
-    { step: 'Validando usuarios activos', delay: 1500, status: 'INFO' },
-    { step: 'Revisando integridad de memory cards', delay: 2000, status: 'INFO' },
-    { step: 'Verificando espacio en disco', delay: 2500, status: 'INFO' },
-    { step: 'Comprobando memoria del sistema', delay: 3000, status: 'INFO' },
-    { step: 'Validando logs de contenedores', delay: 3500, status: 'INFO' }
-  ];
-  
-  // Ejecutar diagnósticos secuencialmente
-  diagnosticSteps.forEach((diagnostic, index) => {
-    setTimeout(() => {
-      if (window.dockerLogsManager) {
-        window.dockerLogsManager.addSystemLog(diagnostic.status, diagnostic.step);
-        
-        // Simular algunos resultados
-        setTimeout(() => {
-          if (diagnostic.step.includes('API')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'API respondiendo correctamente (200ms)');
-          } else if (diagnostic.step.includes('base de datos')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Conexión DB estable (15ms)');
-          } else if (diagnostic.step.includes('usuarios')) {
-            const userCount = document.getElementById('dbUsersCount')?.textContent || '0';
-            window.dockerLogsManager.addSystemLog('SUCCESS', `${userCount} usuarios validados correctamente`);
-          } else if (diagnostic.step.includes('memory cards')) {
-            const cardCount = document.getElementById('totalCards')?.textContent || '0';
-            window.dockerLogsManager.addSystemLog('SUCCESS', `${cardCount} tarjetas íntegras`);
-          } else if (diagnostic.step.includes('espacio')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Espacio disponible: 75% libre');
-          } else if (diagnostic.step.includes('memoria')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Memoria del sistema: 68% en uso');
-          } else if (diagnostic.step.includes('logs')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Logs funcionando correctamente');
-          }
-        }, 200);
-      }
-    }, diagnostic.delay);
-  });
-  
-  // Finalizar diagnóstico
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('SUCCESS', '✅ Diagnóstico completado - Todos los sistemas operativos');
-      window.dockerLogsManager.addSystemLog('INFO', 'Resultado: Sistema funcionando óptimamente');
-    }
-  }, 4000);
-  
-  // Actualizar datos después del diagnóstico
-  setTimeout(() => {
-    updateSystemInfo();
-  }, 4500);
-}
-
-function checkApiHealth() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Verificando salud de la API...');
-  }
-  
-  checkSystemHealth();
-}
-
-function refreshMetric(metric) {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', `Actualizando métrica: ${metric}`);
-  }
-  loadRealTimeData();
-}
-
-function refreshActivity() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando actividad reciente...');
-  }
-  loadRealTimeData();
-}
-
-function refreshCharts() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando gráficos del sistema...');
-  }
-  loadRealTimeData();
-}
-
-function expandWidget(btn) {
-  const widget = btn.closest('.widget');
-  if (widget) {
-    widget.classList.toggle('expanded');
-    btn.textContent = widget.classList.contains('expanded') ? '⛶' : '⛶';
-    
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 'Vista de widget modificada');
-    }
-  }
-}
-
-function exportData() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Iniciando exportación de datos...');
-    
-    setTimeout(() => {
-      window.dockerLogsManager.addSystemLog('SUCCESS', 'Datos exportados correctamente');
-    }, 1000);
-  }
-}
-
-// === FUNCIONES DE LOG CONTROLS GLOBALES ===
-function startLiveLogs() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.startLiveLogs();
-  }
-}
-
-function stopLiveLogs() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.stopLiveLogs();
-  }
-}
-
-function refreshLogs() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.refreshLogs();
-  }
-}
-
-function clearLogs() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.clearLogs();
-  }
-}
-
-function exportLogs() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.exportLogs();
-  }
-}
-
-// === REAL TIME UPDATES ===
-function startRealTimeUpdates() {
-  // Actualizar cada 30 segundos
-  setInterval(loadRealTimeData, 30000);
-  
-  // Actualizar información del sistema cada 10 segundos
-  setInterval(updateSystemInfo, 10000);
-  
-  // Actualizar hora actual cada segundo
-  setInterval(updateLastUpdateTime, 1000);
-}
-
-// === KEYBOARD SHORTCUTS ===
-function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', function(e) {
-    // Ctrl + R para actualizar datos
-    if (e.ctrlKey && e.key === 'r') {
-      e.preventDefault();
-      refreshAllData();
-    }
-    
-    // Ctrl + D para diagnóstico
-    if (e.ctrlKey && e.key === 'd') {
-      e.preventDefault();
-      runSystemDiagnostics();
-    }
-    
-    // Escape para cerrar menús
-    if (e.key === 'Escape') {
-      closeMobileMenu();
-      const userMenu = document.getElementById('userMenuDropdown');
-      if (userMenu) userMenu.classList.remove('show');
-    }
-  });
-}
-
-// === API HEALTH MONITOR ===
-function setupApiHealthMonitor() {
-  // Verificar salud de la API cada 2 minutos
-  setInterval(checkSystemHealth, 120000);
-}
-
-// === DOCKER LOGS MANAGER ===
+// === DOCKER LOGS MANAGER CORREGIDO ===
 class DockerLogsManager {
   constructor() {
     this.logsContainer = document.getElementById('logsContainer');
@@ -866,15 +715,7 @@ class DockerLogsManager {
   
   async loadInitialLogs() {
     try {
-      // URL COMPLETA AL API EN PUERTO 5000
-      const response = await fetch('http://167.71.63.108:5000/api/docker/logs');
-      
-      if (!response.ok) {
-        console.warn(`API responded with status: ${response.status}`);
-        return;
-      }
-      
-      const data = await response.json();
+      const data = await apiFetch('/api/docker/logs');
       this.displayLogs(data.logs || []);
       
     } catch (error) {
@@ -1106,10 +947,7 @@ class DockerLogsManager {
     try {
       this.addSystemLog('INFO', '📥 Preparando exportación de logs...');
       
-      // URL COMPLETA AL API EN PUERTO 5000
-      const response = await fetch('http://167.71.63.108:5000/api/docker/logs?lines=100');
-      
-      const data = await response.json();
+      const data = await apiFetch('/api/docker/logs?lines=100');
       
       if (data.ok && data.logs) {
         const logText = data.logs.map(log => 
@@ -1137,16 +975,318 @@ class DockerLogsManager {
   }
 }
 
-// === CONFIGURACIÓN GLOBAL ===
+// === FUNCIONES GLOBALES ===
+function refreshAllData() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando todos los datos...');
+  }
+  
+  // Mostrar indicador de carga en el botón
+  const refreshBtn = event?.target;
+  if (refreshBtn) {
+    const originalContent = refreshBtn.innerHTML;
+    refreshBtn.innerHTML = '<span>🔄</span> Actualizando...';
+    refreshBtn.disabled = true;
+    
+    // Restaurar botón después de la actualización
+    setTimeout(() => {
+      refreshBtn.innerHTML = originalContent;
+      refreshBtn.disabled = false;
+    }, 2000);
+  }
+  
+  // Actualizar datos
+  loadRealTimeData();
+  
+  // Simular verificación de componentes
+  setTimeout(() => {
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('INFO', 'Verificando estado de la API...');
+    }
+  }, 500);
+  
+  setTimeout(() => {
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('INFO', 'Verificando conexión a la base de datos...');
+    }
+  }, 1000);
+  
+  setTimeout(() => {
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('SUCCESS', 'Actualización completa finalizada');
+    }
+  }, 2000);
+}
+
+function runSystemDiagnostics() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Iniciando diagnóstico completo del sistema...');
+  }
+  
+  // Mostrar indicador de carga en el botón
+  const diagnosticBtn = event?.target;
+  if (diagnosticBtn) {
+    const originalContent = diagnosticBtn.innerHTML;
+    diagnosticBtn.innerHTML = '<span>⚡</span> Ejecutando...';
+    diagnosticBtn.disabled = true;
+    
+    // Restaurar botón al final
+    setTimeout(() => {
+      diagnosticBtn.innerHTML = originalContent;
+      diagnosticBtn.disabled = false;
+    }, 4000);
+  }
+  
+  let diagnosticSteps = [
+    { step: 'Verificando API principal', delay: 500, status: 'INFO' },
+    { step: 'Comprobando conexión a base de datos', delay: 1000, status: 'INFO' },
+    { step: 'Validando usuarios activos', delay: 1500, status: 'INFO' },
+    { step: 'Revisando integridad de memory cards', delay: 2000, status: 'INFO' },
+    { step: 'Verificando espacio en disco', delay: 2500, status: 'INFO' },
+    { step: 'Comprobando memoria del sistema', delay: 3000, status: 'INFO' },
+    { step: 'Validando logs de contenedores', delay: 3500, status: 'INFO' }
+  ];
+  
+  // Ejecutar diagnósticos secuencialmente
+  diagnosticSteps.forEach((diagnostic, index) => {
+    setTimeout(() => {
+      if (window.dockerLogsManager) {
+        window.dockerLogsManager.addSystemLog(diagnostic.status, diagnostic.step);
+        
+        // Simular algunos resultados
+        setTimeout(() => {
+          if (diagnostic.step.includes('API')) {
+            window.dockerLogsManager.addSystemLog('SUCCESS', 'API respondiendo correctamente (200ms)');
+          } else if (diagnostic.step.includes('base de datos')) {
+            window.dockerLogsManager.addSystemLog('SUCCESS', 'Conexión DB estable (15ms)');
+          } else if (diagnostic.step.includes('usuarios')) {
+            const userCount = document.getElementById('dbUsersCount')?.textContent || '0';
+            window.dockerLogsManager.addSystemLog('SUCCESS', `${userCount} usuarios validados correctamente`);
+          } else if (diagnostic.step.includes('memory cards')) {
+            const cardCount = document.getElementById('totalCards')?.textContent || '0';
+            window.dockerLogsManager.addSystemLog('SUCCESS', `${cardCount} tarjetas íntegras`);
+          } else if (diagnostic.step.includes('espacio')) {
+            window.dockerLogsManager.addSystemLog('SUCCESS', 'Espacio disponible: 75% libre');
+          } else if (diagnostic.step.includes('memoria')) {
+            window.dockerLogsManager.addSystemLog('SUCCESS', 'Memoria del sistema: 68% en uso');
+          } else if (diagnostic.step.includes('logs')) {
+            window.dockerLogsManager.addSystemLog('SUCCESS', 'Logs funcionando correctamente');
+          }
+        }, 200);
+      }
+    }, diagnostic.delay);
+  });
+  
+  // Finalizar diagnóstico
+  setTimeout(() => {
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('SUCCESS', '✅ Diagnóstico completado - Todos los sistemas operativos');
+      window.dockerLogsManager.addSystemLog('INFO', 'Resultado: Sistema funcionando óptimamente');
+    }
+  }, 4000);
+  
+  // Actualizar datos después del diagnóstico
+  setTimeout(() => {
+    updateSystemInfo();
+  }, 4500);
+}
+
+function checkApiHealth() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Verificando salud de la API...');
+  }
+  
+  checkSystemHealth();
+}
+
+function refreshMetric(metric) {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', `Actualizando métrica: ${metric}`);
+  }
+  loadRealTimeData();
+}
+
+function refreshActivity() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando actividad reciente...');
+  }
+  loadRealTimeData();
+}
+
+function refreshCharts() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando gráficos del sistema...');
+  }
+  loadRealTimeData();
+}
+
+function expandWidget(btn) {
+  const widget = btn.closest('.widget');
+  if (widget) {
+    const wasExpanded = widget.classList.contains('expanded');
+    widget.classList.toggle('expanded');
+    
+    // CORRECCIÓN: Iconos diferentes para expandir/contraer
+    btn.textContent = widget.classList.contains('expanded') ? '⛷' : '⛶';
+    
+    if (window.dockerLogsManager) {
+      window.dockerLogsManager.addSystemLog('INFO', 
+        `Widget ${wasExpanded ? 'contraído' : 'expandido'}`);
+    }
+  }
+}
+
+function exportData() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('INFO', 'Iniciando exportación de datos...');
+    
+    setTimeout(() => {
+      window.dockerLogsManager.addSystemLog('SUCCESS', 'Datos exportados correctamente');
+    }, 1000);
+  }
+}
+
+// === FUNCIONES DE LOG CONTROLS GLOBALES ===
+function startLiveLogs() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.startLiveLogs();
+  }
+}
+
+function stopLiveLogs() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.stopLiveLogs();
+  }
+}
+
+function refreshLogs() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.refreshLogs();
+  }
+}
+
+function clearLogs() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.clearLogs();
+  }
+}
+
+function exportLogs() {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.exportLogs();
+  }
+}
+
+// === REAL TIME UPDATES ===
+function startRealTimeUpdates() {
+  // Actualizar cada 30 segundos
+  setInterval(loadRealTimeData, 30000);
+  
+  // Actualizar información del sistema cada 10 segundos
+  setInterval(updateSystemInfo, 10000);
+  
+  // Actualizar hora actual cada segundo
+  setInterval(updateLastUpdateTime, 1000);
+}
+
+// === KEYBOARD SHORTCUTS ===
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', function(e) {
+    // Ctrl + R para actualizar datos
+    if (e.ctrlKey && e.key === 'r') {
+      e.preventDefault();
+      refreshAllData();
+    }
+    
+    // Ctrl + D para diagnóstico
+    if (e.ctrlKey && e.key === 'd') {
+      e.preventDefault();
+      runSystemDiagnostics();
+    }
+    
+    // Escape para cerrar menús
+    if (e.key === 'Escape') {
+      closeMobileMenu();
+      const userMenu = document.getElementById('userMenuDropdown');
+      if (userMenu) userMenu.classList.remove('show');
+    }
+  });
+}
+
+// === API HEALTH MONITOR ===
+function setupApiHealthMonitor() {
+  // Verificar salud de la API cada 2 minutos
+  setInterval(checkSystemHealth, 120000);
+}
+
+// === MÉTRICAS DE PERFORMANCE ===
+function trackPerformance(metricName, duration) {
+  if (window.dockerLogsManager) {
+    window.dockerLogsManager.addSystemLog('PERF', `${metricName}: ${duration}ms`);
+  }
+  
+  // También guardar en localStorage para analytics
+  const perfData = JSON.parse(localStorage.getItem('performanceMetrics') || '[]');
+  perfData.push({
+    metric: metricName,
+    duration: duration,
+    timestamp: new Date().toISOString()
+  });
+  
+  // Mantener solo los últimos 100 registros
+  if (perfData.length > 100) {
+    perfData.splice(0, perfData.length - 100);
+  }
+  
+  localStorage.setItem('performanceMetrics', JSON.stringify(perfData));
+}
+
+// === CLEANUP DE RECURSOS ===
+function cleanup() {
+  if (window.dockerLogsManager) {
+    if (window.dockerLogsManager.liveInterval) {
+      clearInterval(window.dockerLogsManager.liveInterval);
+    }
+  }
+  
+  // Limpiar todos los intervals globales conocidos
+  const intervalIds = Object.keys(window).filter(key => key.startsWith('intervalId_'));
+  intervalIds.forEach(id => {
+    clearInterval(window[id]);
+  });
+}
+
+// === CONFIGURACIÓN GLOBAL COMPLETA ===
 function setupGlobalHandlers() {
   // Manejar errores globales
   window.addEventListener('error', function(e) {
     console.error('Error global:', e.error);
+    showNotification('Error inesperado en la aplicación', 'error');
   });
   
   // Manejar promesas rechazadas
   window.addEventListener('unhandledrejection', function(e) {
     console.warn('Promesa rechazada:', e.reason);
+    showNotification('Error en operación asíncrona', 'warning');
     e.preventDefault();
   });
+  
+  // Configurar manejo offline
+  setupOfflineHandler();
+  
+  // Configurar cleanup cuando la página se cierre
+  window.addEventListener('beforeunload', cleanup);
+  
+  // Configurar cleanup cuando la página se oculte (para móviles)
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      // Limpiar recursos temporales cuando la página no es visible
+      if (window.dockerLogsManager && window.dockerLogsManager.isLive) {
+        window.dockerLogsManager.stopLiveLogs();
+      }
+    }
+  });
 }
+
+// === INICIALIZACIÓN COMPLETA DEL SISTEMA ===
+console.log('🚀 FirefighterAI BackOffice JavaScript cargado correctamente');
