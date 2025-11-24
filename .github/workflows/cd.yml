@@ -277,7 +277,7 @@ jobs:
             echo "🌍 IP externa detectada: $SERVER_IP"
             
             cat << EOF > /root/firefighter.env
-            # 🔥 CLAVES SECRETAS SEPARADAS PARA SESIONES
+            # 🔥 CLAVES SECRETAS SEPARADAS PARA SESIONES (CRÍTICO)
             FRONTEND_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
             BACKOFFICE_SECRET_KEY=${{ secrets.BACKOFFICE_SECRET_KEY }}
             
@@ -285,7 +285,7 @@ jobs:
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             JWT_EXPIRES_HOURS=${{ secrets.JWT_EXPIRES_HOURS }}
             
-            # MongoDB Atlas
+            # MongoDB Atlas (COMPLETO)
             MONGO_CLUSTER=${{ secrets.MONGO_CLUSTER }}
             MONGO_USER=${{ secrets.MONGO_USER }}
             MONGO_PASS=${{ secrets.MONGO_PASS }}
@@ -296,13 +296,15 @@ jobs:
             VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
             VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
             
-            # Admin credentials
+            # 🔥 ADMIN CREDENTIALS COMPLETAS
             ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
-            ADMIN_PASSWORD=admin123
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
             
             # Configuración de sesiones
             FRONTEND_SESSION_TIMEOUT=86400
             BACKOFFICE_SESSION_TIMEOUT=28800
+            
+            # 🔥 MFA CONFIGURATION (NECESARIA PARA BACKOFFICE)
             MFA_ISSUER=FirefighterAI
             
             # 🔥 URLs CORREGIDAS PARA NAVEGADOR EXTERNO
@@ -321,15 +323,15 @@ jobs:
             # Verificar que el archivo se creó correctamente
             if [ -f /root/firefighter.env ]; then
               echo "📋 Variables configuradas ($(wc -l < /root/firefighter.env) líneas)"
-              echo "🔍 Verificando URLs..."
-              grep "API_BASE_URL" /root/firefighter.env || echo "⚠️ API_BASE_URL no encontrado"
-              grep "FRONTEND_API_BASE_URL" /root/firefighter.env || echo "⚠️ FRONTEND_API_BASE_URL no encontrado"
-              grep "BACKOFFICE_API_BASE_URL" /root/firefighter.env || echo "⚠️ BACKOFFICE_API_BASE_URL no encontrado"
+              echo "🔍 Verificando variables CRÍTICAS..."
+              grep "BACKOFFICE_SECRET_KEY" /root/firefighter.env || echo "❌ BACKOFFICE_SECRET_KEY no encontrado - CRÍTICO"
+              grep "ADMIN_PASSWORD" /root/firefighter.env || echo "❌ ADMIN_PASSWORD no encontrado"
+              grep "MFA_ISSUER" /root/firefighter.env || echo "❌ MFA_ISSUER no encontrado"
+              grep "API_BASE_URL" /root/firefighter.env || echo "❌ API_BASE_URL no encontrado"
             else
               echo "❌ Error: Archivo de variables no creado"
               exit 1
             fi
-
       - name: 🧹 Aggressive Pre-Cleanup
         uses: appleboy/ssh-action@v0.1.10
         with:

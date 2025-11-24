@@ -2,7 +2,10 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# 🔥 CARGAR VARIABLES DE ENTORNO DESDE EL ARCHIVO .env
+# Especificar la ruta absoluta al archivo .env
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(env_path)
 
 class Config:
     # 🔥 SECRET KEY ESPECÍFICA PARA BACKOFFICE

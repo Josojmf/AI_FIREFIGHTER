@@ -257,7 +257,7 @@ async function loadDashboardStats() {
     console.log('🔍 Cargando estadísticas del dashboard...');
     
     // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://localhost:5000/api/dashboard/stats');
+    const response = await fetch('http://167.71.63.108:5000/api/dashboard/stats');
     
     console.log('📡 Response status:', response.status);
     
@@ -287,7 +287,7 @@ async function updateSystemInfo() {
     console.log('🔍 Cargando información del sistema...');
     
     // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://localhost:5000/api/dashboard/system-info');
+    const response = await fetch('http://167.71.63.108:5000/api/dashboard/system-info');
     
     console.log('📡 System info response status:', response.status);
     
@@ -482,7 +482,7 @@ async function checkSystemHealth() {
     console.log('🔍 Verificando salud de la API...');
     
     // URL COMPLETA AL API EN PUERTO 5000
-    const response = await fetch('http://localhost:5000/api/dashboard/health');
+    const response = await fetch('http://167.71.63.108:5000/api/dashboard/health');
     
     console.log('📡 Health check response status:', response.status);
     
@@ -561,9 +561,9 @@ async function debugAllEndpoints() {
   console.log('🔍 === DEBUGGING ENDPOINTS ===');
   
   const endpoints = [
-    'http://localhost:5000/api/dashboard/stats',
-    'http://localhost:5000/api/dashboard/system-info',
-    'http://localhost:5000/api/dashboard/health'
+    'http://167.71.63.108:5000/api/dashboard/stats',
+    'http://167.71.63.108:5000/api/dashboard/system-info',
+    'http://167.71.63.108:5000/api/dashboard/health'
   ];
   
   for (const endpoint of endpoints) {
@@ -867,7 +867,7 @@ class DockerLogsManager {
   async loadInitialLogs() {
     try {
       // URL COMPLETA AL API EN PUERTO 5000
-      const response = await fetch('http://localhost:5000/api/docker/logs');
+      const response = await fetch('http://167.71.63.108:5000/api/docker/logs');
       
       if (!response.ok) {
         console.warn(`API responded with status: ${response.status}`);
@@ -1107,7 +1107,7 @@ class DockerLogsManager {
       this.addSystemLog('INFO', '📥 Preparando exportación de logs...');
       
       // URL COMPLETA AL API EN PUERTO 5000
-      const response = await fetch('http://localhost:5000/api/docker/logs?lines=100');
+      const response = await fetch('http://167.71.63.108:5000/api/docker/logs?lines=100');
       
       const data = await response.json();
       
