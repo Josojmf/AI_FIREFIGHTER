@@ -1447,7 +1447,7 @@ if __name__ == "__main__":
     print("🚀 Auth API iniciando...")
     print(f"📊 Base de datos: {DB_NAME}")
     print(f"🔗 MongoDB URI: {MONGO_URI}")
-    print("🌐 API corriendo en http://localhost:5000")
+    print("🌐 API corriendo en http://firefighter_backend:5000")
     
     # Crear usuario admin por defecto si no existe
     try:

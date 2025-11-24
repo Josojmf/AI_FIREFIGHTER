@@ -76,7 +76,7 @@ def test_api_cards():
         
         # Primero login para obtener token
         login_response = requests.post(
-            "http://localhost:5000/api/login",
+            "http://firefighter_backend:5000/api/login",
             json={"username": "admin", "password": "admin123"},
             timeout=10
         )
@@ -88,7 +88,7 @@ def test_api_cards():
             # Ahora obtener memory cards
             headers = {'Authorization': f'Bearer {token}'}
             cards_response = requests.get(
-                "http://localhost:5000/api/memory-cards",
+                "http://firefighter_backend:5000/api/memory-cards",
                 headers=headers,
                 timeout=10
             )

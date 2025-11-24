@@ -330,7 +330,7 @@ def api_leitner_decks():
         return jsonify({"ok": True, "decks": []})
 
 # --- API externa (tu backend auth) ---
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:5000/api")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://firefighter_backend:5000/api")
 
 # --- Preguntas para home ---
 try:

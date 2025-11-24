@@ -4,7 +4,7 @@ import requests
 from datetime import datetime, timezone
 from bson import ObjectId
 
-def sync_memory_cards_to_leitner(username, cards_collection, api_base_url="http://localhost:5000", auth_token=None):
+def sync_memory_cards_to_leitner(username, cards_collection, api_base_url="http://firefighter_backend:5000", auth_token=None):
     """
     Sincroniza memory cards del BackOffice al sistema Leitner
     """
@@ -90,7 +90,7 @@ def sync_memory_cards_to_leitner(username, cards_collection, api_base_url="http:
         print(f"❌ Error en sincronización: {e}")
         return 0
 
-def create_memory_card_from_leitner(leitner_card, api_base_url="http://localhost:5000", auth_token=None):
+def create_memory_card_from_leitner(leitner_card, api_base_url="http://firefighter_backend:5000", auth_token=None):
     """
     Crea una memory card en el BO desde una carta Leitner
     """
@@ -144,7 +144,7 @@ def api_sync_memory_cards():
         synced_count = sync_memory_cards_to_leitner(
             username, 
             cards_col, 
-            api_base_url="http://localhost:5000",  # URL de tu API
+            api_base_url="http://firefighter_backend:5000",  # URL de tu API
             auth_token=auth_token
         )
         

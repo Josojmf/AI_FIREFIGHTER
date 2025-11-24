@@ -309,7 +309,7 @@ def generate_mfa_secret_api(user_id, issuer="FirefighterAI"):
             print(f"❌ ID inválido para generar MFA: {user_id}")
             return None
             
-        api_url = "http://localhost:5000"  
+        api_url = os.getenv("API_BASE_URL", "http://localhost:5000")  
         token = session.get('api_token')
         
         if not token:
