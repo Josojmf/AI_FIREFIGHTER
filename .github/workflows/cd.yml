@@ -299,6 +299,9 @@ jobs:
             BACKOFFICE_SESSION_TIMEOUT=28800
             MFA_ISSUER=FirefighterAI
             
+            # ✅ URLs DE COMUNICACIÓN ENTRE CONTENEDORES DOCKER
+            API_BASE_URL=http://firefighter_backend:5000
+            
             # Configuración general
             DEBUG=false
             EOF
@@ -309,6 +312,8 @@ jobs:
             # Verificar que el archivo se creó correctamente
             if [ -f /root/firefighter.env ]; then
               echo "📋 Variables configuradas ($(wc -l < /root/firefighter.env) líneas)"
+              echo "🔍 Verificando API_BASE_URL..."
+              grep "API_BASE_URL" /root/firefighter.env || echo "⚠️ API_BASE_URL no encontrado"
             else
               echo "❌ Error: Archivo de variables no creado"
               exit 1
