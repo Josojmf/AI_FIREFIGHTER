@@ -1,4 +1,4 @@
-# config.py - BACKOFFICE CON SESIONES SEPARADAS
+# config.py - BACKOFFICE CON SESIONES SEPARADAS - VERSIÓN CORREGIDA
 import os
 from dotenv import load_dotenv
 
@@ -6,10 +6,12 @@ load_dotenv()
 
 class Config:
     # 🔥 SECRET KEY ESPECÍFICA PARA BACKOFFICE
-    SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY', 'firefighter-backoffice-secret-2024')
+    SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY', 'firefighter-backoffice-ultra-secret-production-2024-jose')
     
-    # API y configuración general
-    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:5000')
+    # 🔥 URLs ABSOLUTAS - VALORES POR DEFECTO EXPLÍCITOS
+    API_BASE_URL = os.getenv('API_BASE_URL', 'http://167.71.63.108:5000')
+    BACKOFFICE_API_BASE_URL = os.getenv('BACKOFFICE_API_BASE_URL', 'http://167.71.63.108:5000')
+    
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
     
     # 🔥 CONFIGURACIÓN DE COOKIES ESPECÍFICA PARA BACKOFFICE
@@ -26,7 +28,7 @@ class Config:
     SESSION_REFRESH_EACH_REQUEST = True
     
     # Admin credentials (para primer acceso)
-    ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin3')
+    ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
     
     # MFA Configuration
@@ -40,5 +42,8 @@ class Config:
         print(f"   - Secret key: {cls.SECRET_KEY[:20]}...")
         print(f"   - Lifetime: {cls.PERMANENT_SESSION_LIFETIME}s")
         print(f"   - API URL: {cls.API_BASE_URL}")
+        print(f"   - BackOffice API URL: {cls.BACKOFFICE_API_BASE_URL}")
         print(f"   - Debug: {cls.DEBUG}")
-  
+
+# 🔥 INICIALIZACIÓN: Verificar configuración al cargar
+Config.log_config()
