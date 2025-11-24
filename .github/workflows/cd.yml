@@ -271,6 +271,11 @@ jobs:
           script: |
             set -e
             echo "🔧 Generando archivo de variables..."
+            
+            # 🔥 OBTENER IP EXTERNA DEL SERVIDOR AUTOMÁTICAMENTE
+            SERVER_IP=$(curl -s ifconfig.me || curl -s ipinfo.io/ip || echo "${{ secrets.PRODUCTION_HOST }}")
+            echo "🌍 IP externa detectada: $SERVER_IP"
+            
             cat << EOF > /root/firefighter.env
             # 🔥 CLAVES SECRETAS SEPARADAS PARA SESIONES
             FRONTEND_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
@@ -299,8 +304,12 @@ jobs:
             BACKOFFICE_SESSION_TIMEOUT=28800
             MFA_ISSUER=FirefighterAI
             
-            # ✅ URLs DE COMUNICACIÓN ENTRE CONTENEDORES DOCKER
+            # ✅ URLs CORREGIDAS PARA COMUNICACIÓN DOCKER
+            # Para comunicación interna (servidor a servidor)
             API_BASE_URL=http://firefighter_backend:5000
+            
+            # 🔥 NUEVA: URL para BackOffice desde navegador externo
+            BACKOFFICE_API_BASE_URL=http://$SERVER_IP:5000
             
             # Configuración general
             DEBUG=false
@@ -312,8 +321,9 @@ jobs:
             # Verificar que el archivo se creó correctamente
             if [ -f /root/firefighter.env ]; then
               echo "📋 Variables configuradas ($(wc -l < /root/firefighter.env) líneas)"
-              echo "🔍 Verificando API_BASE_URL..."
+              echo "🔍 Verificando URLs..."
               grep "API_BASE_URL" /root/firefighter.env || echo "⚠️ API_BASE_URL no encontrado"
+              grep "BACKOFFICE_API_BASE_URL" /root/firefighter.env || echo "⚠️ BACKOFFICE_API_BASE_URL no encontrado"
             else
               echo "❌ Error: Archivo de variables no creado"
               exit 1
@@ -591,5 +601,6 @@ jobs:
           echo "   - 🏥 Health checks exhaustivos"
           echo "   - 📦 Sistema de backups automático"
           echo "   - 🧹 Limpieza post-deploy"
+          echo "   - 🌐 URLs CORREGIDAS para comunicación externa"
           echo ""
           echo "🚀 EL SISTEMA ESTÁ FUNCIONANDO AL 100%!"

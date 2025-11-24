@@ -43,7 +43,7 @@ services:
       retries: 5
       start_period: 40s
 
-  # 🔥 BACKOFFICE - Con configuración de sesión separada
+  # 🔥 BACKOFFICE - Con configuración de sesión separada + DUAL URL SUPPORT
   backoffice:
     image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
     container_name: firefighter_backoffice
@@ -52,8 +52,10 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # ✅ CORRECTO: usar nombre del backend
+      # ✅ CORRECTO: usar nombre del backend para comunicación interna
       - API_BASE_URL=http://firefighter_backend:5000
+      # 🔥 NUEVO: URL externa para JavaScript del navegador
+      - BACKOFFICE_API_BASE_URL=${BACKOFFICE_API_BASE_URL:-http://firefighter_backend:5000}
     networks:
       - firefighter_network
     restart: unless-stopped
