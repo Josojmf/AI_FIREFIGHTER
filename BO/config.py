@@ -6,17 +6,11 @@ load_dotenv()
 
 class Config:
     # 🔥 SECRET KEY ESPECÍFICA PARA BACKOFFICE
-    SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY', 'firefighter-backoffice-ultra-secret-production-2024-jose')
+    SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY')  # SIN valor por defecto
     
-    # 🔥 URLs ABSOLUTAS - SIN VALORES POR DEFECTO O CON DOCKER INTERNO
-    # ❌ ELIMINADO: Valores por defecto con IP externa
-    # ✅ CORREGIDO: Sin valores por defecto o con nombre de servicio Docker
-    API_BASE_URL = os.getenv('API_BASE_URL')  # Sin valor por defecto - OBLIGATORIO desde variables
-    BACKOFFICE_API_BASE_URL = os.getenv('BACKOFFICE_API_BASE_URL')  # Sin valor por defecto
-    
-    # Si necesitas valores por defecto, usar nombres Docker internos:
-    # API_BASE_URL = os.getenv('API_BASE_URL', 'http://backend:5000')
-    # BACKOFFICE_API_BASE_URL = os.getenv('BACKOFFICE_API_BASE_URL', 'http://backend:5000')
+    # 🔥 URLs ABSOLUTAS - SIN VALORES POR DEFECTO
+    API_BASE_URL = os.getenv('API_BASE_URL')  # SIN valor por defecto
+    BACKOFFICE_API_BASE_URL = os.getenv('BACKOFFICE_API_BASE_URL')  # SIN valor por defecto
     
     DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
     
@@ -50,8 +44,8 @@ class Config:
             errors.append("❌ API_BASE_URL no está configurado")
         if not cls.BACKOFFICE_API_BASE_URL:
             errors.append("❌ BACKOFFICE_API_BASE_URL no está configurado")
-        if not cls.SECRET_KEY or cls.SECRET_KEY.startswith('firefighter-backoffice-ultra-secret'):
-            errors.append("❌ SECRET_KEY no está configurado correctamente")
+        if not cls.SECRET_KEY:
+            errors.append("❌ SECRET_KEY no está configurado")
             
         return errors
     
@@ -60,7 +54,7 @@ class Config:
         """Método para debuggear la configuración"""
         print(f"🔒 BackOffice Config:")
         print(f"   - Session cookie: {cls.SESSION_COOKIE_NAME}")
-        print(f"   - Secret key: {cls.SECRET_KEY[:20]}..." if cls.SECRET_KEY else "   - Secret key: ❌ NO CONFIGURADO")
+        print(f"   - Secret key: {cls.SECRET_KEY[:20]}..." if cls.SECRET_KEY and len(cls.SECRET_KEY) > 20 else "   - Secret key: ❌ NO CONFIGURADO")
         print(f"   - Lifetime: {cls.PERMANENT_SESSION_LIFETIME}s")
         print(f"   - API URL: {cls.API_BASE_URL or '❌ NO CONFIGURADO'}")
         print(f"   - BackOffice API URL: {cls.BACKOFFICE_API_BASE_URL or '❌ NO CONFIGURADO'}")
@@ -72,14 +66,16 @@ class Config:
             print("🚨 ERRORES DE CONFIGURACIÓN:")
             for error in errors:
                 print(f"   {error}")
+            return False
         else:
             print("✅ Configuración validada correctamente")
+            return True
 
 # 🔥 INICIALIZACIÓN: Verificar configuración al cargar
 if __name__ == "__main__":
+    # Solo ejecutar validación completa si se ejecuta directamente
     Config.log_config()
 else:
-    # Solo log en modo debug o si hay problemas
-    errors = Config.validate_config()
-    if errors or Config.DEBUG:
+    # En modo importación, solo validar si DEBUG está activado
+    if Config.DEBUG:
         Config.log_config()
