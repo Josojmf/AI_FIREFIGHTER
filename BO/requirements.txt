@@ -7,10 +7,17 @@ Flask-Login==0.6.3
 Flask-WTF==1.1.1
 Flask-Cors==4.0.0
 
+# Dependencias CRÍTICAS de Flask
+Werkzeug==3.0.1  # ✅ AGREGAR ESTA LÍNEA
+Jinja2==3.1.6
+click==8.1.7
+itsdangerous==2.1.2
+MarkupSafe==2.1.3
+
 # Autenticación y seguridad - MFA
-pyotp==2.9.0          # Para generar y verificar códigos TOTP
-qrcode[pil]==7.4.2     # Para generar códigos QR
-Pillow==10.1.0         # Para procesamiento de imágenes (QR codes)
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+Pillow==10.1.0
 
 # HTTP requests
 requests==2.31.0
@@ -21,11 +28,10 @@ python-dotenv==1.0.0
 
 # Servidor WSGI
 waitress==2.1.2
-gunicorn==21.2.0
 
 # Utilidades
-bcrypt==4.1.2          # Para hashing de contraseñas
-PyJWT==2.8.0           # Para JWT tokens
+bcrypt==4.1.2
+PyJWT==2.8.0
 
 # Fechas y tiempo
 python-dateutil==2.8.2

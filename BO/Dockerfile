@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install dependencies first (better caching)
+# ✅ CORREGIDO: QUITAR --no-deps para instalar TODAS las dependencias
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-deps -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the full app
 COPY . .
