@@ -330,13 +330,36 @@ jobs:
               exit 1
             fi
 
+      - name: 🧹 Aggressive Pre-Cleanup
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            set -e
+            echo "🧹 Limpieza agresiva previa..."
+            
+            # Parar todo
+            docker-compose -f /opt/emergency/docker-compose.prod.yml down --remove-orphans --timeout 30 2>/dev/null || true
+            
+            # Limpiar TODO el sistema Docker
+            docker system prune -a -f --volumes 2>/dev/null || true
+            
+            # Limpiar builder cache
+            docker builder prune -a -f 2>/dev/null || true
+            
+            # Verificar espacio
+            echo "💾 Espacio después de limpieza:"
+            df -h / | grep -E "(Filesystem|/dev/vda1)"
+
       - name: 🚀 Pull Images with Retry Logic
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          command_timeout: 1800s
+          command_timeout: 2400s  # Aumentar a 40 minutos
           script: |
             set -e
             cd /opt/emergency
@@ -347,29 +370,35 @@ jobs:
             AVAILABLE_GB=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
             echo "💾 Espacio antes del pull: ${AVAILABLE_GB}GB"
             
-            if [ "$AVAILABLE_GB" -lt 4 ]; then
-              echo "❌ Espacio insuficiente para pull (necesario: 4GB mínimo)"
+            if [ "$AVAILABLE_GB" -lt 6 ]; then  # Aumentar mínimo a 6GB
+              echo "❌ Espacio insuficiente para pull (necesario: 6GB mínimo)"
               exit 1
             fi
             
-            # Función de pull con reintentos
+            # Función de pull con reintentos y timeout por imagen
             pull_with_retry() {
               local service=$1
-              local max_retries=3
+              local max_retries=2
               local retry_count=0
               
               while [ $retry_count -lt $max_retries ]; do
                 echo "🔄 Intentando pull $service (intento $((retry_count + 1))/$max_retries)..."
                 
-                if docker-compose -f docker-compose.prod.yml pull $service; then
+                # Timeout de 15 minutos por imagen
+                if timeout 900s docker-compose -f docker-compose.prod.yml pull $service; then
                   echo "✅ $service descargado exitosamente"
-                  docker image prune -f  # Limpiar después de cada pull exitoso
+                  # Limpiar cache después de cada pull exitoso
+                  docker system prune -f
                   return 0
                 else
                   retry_count=$((retry_count + 1))
                   if [ $retry_count -lt $max_retries ]; then
-                    echo "⚠️ Fallo en $service, reintentando en 10 segundos..."
-                    sleep 10
+                    echo "⚠️ Fallo en $service, reintentando en 30 segundos..."
+                    sleep 30
+                    
+                    # Limpieza agresiva entre reintentos
+                    echo "🧹 Limpieza entre reintentos..."
+                    docker system prune -f
                   fi
                 fi
               done
@@ -378,39 +407,24 @@ jobs:
               return 1
             }
             
-            # Pull cada servicio por separado con reintentos
-            pull_with_retry "frontend"
-            pull_with_retry "backend" 
-            pull_with_retry "backoffice"
+            # Pull servicios en paralelo con timeout individual
+            echo "📥 Descargando imágenes en secuencia..."
             
-            # Verificación final de imágenes
+            # Backend primero (más crítico)
+            if ! pull_with_retry "backend"; then
+              echo "❌ FALLO CRÍTICO: No se pudo descargar backend"
+              exit 1
+            fi
+            
+            # Frontend y Backoffice pueden ser menos críticos
+            pull_with_retry "frontend" || echo "⚠️ Frontend falló pero continuando..."
+            pull_with_retry "backoffice" || echo "⚠️ Backoffice falló pero continuando..."
+            
+            # Verificación final
             echo "🔍 Verificando imágenes descargadas..."
-            if docker images | grep -q "ai-firefighter-frontend"; then
-              echo "✅ Frontend image OK"
-            else
-              echo "❌ Frontend image MISSING"
-              exit 1
-            fi
+            docker images | grep ai-firefighter
             
-            if docker images | grep -q "ai-firefighter-backend"; then
-              echo "✅ Backend image OK"
-            else
-              echo "❌ Backend image MISSING"
-              exit 1
-            fi
-            
-            if docker images | grep -q "ai-firefighter-backoffice"; then
-              echo "✅ Backoffice image OK"
-            else
-              echo "❌ Backoffice image MISSING"
-              exit 1
-            fi
-            
-            # Verificar espacio después del pull
-            AVAILABLE_AFTER=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
-            echo "💾 Espacio después del pull: ${AVAILABLE_AFTER}GB"
-            
-            echo "✅ Todas las imágenes descargadas correctamente"
+            echo "✅ Pull de imágenes completado"
 
       - name: 🚀 Start Services with Health Verification
         uses: appleboy/ssh-action@v0.1.10

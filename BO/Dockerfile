@@ -2,18 +2,19 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# System tools
-RUN apt-get update && apt-get install -y \
-    gcc g++ curl \
-    && rm -rf /var/lib/apt/lists/*
+# System tools (mínimas)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Disable Python buffering (better logs)
+# Disable Python buffering
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install dependencies
+# Install dependencies first (better caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && rm -rf /root/.cache/pip
+RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
 # Copy the full app
 COPY . .
@@ -27,5 +28,4 @@ ENV FLASK_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD curl -f http://localhost:3001/health || exit 1
 
-# IMPORTANT: Run using our script, not waitress-serve
 CMD ["python", "serve_waitress.py"]
