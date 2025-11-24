@@ -7,9 +7,8 @@ RUN apt-get update && apt-get install -y \
     gcc g++ curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Build arguments for React/Vue app
-ARG API_BASE_URL=http://firefighter_backend:5000
-ENV API_BASE_URL=$API_BASE_URL
+# ✅ CORREGIDO: No hardcodear API_BASE_URL en build time
+# Se pasará como variable de entorno en runtime
 
 # Install Python dependencies
 COPY requirements.txt .
