@@ -1,5 +1,5 @@
 # app/__init__.py - BACKOFFICE CON SESIONES SEPARADAS
-from flask import Flask, request, session
+from flask import Flask, request, session, redirect
 from flask_login import LoginManager, current_user
 import logging
 from config import Config
@@ -93,6 +93,13 @@ def create_app():
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "backoffice"}, 200
+    
+    # 🔥 NUEVA RUTA: Redirigir raíz al dashboard
+    @app.route('/')
+    def root_redirect():
+        """Redirigir raíz al dashboard"""
+        print("🔄 Redirigiendo / → /dashboard")
+        return redirect('/dashboard')
     
     # Middleware de debug MEJORADO
     @app.before_request
