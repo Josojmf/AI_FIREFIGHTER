@@ -525,83 +525,32 @@ jobs:
               sleep 15
             done
 
-      - name: 📊 Final Status Report
+      - name: 🎯 Final Deployment Verification
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
-          command_timeout: 180s
+          command_timeout: 120s
           script: |
             set -e
             cd /opt/emergency
             
-            echo "📊 REPORTE FINAL DEL DEPLOY"
-            echo "=========================="
+            echo "🎯 Verificación final de deployment..."
             
-            # Estado del sistema
+            # Verificar contenedores activos
+            echo "📊 Estado de contenedores:"
+            docker-compose -f docker-compose.prod.yml ps
+            
+            # Verificar recursos
             echo "💾 Uso de disco:"
             df -h / | grep -E "(Filesystem|/dev/vda1)"
             
-            echo ""
-            echo "🐳 Estado de contenedores:"
-            docker-compose -f docker-compose.prod.yml ps
+            echo "🐳 Imágenes Docker:"
+            docker images | grep ai-firefighter
             
-            echo ""
-            echo "🌐 Puertos expuestos:"
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "No se pudo obtener info de puertos"
-            
-            echo ""
-            echo "🔗 Tests finales de conectividad:"
-            
-            # Backend
-            if curl -s --connect-timeout 5 --max-time 10 http://localhost:5000/ >/dev/null 2>&1; then
-              echo "  ✅ Backend (puerto 5000): FUNCIONANDO"
-            else
-              echo "  ⚠️ Backend (puerto 5000): No responde aún"
-            fi
-            
-            # Frontend  
-            if curl -s --connect-timeout 5 --max-time 10 http://localhost:8000/ >/dev/null 2>&1; then
-              echo "  ✅ Frontend (puerto 8000): FUNCIONANDO"
-            else
-              echo "  ⚠️ Frontend (puerto 8000): No responde aún"
-            fi
-            
-            # Backoffice
-            if curl -s --connect-timeout 5 --max-time 10 http://localhost:3001/ >/dev/null 2>&1; then
-              echo "  ✅ Backoffice (puerto 3001): FUNCIONANDO"
-            else
-              echo "  ⚠️ Backoffice (puerto 3001): No responde aún"
-            fi
-            
-            echo ""
-            echo "📈 Uso de recursos:"
-            echo "   - Memoria: $(free -h | grep '^Mem:' | awk '{print $3 "/" $2}')"
-            echo "   - CPU Load: $(uptime | awk -F'load average:' '{print $2}')"
-            
-            echo ""
-            echo "🔥 DEPLOY COMPLETADO EXITOSAMENTE"
-            echo "================================"
-
-      - name: Deployment summary
-        run: |
-          echo "🎉 ULTRA ROBUST DEPLOYMENT COMPLETED!"
-          echo "====================================="
-          echo "📅 $(date)"
-          echo ""
-          echo "🔥 SERVICIOS DESPLEGADOS:"
-          echo "   - 🌐 Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
-          echo "   - 🔌 Backend API: http://${{ secrets.PRODUCTION_HOST }}:5000" 
-          echo "   - ⚙️ Backoffice: http://${{ secrets.PRODUCTION_HOST }}:3001"
-          echo ""
-          echo "✅ CARACTERÍSTICAS INCLUIDAS:"
-          echo "   - 🔐 SESIONES SEPARADAS (Frontend/Backoffice independientes)"
-          echo "   - 🛡️ Limpieza automática de espacio en disco"
-          echo "   - 🔄 Pull de imágenes con lógica de reintentos"
-          echo "   - 🏥 Health checks exhaustivos"
-          echo "   - 📦 Sistema de backups automático"
-          echo "   - 🧹 Limpieza post-deploy"
-          echo "   - 🌐 URLs CORREGIDAS para comunicación externa"
-          echo ""
-          echo "🚀 EL SISTEMA ESTÁ FUNCIONANDO AL 100%!"
+            echo "✅ Deployment completado exitosamente"
+            echo "🌐 Servicios disponibles en:"
+            echo "   - Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
+            echo "   - Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
+            echo "   - Backoffice: http://${{ secrets.PRODUCTION_HOST }}:3001"
