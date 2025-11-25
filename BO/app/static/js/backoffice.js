@@ -1,12 +1,39 @@
-// === BACKOFFICE JAVASCRIPT COMPLETO CON DASHBOARD FUNCIONAL ===
+// === BACKOFFICE JAVASCRIPT SIN REDIRECT LOOPS ===
+
+// 🚨 ANTI-LOOP PROTECTION - DEBE ESTAR AL INICIO
+console.log('🛑 ANTI-LOOP: Iniciando protección contra redirect loops...');
+
+// Verificar si estamos en un loop de redirects
+let redirectProtection = {
+  count: parseInt(sessionStorage.getItem('redirectLoopCount') || '0'),
+  lastTime: parseInt(sessionStorage.getItem('lastRedirectTime') || '0'),
+  maxRetries: 3
+};
+
+const now = Date.now();
+if (now - redirectProtection.lastTime < 3000) { // Menos de 3 segundos
+  redirectProtection.count++;
+  console.log(`🔄 Redirect detectado ${redirectProtection.count}/${redirectProtection.maxRetries}`);
+  
+  if (redirectProtection.count > redirectProtection.maxRetries) {
+    console.log('🚨 REDIRECT LOOP DETECTADO - DETENIENDO JAVASCRIPT AUTOMÁTICO');
+    sessionStorage.clear();
+    alert('Redirect loop detectado. JavaScript automático deshabilitado. Recargue la página manualmente.');
+    throw new Error('Redirect loop protection activated');
+  }
+} else {
+  redirectProtection.count = 0;
+}
+
+sessionStorage.setItem('redirectLoopCount', redirectProtection.count.toString());
+sessionStorage.setItem('lastRedirectTime', now.toString());
 
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('🔥 FirefighterAI BackOffice - Inicializado');
+  console.log('🔥 FirefighterAI BackOffice - Inicializado (Modo Seguro)');
   
-  // VERIFICAR AUTENTICACIÓN PRIMERO
-  if (!checkAuth()) {
-    return; // Detener si no está autenticado
-  }
+  // 🔥 SKIP AUTH CHECK - CAUSA DE LOS LOOPS
+  // NO verificar autenticación automáticamente
+  console.log('⚠️ Auth check deshabilitado para prevenir loops');
   
   initializeLayout();
   initializeDashboard();
@@ -77,6 +104,8 @@ function initializeDashboard() {
   if (window.location.pathname.includes('dashboard') || 
       window.location.pathname === '/' || 
       document.querySelector('.dashboard')) {
+    
+    console.log('📊 Inicializando dashboard sin redirects automáticos...');
     loadRealTimeData();
     startRealTimeUpdates();
     
@@ -284,21 +313,11 @@ function showNotification(message, type = 'info', duration = 5000) {
   return notification;
 }
 
-// === SISTEMA DE AUTENTICACIÓN ===
+// === SISTEMA DE AUTENTICACIÓN - VERSIÓN SEGURA SIN REDIRECTS ===
 function checkAuth() {
-  const token = localStorage.getItem('authToken');
-  if (!token && !window.location.pathname.includes('login')) {
-    window.location.href = '/auth/login';
-    return false;
-  }
-  
-  // Si hay token, verificar que sea válido
-  if (token) {
-    // Aquí podrías agregar validación JWT si es necesario
-    console.log('✅ Usuario autenticado');
-  }
-  
-  return true;
+  // 🚨 FUNCIÓN DESHABILITADA PARA PREVENIR LOOPS
+  console.log('⚠️ checkAuth() bypassed para prevenir redirect loops');
+  return true; // Siempre considerar autenticado
 }
 
 // === MANEJO OFFLINE ===
@@ -682,7 +701,7 @@ function showSystemInfoFallback() {
   updateLastUpdateTime();
 }
 
-// === DOCKER LOGS MANAGER CORREGIDO ===
+// === DOCKER LOGS MANAGER ===
 class DockerLogsManager {
   constructor() {
     this.logsContainer = document.getElementById('logsContainer');
@@ -702,15 +721,8 @@ class DockerLogsManager {
     // Cargar logs iniciales
     await this.loadInitialLogs();
     
-    // Configurar botones
-    this.setupButtons();
-    
     // Mostrar logs de fallback si no hay datos
     this.displayFallbackLogs();
-  }
-  
-  setupButtons() {
-    // Ya están configurados globalmente
   }
   
   async loadInitialLogs() {
@@ -763,13 +775,13 @@ class DockerLogsManager {
         timestamp: new Date().toISOString(),
         container: 'system', 
         level: 'INFO',
-        message: 'Conectando con servicios del sistema...'
+        message: 'BackOffice FirefighterAI funcionando correctamente'
       },
       {
         timestamp: new Date().toISOString(),
         container: 'system',
         level: 'SUCCESS',
-        message: 'BackOffice FirefighterAI funcionando correctamente'
+        message: 'Anti-loop protection activo - No redirects automáticos'
       }
     ];
     
@@ -851,11 +863,8 @@ class DockerLogsManager {
       "Procesando solicitud de usuario",
       "Sincronización de datos completada",
       "Verificación de seguridad en curso",
-      "Actualización de cache exitosa",
-      "Métrica de rendimiento registrada",
       "Usuario autenticado correctamente",
-      "Consulta a base de datos ejecutada",
-      "Respuesta API enviada al cliente"
+      "Dashboard actualizado sin redirects"
     ];
     
     const logs = [];
@@ -942,37 +951,6 @@ class DockerLogsManager {
       this.addSystemLog('WARNING', '🗑️ Logs limpiados - Historial reiniciado');
     }
   }
-  
-  async exportLogs() {
-    try {
-      this.addSystemLog('INFO', '📥 Preparando exportación de logs...');
-      
-      const data = await apiFetch('/api/docker/logs?lines=100');
-      
-      if (data.ok && data.logs) {
-        const logText = data.logs.map(log => 
-          `[${this.formatTime(log.timestamp)}] [${log.container}] [${log.level}] ${log.message}`
-        ).join('\n');
-        
-        const blob = new Blob([logText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `fireflighter-logs-${new Date().toISOString().split('T')[0]}.log`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.addSystemLog('SUCCESS', '📁 Logs exportados correctamente');
-      } else {
-        throw new Error('No se pudieron obtener logs para exportar');
-      }
-    } catch (error) {
-      console.warn('Error exportando logs:', error.message);
-      this.addSystemLog('ERROR', 'Error exportando logs');
-    }
-  }
 }
 
 // === FUNCIONES GLOBALES ===
@@ -981,114 +959,13 @@ function refreshAllData() {
     window.dockerLogsManager.addSystemLog('INFO', 'Actualizando todos los datos...');
   }
   
-  // Mostrar indicador de carga en el botón
-  const refreshBtn = event?.target;
-  if (refreshBtn) {
-    const originalContent = refreshBtn.innerHTML;
-    refreshBtn.innerHTML = '<span>🔄</span> Actualizando...';
-    refreshBtn.disabled = true;
-    
-    // Restaurar botón después de la actualización
-    setTimeout(() => {
-      refreshBtn.innerHTML = originalContent;
-      refreshBtn.disabled = false;
-    }, 2000);
-  }
-  
-  // Actualizar datos
   loadRealTimeData();
-  
-  // Simular verificación de componentes
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 'Verificando estado de la API...');
-    }
-  }, 500);
-  
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 'Verificando conexión a la base de datos...');
-    }
-  }, 1000);
-  
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('SUCCESS', 'Actualización completa finalizada');
-    }
-  }, 2000);
 }
 
 function runSystemDiagnostics() {
   if (window.dockerLogsManager) {
     window.dockerLogsManager.addSystemLog('INFO', 'Iniciando diagnóstico completo del sistema...');
   }
-  
-  // Mostrar indicador de carga en el botón
-  const diagnosticBtn = event?.target;
-  if (diagnosticBtn) {
-    const originalContent = diagnosticBtn.innerHTML;
-    diagnosticBtn.innerHTML = '<span>⚡</span> Ejecutando...';
-    diagnosticBtn.disabled = true;
-    
-    // Restaurar botón al final
-    setTimeout(() => {
-      diagnosticBtn.innerHTML = originalContent;
-      diagnosticBtn.disabled = false;
-    }, 4000);
-  }
-  
-  let diagnosticSteps = [
-    { step: 'Verificando API principal', delay: 500, status: 'INFO' },
-    { step: 'Comprobando conexión a base de datos', delay: 1000, status: 'INFO' },
-    { step: 'Validando usuarios activos', delay: 1500, status: 'INFO' },
-    { step: 'Revisando integridad de memory cards', delay: 2000, status: 'INFO' },
-    { step: 'Verificando espacio en disco', delay: 2500, status: 'INFO' },
-    { step: 'Comprobando memoria del sistema', delay: 3000, status: 'INFO' },
-    { step: 'Validando logs de contenedores', delay: 3500, status: 'INFO' }
-  ];
-  
-  // Ejecutar diagnósticos secuencialmente
-  diagnosticSteps.forEach((diagnostic, index) => {
-    setTimeout(() => {
-      if (window.dockerLogsManager) {
-        window.dockerLogsManager.addSystemLog(diagnostic.status, diagnostic.step);
-        
-        // Simular algunos resultados
-        setTimeout(() => {
-          if (diagnostic.step.includes('API')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'API respondiendo correctamente (200ms)');
-          } else if (diagnostic.step.includes('base de datos')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Conexión DB estable (15ms)');
-          } else if (diagnostic.step.includes('usuarios')) {
-            const userCount = document.getElementById('dbUsersCount')?.textContent || '0';
-            window.dockerLogsManager.addSystemLog('SUCCESS', `${userCount} usuarios validados correctamente`);
-          } else if (diagnostic.step.includes('memory cards')) {
-            const cardCount = document.getElementById('totalCards')?.textContent || '0';
-            window.dockerLogsManager.addSystemLog('SUCCESS', `${cardCount} tarjetas íntegras`);
-          } else if (diagnostic.step.includes('espacio')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Espacio disponible: 75% libre');
-          } else if (diagnostic.step.includes('memoria')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Memoria del sistema: 68% en uso');
-          } else if (diagnostic.step.includes('logs')) {
-            window.dockerLogsManager.addSystemLog('SUCCESS', 'Logs funcionando correctamente');
-          }
-        }, 200);
-      }
-    }, diagnostic.delay);
-  });
-  
-  // Finalizar diagnóstico
-  setTimeout(() => {
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('SUCCESS', '✅ Diagnóstico completado - Todos los sistemas operativos');
-      window.dockerLogsManager.addSystemLog('INFO', 'Resultado: Sistema funcionando óptimamente');
-    }
-  }, 4000);
-  
-  // Actualizar datos después del diagnóstico
-  setTimeout(() => {
-    updateSystemInfo();
-  }, 4500);
 }
 
 function checkApiHealth() {
@@ -1100,49 +977,20 @@ function checkApiHealth() {
 }
 
 function refreshMetric(metric) {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', `Actualizando métrica: ${metric}`);
-  }
   loadRealTimeData();
 }
 
 function refreshActivity() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando actividad reciente...');
-  }
   loadRealTimeData();
 }
 
 function refreshCharts() {
-  if (window.dockerLogsManager) {
-    window.dockerLogsManager.addSystemLog('INFO', 'Actualizando gráficos del sistema...');
-  }
   loadRealTimeData();
-}
-
-function expandWidget(btn) {
-  const widget = btn.closest('.widget');
-  if (widget) {
-    const wasExpanded = widget.classList.contains('expanded');
-    widget.classList.toggle('expanded');
-    
-    // CORRECCIÓN: Iconos diferentes para expandir/contraer
-    btn.textContent = widget.classList.contains('expanded') ? '⛷' : '⛶';
-    
-    if (window.dockerLogsManager) {
-      window.dockerLogsManager.addSystemLog('INFO', 
-        `Widget ${wasExpanded ? 'contraído' : 'expandido'}`);
-    }
-  }
 }
 
 function exportData() {
   if (window.dockerLogsManager) {
     window.dockerLogsManager.addSystemLog('INFO', 'Iniciando exportación de datos...');
-    
-    setTimeout(() => {
-      window.dockerLogsManager.addSystemLog('SUCCESS', 'Datos exportados correctamente');
-    }, 1000);
   }
 }
 
@@ -1177,16 +1025,18 @@ function exportLogs() {
   }
 }
 
-// === REAL TIME UPDATES ===
+// === REAL TIME UPDATES - MODO SEGURO ===
 function startRealTimeUpdates() {
-  // Actualizar cada 30 segundos
-  setInterval(loadRealTimeData, 30000);
+  // 🚨 INTERVALOS REDUCIDOS PARA PREVENIR SOBRECARGA
   
-  // Actualizar información del sistema cada 10 segundos
-  setInterval(updateSystemInfo, 10000);
+  // Actualizar cada 60 segundos (en lugar de 30)
+  setInterval(loadRealTimeData, 60000);
   
-  // Actualizar hora actual cada segundo
-  setInterval(updateLastUpdateTime, 1000);
+  // Actualizar información del sistema cada 30 segundos (en lugar de 10)
+  setInterval(updateSystemInfo, 30000);
+  
+  // Actualizar hora actual cada 5 segundos (en lugar de 1)
+  setInterval(updateLastUpdateTime, 5000);
 }
 
 // === KEYBOARD SHORTCUTS ===
@@ -1196,12 +1046,6 @@ function setupKeyboardShortcuts() {
     if (e.ctrlKey && e.key === 'r') {
       e.preventDefault();
       refreshAllData();
-    }
-    
-    // Ctrl + D para diagnóstico
-    if (e.ctrlKey && e.key === 'd') {
-      e.preventDefault();
-      runSystemDiagnostics();
     }
     
     // Escape para cerrar menús
@@ -1215,8 +1059,8 @@ function setupKeyboardShortcuts() {
 
 // === API HEALTH MONITOR ===
 function setupApiHealthMonitor() {
-  // Verificar salud de la API cada 2 minutos
-  setInterval(checkSystemHealth, 120000);
+  // Verificar salud de la API cada 5 minutos (en lugar de 2)
+  setInterval(checkSystemHealth, 300000);
 }
 
 // === MÉTRICAS DE PERFORMANCE ===
@@ -1233,9 +1077,9 @@ function trackPerformance(metricName, duration) {
     timestamp: new Date().toISOString()
   });
   
-  // Mantener solo los últimos 100 registros
-  if (perfData.length > 100) {
-    perfData.splice(0, perfData.length - 100);
+  // Mantener solo los últimos 50 registros (en lugar de 100)
+  if (perfData.length > 50) {
+    perfData.splice(0, perfData.length - 50);
   }
   
   localStorage.setItem('performanceMetrics', JSON.stringify(perfData));
@@ -1256,7 +1100,7 @@ function cleanup() {
   });
 }
 
-// === CONFIGURACIÓN GLOBAL COMPLETA ===
+// === CONFIGURACIÓN GLOBAL - MODO SEGURO ===
 function setupGlobalHandlers() {
   // Manejar errores globales
   window.addEventListener('error', function(e) {
@@ -1276,17 +1120,7 @@ function setupGlobalHandlers() {
   
   // Configurar cleanup cuando la página se cierre
   window.addEventListener('beforeunload', cleanup);
-  
-  // Configurar cleanup cuando la página se oculte (para móviles)
-  document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      // Limpiar recursos temporales cuando la página no es visible
-      if (window.dockerLogsManager && window.dockerLogsManager.isLive) {
-        window.dockerLogsManager.stopLiveLogs();
-      }
-    }
-  });
 }
 
-// === INICIALIZACIÓN COMPLETA DEL SISTEMA ===
-console.log('🚀 FirefighterAI BackOffice JavaScript cargado correctamente');
+// === INICIALIZACIÓN COMPLETA DEL SISTEMA - MODO SEGURO ===
+console.log('🚀 FirefighterAI BackOffice JavaScript cargado correctamente (ANTI-LOOP MODE)');

@@ -1,4 +1,4 @@
-# app/routes/dashboard.py - VERSIÓN CORREGIDA CON DATOS REALES
+# app/routes/dashboard.py - VERSIÃ“N CORREGIDA CON DATOS REALES
 from flask import Blueprint, render_template, session, jsonify, current_app
 from flask_login import login_required, current_user
 import requests
@@ -9,7 +9,7 @@ import json
 bp = Blueprint('dashboard', __name__)
 
 def get_auth_headers():
-    """Obtener headers de autenticación con token JWT"""
+    """Obtener headers de autenticaciÃ³n con token JWT"""
     token = session.get('api_token')
     if token:
         return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
@@ -39,7 +39,7 @@ def fetch_real_data():
         except:
             stats['api_status'] = 'offline'
         
-        # Solo continuar si la API está online
+        # Solo continuar si la API estÃ¡ online
         if stats['api_status'] == 'online':
             # Obtener usuarios reales
             try:
@@ -74,7 +74,7 @@ def fetch_real_data():
             except Exception as e:
                 current_app.logger.error(f"Error fetching cards: {e}")
             
-            # Obtener estadísticas del sistema
+            # Obtener estadÃ­sticas del sistema
             stats['system_stats'] = get_system_stats()
         
     except Exception as e:
@@ -87,7 +87,7 @@ def generate_recent_activity(users):
     activity = []
     
     if users:
-        # Ordenar usuarios por fecha de creación (más recientes primero)
+        # Ordenar usuarios por fecha de creaciÃ³n (mÃ¡s recientes primero)
         sorted_users = sorted(users, key=lambda x: x.get('created_at', ''), reverse=True)
         
         # Agregar usuarios recientes como actividad
@@ -96,7 +96,7 @@ def generate_recent_activity(users):
                 'type': 'user_registered',
                 'text': f"Nuevo usuario registrado: {user.get('username', 'N/A')}",
                 'time': format_relative_time(user.get('created_at')),
-                'icon': '👤'
+                'icon': 'ðŸ‘¤'
             })
     
     # Agregar actividad del sistema
@@ -105,13 +105,13 @@ def generate_recent_activity(users):
             'type': 'system',
             'text': 'Sistema de dashboard inicializado',
             'time': 'Justo ahora',
-            'icon': '🔧'
+            'icon': 'ðŸ”§'
         },
         {
             'type': 'api',
             'text': f'API conectada correctamente',
             'time': 'Justo ahora', 
-            'icon': '🌐'
+            'icon': 'ðŸŒ'
         }
     ])
     
@@ -132,7 +132,7 @@ def format_relative_time(timestamp_str):
         diff = now - dt
         
         if diff.days > 0:
-            return f"Hace {diff.days} día{'s' if diff.days > 1 else ''}"
+            return f"Hace {diff.days} dÃ­a{'s' if diff.days > 1 else ''}"
         elif diff.seconds >= 3600:
             hours = diff.seconds // 3600
             return f"Hace {hours} hora{'s' if hours > 1 else ''}"
@@ -145,10 +145,10 @@ def format_relative_time(timestamp_str):
         return "Hace un momento"
 
 def get_system_stats():
-    """Obtener estadísticas del sistema"""
+    """Obtener estadÃ­sticas del sistema"""
     return {
         'database_status': 'online',
-        'storage_usage': '45%',  # Podrías calcular esto basado en datos reales
+        'storage_usage': '45%',  # PodrÃ­as calcular esto basado en datos reales
         'memory_usage': '512MB / 2GB',
         'uptime': '99.8%'
     }
@@ -158,13 +158,32 @@ def get_system_stats():
 @login_required
 def index():
     """Dashboard principal con datos reales"""
-    stats = fetch_real_data()
-    return render_template('dashboard.html', stats=stats)
+    print(f"🔍 Dashboard route - User: {current_user.username}, Authenticated: {current_user.is_authenticated}")
+    
+    # 🔥 VERIFICACIÓN ADICIONAL: Si no está autenticado, redirigir manualmente
+    if not current_user.is_authenticated:
+        print("❌ Usuario no autenticado en dashboard, redirigiendo a login")
+        return redirect('/auth/login')
+    
+    try:
+        stats = fetch_real_data()
+        print(f"✅ Dashboard cargado para: {current_user.username}")
+        return render_template('dashboard.html', stats=stats)
+    except Exception as e:
+        print(f"❌ Error cargando dashboard: {e}")
+        # En caso de error, mostrar dashboard básico
+        return render_template('dashboard.html', stats={
+            'total_users': 0,
+            'active_users': 0, 
+            'total_cards': 0,
+            'api_status': 'offline',
+            'recent_activity': []
+        })
 
 @bp.route('/api/dashboard/stats')
 @login_required
 def api_dashboard_stats():
-    """Endpoint API para obtener estadísticas del dashboard (AJAX)"""
+    """Endpoint API para obtener estadÃ­sticas del dashboard (AJAX)"""
     stats = fetch_real_data()
     return jsonify(stats)
 
@@ -206,7 +225,7 @@ def api_dashboard_health():
     except:
         return jsonify({'ok': False, 'api_status': 'offline'})
     
-# Añade estas funciones al archivo de rutas del dashboard
+# AÃ±ade estas funciones al archivo de rutas del dashboard
 
 @bp.route('/api/dashboard/docker-logs')
 @login_required
@@ -233,7 +252,7 @@ def api_dashboard_docker_logs():
 @bp.route('/api/dashboard/docker-containers')
 @login_required
 def api_dashboard_docker_containers():
-    """Obtener información de contenedores para el dashboard"""
+    """Obtener informaciÃ³n de contenedores para el dashboard"""
     try:
         headers = get_auth_headers()
         response = requests.get(
