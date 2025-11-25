@@ -1917,7 +1917,7 @@ def validate_access_token_endpoint(token_value):
         
 @app.route('/api/access_tokens/<token_id>', methods=['GET'])
 def get_access_token(token_id):
-    """Obtener token específico"""
+    """Obtener token específico - VERSIÓN CORREGIDA"""
     # Verificar autenticación
     auth_valid, auth_result = require_auth()
     if not auth_valid:
@@ -1926,11 +1926,9 @@ def get_access_token(token_id):
     try:
         collection = db.access_tokens
         
-        # Buscar por ID o por valor del token
-        if len(token_id) == 24:  # ObjectId
-            token = collection.find_one({'_id': ObjectId(token_id)})
-        else:  # Token value
-            token = collection.find_one({'token': token_id})
+        # Buscar por ObjectId
+        from bson import ObjectId
+        token = collection.find_one({'_id': ObjectId(token_id)})
         
         if not token:
             return jsonify({
@@ -1938,16 +1936,49 @@ def get_access_token(token_id):
                 'message': 'Token no encontrado'
             }), 404
         
-        token['_id'] = str(token['_id'])
+        # CORRECCIÓN: Normalizar timezones para las comparaciones de fecha
+        now = datetime.now(timezone.utc)  # Asegurar que now tiene timezone
         
-        # Calcular estado actual
-        now = datetime.now()
-        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        # Procesar expires_at con timezone correcto
+        expires_at_str = token.get('expires_at')
+        if expires_at_str:
+            try:
+                if isinstance(expires_at_str, str):
+                    expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                else:
+                    expires_at = expires_at_str
+                
+                # Asegurar que ambas fechas tengan timezone
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                
+                # Ahora la comparación es segura
+                if expires_at < now:
+                    token['status'] = 'expired'
+            except Exception as e:
+                print(f"⚠️ Error procesando fecha de expiración: {e}")
+                # En caso de error, mantener el estado actual
         
-        if expires_at < now:
-            token['status'] = 'expired'
-        elif token.get('current_uses', 0) >= token.get('max_uses', 1):
+        # Verificar si está agotado
+        if token.get('current_uses', 0) >= token.get('max_uses', 1):
             token['status'] = 'exhausted'
+        
+        # Formatear fechas para mostrar
+        if 'created_at' in token:
+            try:
+                created_at = datetime.fromisoformat(token['created_at'].replace('Z', '+00:00'))
+                token['created_at_formatted'] = created_at.strftime('%d/%m/%Y %H:%M')
+            except:
+                token['created_at_formatted'] = token['created_at']
+        
+        if 'expires_at' in token:
+            try:
+                expires_at = datetime.fromisoformat(token['expires_at'].replace('Z', '+00:00'))
+                token['expires_at_formatted'] = expires_at.strftime('%d/%m/%Y %H:%M')
+            except:
+                token['expires_at_formatted'] = token['expires_at']
+        
+        token['_id'] = str(token['_id'])
         
         return jsonify({
             'ok': True,
@@ -1956,11 +1987,12 @@ def get_access_token(token_id):
     
     except Exception as e:
         print(f"❌ Error al obtener token: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'ok': False,
             'message': f'Error al obtener token: {str(e)}'
         }), 500
-
 @app.route('/api/access_tokens/<token_id>', methods=['PUT'])
 def update_access_token(token_id):
     """Actualizar token existente"""

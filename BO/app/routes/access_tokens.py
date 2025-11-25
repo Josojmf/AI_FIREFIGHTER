@@ -227,39 +227,55 @@ def create_token():
 @login_required
 def edit_token(token_id):
     """Editar token existente"""
+    print(f"🔧 DEBUG edit_token - Iniciando edición para token_id: {token_id}")
     
     if request.method == 'GET':
+        print(f"📝 DEBUG GET edit - Obteniendo datos del token {token_id}")
         try:
             headers = get_auth_headers()
-            response = requests.get(
-                f"{Config.API_BASE_URL}/api/access_tokens/{token_id}", 
-                headers=headers,
-                timeout=10
-            )
+            api_url = f"{Config.API_BASE_URL}/api/access_tokens/{token_id}"
+            print(f"🌐 DEBUG GET edit - Llamando a: {api_url}")
+            
+            response = requests.get(api_url, headers=headers, timeout=10)
+            print(f"📡 DEBUG GET edit - Status Code: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
+                print(f"📋 DEBUG GET edit - Respuesta: {data}")
+                
                 if data.get('ok'):
                     token = data.get('token')
+                    print(f"✅ DEBUG GET edit - Token obtenido: {token.get('name') if token else 'None'}")
                     return render_template('access_tokens/edit.html', token=token)
                 else:
-                    flash(data.get('message', 'Token no encontrado'), 'error')
+                    error_msg = data.get('message', 'Token no encontrado')
+                    print(f"❌ DEBUG GET edit - Error en data: {error_msg}")
+                    flash(error_msg, 'error')
             else:
-                flash(f'Error del servidor: {response.status_code}', 'error')
+                error_msg = f'Error del servidor: {response.status_code}'
+                print(f"❌ DEBUG GET edit - Error HTTP: {error_msg}")
+                flash(error_msg, 'error')
         
         except requests.RequestException as e:
-            print(f"❌ Error de conexión: {e}")
+            print(f"❌ DEBUG GET edit - Error de conexión: {e}")
             flash('Error de conexión con el servidor', 'error')
+        except Exception as e:
+            print(f"❌ DEBUG GET edit - Error inesperado: {e}")
+            flash('Error interno del sistema', 'error')
         
+        print("🔄 DEBUG GET edit - Redirigiendo a lista de tokens")
         return redirect(url_for('access_tokens.token_list'))
     
     # POST - Actualizar token
+    print(f"📝 DEBUG POST edit - Actualizando token {token_id}")
     try:
         # Validar datos del formulario
         name = (request.form.get('name') or '').strip()
         description = (request.form.get('description') or '').strip()
         max_uses = int(request.form.get('max_uses', 1))
         status = request.form.get('status', 'active')
+        
+        print(f"📋 DEBUG POST edit - Datos recibidos: name={name}, max_uses={max_uses}, status={status}")
         
         # Validaciones
         if not name:
@@ -281,12 +297,13 @@ def edit_token(token_id):
         }
         
         headers = get_auth_headers()
-        response = requests.put(
-            f"{Config.API_BASE_URL}/api/access_tokens/{token_id}", 
-            headers=headers,
-            json=update_data,
-            timeout=10
-        )
+        api_url = f"{Config.API_BASE_URL}/api/access_tokens/{token_id}"
+        print(f"🌐 DEBUG POST edit - Actualizando en: {api_url}")
+        print(f"📦 DEBUG POST edit - Datos a enviar: {update_data}")
+        
+        response = requests.put(api_url, headers=headers, json=update_data, timeout=10)
+        print(f"📡 DEBUG POST edit - Status Code: {response.status_code}")
+        print(f"📡 DEBUG POST edit - Respuesta: {response.text}")
         
         if response.status_code == 200:
             data = response.json()
@@ -298,16 +315,17 @@ def edit_token(token_id):
             flash(f'Error del servidor: {response.status_code}', 'error')
     
     except ValueError as e:
+        print(f"❌ DEBUG POST edit - Error de valor: {e}")
         flash('Por favor, verifica que todos los números sean válidos', 'error')
     except requests.RequestException as e:
-        print(f"❌ Error de conexión: {e}")
+        print(f"❌ DEBUG POST edit - Error de conexión: {e}")
         flash('Error de conexión con el servidor', 'error')
     except Exception as e:
-        print(f"❌ Error inesperado: {e}")
+        print(f"❌ DEBUG POST edit - Error inesperado: {e}")
         flash('Error interno del sistema', 'error')
     
+    print("🔄 DEBUG POST edit - Redirigiendo a lista de tokens")
     return redirect(url_for('access_tokens.token_list'))
-
 @bp.route('/delete/<token_id>', methods=['POST'])
 @login_required
 def delete_token(token_id):
@@ -430,6 +448,54 @@ def reset_uses(token_id):
         flash('Error interno del sistema', 'error')
     
     return redirect(url_for('access_tokens.token_list'))
+
+@bp.route('/public-debug')
+def public_debug():
+    """Endpoint público para debug (sin autenticación)"""
+    debug_info = {
+        'session_keys': list(session.keys()),
+        'has_api_token': 'api_token' in session,
+        'api_token_preview': session.get('api_token', '')[:50] + '...' if session.get('api_token') else None,
+        'user_authenticated': current_user.is_authenticated,
+        'config_api_url': Config.API_BASE_URL,
+        'config_backoffice_url': Config.BACKOFFICE_API_BASE_URL
+    }
+    return jsonify(debug_info)
+
+@bp.route('/public-test-api')
+def public_test_api():
+    """Endpoint público para testear API (sin autenticación)"""
+    try:
+        test_url = f"{Config.API_BASE_URL}/health"
+        response = requests.get(test_url, timeout=5)
+        
+        result = {
+            'test_url': test_url,
+            'status_code': response.status_code,
+            'response': response.text
+        }
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/debug-test')
+@login_required  
+def debug_test():
+    """Endpoint de debug simple con autenticación"""
+    try:
+        headers = get_auth_headers()
+        response = requests.get(f"{Config.API_BASE_URL}/api/access_tokens", headers=headers, timeout=10)
+        
+        result = {
+            'status_code': response.status_code,
+            'response_ok': response.ok,
+            'data': response.json() if response.status_code == 200 else {'error': response.text}
+        }
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/stats')
 @login_required
