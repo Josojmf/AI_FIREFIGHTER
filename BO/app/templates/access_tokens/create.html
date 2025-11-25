@@ -33,6 +33,14 @@
         <div class="form-help">Descripción opcional para documentar el uso del token</div>
       </div>
 
+      <!-- NUEVO: Campo para email del destinatario (OPCIONAL) -->
+      <div class="form-group">
+        <label for="recipient_email" class="form-label">Enviar por Email (Opcional)</label>
+        <input type="email" id="recipient_email" name="recipient_email" class="form-input" 
+               value="{{ form.recipient_email if form }}" placeholder="destinatario@ejemplo.com">
+        <div class="form-help">Si se especifica, el token se enviará automáticamente por email. Dejar vacío para crear solo el token.</div>
+      </div>
+
       <!-- Configuración de usos -->
       <div class="form-grid">
         <div class="form-group">
@@ -55,10 +63,10 @@
 
       <!-- Configuración de expiración -->
       <div class="form-group">
-        <label for="expires_at" class="form-label">Fecha de Expiración</label>
-        <input type="date" id="expires_at" name="expires_at" class="form-input" 
-               value="{{ form.expires_at if form }}">
-        <div class="form-help">Fecha opcional de expiración del token (dejar vacío para que no expire)</div>
+        <label for="expires_days" class="form-label">Días hasta expiración</label>
+        <input type="number" id="expires_days" name="expires_days" class="form-input" 
+               value="{{ form.expires_days if form else '30' }}" min="1" max="365">
+        <div class="form-help">Número de días hasta que el token expire (1-365). Dejar vacío para que no expire.</div>
       </div>
 
       <!-- Acciones -->
@@ -84,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const nameInput = document.getElementById('name');
   const maxUsesInput = document.getElementById('max_uses');
   const userTypeInput = document.getElementById('user_type');
+  const emailInput = document.getElementById('recipient_email');
   const submitButton = document.getElementById('submitButton');
 
   // Validación en tiempo real
@@ -91,6 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = nameInput.value.trim();
     const maxUses = parseInt(maxUsesInput.value);
     const userType = userTypeInput.value;
+    const email = emailInput.value.trim();
     
     let isValid = true;
     
@@ -118,10 +128,21 @@ document.addEventListener('DOMContentLoaded', function() {
       isValid = false;
     }
     
+    // Validar email si se proporciona (OPCIONAL)
+    if (email && !isValidEmail(email)) {
+      showError(emailInput, 'Por favor ingresa un email válido');
+      isValid = false;
+    }
+    
     // Actualizar botón
     submitButton.disabled = !isValid;
     
     return isValid;
+  }
+
+  function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   function showError(input, message) {
@@ -133,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Event listeners para validación
-  [nameInput, maxUsesInput, userTypeInput].forEach(input => {
+  [nameInput, maxUsesInput, userTypeInput, emailInput].forEach(input => {
     input.addEventListener('input', validateForm);
     input.addEventListener('blur', validateForm);
   });

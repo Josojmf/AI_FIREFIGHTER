@@ -12,6 +12,7 @@ import numpy as np
 warnings.filterwarnings("ignore", message=".*torch_dtype.*")
 warnings.filterwarnings("ignore", message=".*Truncation.*")
 warnings.filterwarnings("ignore", message=".*max_new_tokens.*")
+from flask_login import logout_user
 
 # --- Carga env ---
 load_dotenv()
@@ -314,6 +315,25 @@ def chat_status():
         "has_generator": chat_model.generator is not None,
         "device": "cuda" if torch.cuda.is_available() else "cpu"
     })
+
+@app.route('/logout')
+def logout():
+    """Cerrar sesión - VERSIÓN CORREGIDA"""
+    try:
+        # Limpiar la sesión manualmente
+        session.pop('user_id', None)
+        session.pop('username', None)
+        session.pop('access_token', None)
+        session.pop('user_data', None)
+        
+        print("✅ Sesión cerrada correctamente")
+        return redirect(url_for('login'))
+        
+    except Exception as e:
+        print(f"⚠️ Error en logout: {e}")
+        # Redirigir a login de todas formas
+        return redirect(url_for('login'))
+
 
 @app.route("/api/chat/clear", methods=["POST"])
 @login_required

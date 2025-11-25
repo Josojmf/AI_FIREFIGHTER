@@ -28,6 +28,9 @@ import secrets
 import string
 from datetime import timedelta
 
+from services.email_service import send_token_email
+
+
 load_dotenv()
 
 # --- Config ---
@@ -1630,11 +1633,11 @@ def api_dashboard_system_info():
 
 
 
-
+#Token endpoints
 
 @app.route('/api/access_tokens', methods=['GET'])
 def get_access_tokens():
-    """Obtener todos los tokens de acceso"""
+    """Obtener todos los tokens de acceso - CORREGIDO timezone"""
     # Verificar autenticación
     auth_valid, auth_result = require_auth()
     if not auth_valid:
@@ -1650,20 +1653,50 @@ def get_access_tokens():
         for token in tokens_cursor:
             token['_id'] = str(token['_id'])
             
-            # Calcular estado actual
-            now = datetime.now()
-            expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+            # CORRECCIÓN: Manejar timezones correctamente
+            now = datetime.now(timezone.utc)
+            expires_at_str = token.get('expires_at')
             
-            if expires_at < now:
-                token['status'] = 'expired'
-            elif token.get('current_uses', 0) >= token.get('max_uses', 1):
+            # Inicializar estado
+            token['status'] = token.get('status', 'active')
+            
+            # Verificar expiración
+            if expires_at_str:
+                try:
+                    # Convertir a datetime con timezone
+                    if isinstance(expires_at_str, str):
+                        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                    else:
+                        expires_at = expires_at_str
+                    
+                    # Asegurar que ambas fechas tengan timezone
+                    if expires_at.tzinfo is None:
+                        expires_at = expires_at.replace(tzinfo=timezone.utc)
+                    
+                    if expires_at < now:
+                        token['status'] = 'expired'
+                except Exception as e:
+                    print(f"⚠️ Error procesando fecha de expiración: {e}")
+                    # Si hay error, mantener el estado actual
+            
+            # Verificar si está agotado
+            if token.get('current_uses', 0) >= token.get('max_uses', 1):
                 token['status'] = 'exhausted'
             
             # Formatear fechas para mostrar
             if 'created_at' in token:
-                token['created_at_formatted'] = datetime.fromisoformat(token['created_at']).strftime('%d/%m/%Y %H:%M')
+                try:
+                    created_at = datetime.fromisoformat(token['created_at'].replace('Z', '+00:00'))
+                    token['created_at_formatted'] = created_at.strftime('%d/%m/%Y %H:%M')
+                except:
+                    token['created_at_formatted'] = token['created_at']
+            
             if 'expires_at' in token:
-                token['expires_at_formatted'] = expires_at.strftime('%d/%m/%Y %H:%M')
+                try:
+                    expires_at = datetime.fromisoformat(token['expires_at'].replace('Z', '+00:00'))
+                    token['expires_at_formatted'] = expires_at.strftime('%d/%m/%Y %H:%M')
+                except:
+                    token['expires_at_formatted'] = token['expires_at']
             
             tokens.append(token)
         
@@ -1678,6 +1711,8 @@ def get_access_tokens():
     
     except Exception as e:
         print(f"❌ Error al obtener tokens: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'ok': False,
             'message': f'Error al obtener tokens: {str(e)}'
@@ -1685,7 +1720,7 @@ def get_access_tokens():
 
 @app.route('/api/access_tokens', methods=['POST'])
 def create_access_token():
-    """Crear nuevo token de acceso - CORREGIDO timezone"""
+    """Crear nuevo token de acceso con envío de email"""
     # Verificar autenticación
     auth_valid, auth_result = require_auth()
     if not auth_valid:
@@ -1721,7 +1756,7 @@ def create_access_token():
                 'message': 'Ya existe un token con este nombre'
             }), 409
         
-        # Preparar documento CON TIMEZONE
+        # Preparar documento
         token_doc = {
             'name': data['name'],
             'description': data.get('description', ''),
@@ -1731,20 +1766,85 @@ def create_access_token():
             'user_type': data.get('user_type', 'student'),
             'status': 'active',
             'created_by': data.get('created_by', 'system'),
-            'created_at': datetime.now(timezone.utc).isoformat(),  # CON TIMEZONE
-            'expires_at': data.get('expires_at', (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()),  # CON TIMEZONE
-            'usage_history': []
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'expires_at': data.get('expires_at', (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()),
+            'usage_history': [],
+            # Información de email
+            'email_sent_to': data.get('recipient_email', ''),
+            'email_sent_at': None,
+            'email_status': 'pending'
         }
         
         # Insertar en base de datos
         result = collection.insert_one(token_doc)
         token_doc['_id'] = str(result.inserted_id)
         
-        return jsonify({
+        # ENVIAR EMAIL SI SE ESPECIFICÓ UN DESTINATARIO
+        recipient_email = data.get('recipient_email')
+        email_sent = False
+        email_error = None
+        
+        if recipient_email:
+            try:
+                email_sent = send_token_email(
+                    recipient_email=recipient_email,
+                    token_name=data['name'],
+                    token_value=data['token'],
+                    max_uses=int(data['max_uses']),
+                    expires_at=token_doc['expires_at'],
+                    created_by=data.get('created_by', 'system')
+                )
+                
+                # Actualizar estado del email en la base de datos
+                if email_sent:
+                    collection.update_one(
+                        {'_id': result.inserted_id},
+                        {'$set': {
+                            'email_sent_at': datetime.now(timezone.utc).isoformat(),
+                            'email_status': 'sent'
+                        }}
+                    )
+                    token_doc['email_status'] = 'sent'
+                    token_doc['email_sent_at'] = datetime.now(timezone.utc).isoformat()
+                else:
+                    collection.update_one(
+                        {'_id': result.inserted_id},
+                        {'$set': {'email_status': 'failed'}}
+                    )
+                    token_doc['email_status'] = 'failed'
+                    email_error = "Error al enviar el email"
+                    
+            except Exception as e:
+                print(f"❌ Error en envío de email: {e}")
+                collection.update_one(
+                    {'_id': result.inserted_id},
+                    {'$set': {'email_status': 'failed'}}
+                )
+                token_doc['email_status'] = 'failed'
+                email_error = str(e)
+        
+        response_data = {
             'ok': True,
             'message': 'Token creado exitosamente',
             'token': token_doc
-        }), 201
+        }
+        
+        # Añadir información del email a la respuesta
+        if recipient_email:
+            if email_sent:
+                response_data['email_info'] = {
+                    'sent': True,
+                    'recipient': recipient_email,
+                    'message': 'Email enviado correctamente'
+                }
+            else:
+                response_data['email_info'] = {
+                    'sent': False,
+                    'recipient': recipient_email,
+                    'error': email_error
+                }
+        
+        return jsonify(response_data), 201
     
     except Exception as e:
         print(f"❌ Error al crear token: {e}")
@@ -1752,7 +1852,7 @@ def create_access_token():
             'ok': False,
             'message': f'Error al crear token: {str(e)}'
         }), 500
-
+        
 @app.route('/api/access_tokens/<token_value>/validate', methods=['GET'])
 def validate_access_token_endpoint(token_value):
     """Validar token sin incrementar usos - CORREGIDO timezone"""
@@ -1943,6 +2043,8 @@ def delete_access_token(token_id):
             'message': f'Error al eliminar token: {str(e)}'
         }), 500
 
+
+
 @app.route('/api/access_tokens/<token_id>/revoke', methods=['PATCH'])
 def revoke_access_token(token_id):
     """Revocar token (cambiar status)"""
@@ -2064,6 +2166,7 @@ def reset_token_uses(token_id):
             'message': f'Error al reiniciar usos: {str(e)}'
         }), 500
 
+
 @app.route('/api/access_tokens/stats', methods=['GET'])
 def get_access_tokens_stats():
     """Obtener estadísticas de tokens - CORREGIDO timezone"""
@@ -2080,7 +2183,7 @@ def get_access_tokens_stats():
         active_tokens = collection.count_documents({'status': 'active'})
         revoked_tokens = collection.count_documents({'status': 'revoked'})
         
-        # Contar tokens expirados y agotados CON TIMEZONE CORRECTO
+        # CORRECCIÓN: Usar datetime con timezone para comparaciones
         now = datetime.now(timezone.utc).isoformat()
         
         # Para tokens expirados, usar consulta con timezone
@@ -2115,7 +2218,8 @@ def get_access_tokens_stats():
         return jsonify({
             'ok': False,
             'message': f'Error al obtener estadísticas: {str(e)}'
-        }), 500
+        }), 500     
+        
 @app.route('/api/access_tokens/<token_value>/use', methods=['POST'])
 def use_access_token(token_value):
     """Usar un token de acceso - endpoint público para registro de usuarios"""
@@ -2287,7 +2391,7 @@ def use_access_token(token_value, username):
     except Exception as e:
         return False, f"Error usando token: {str(e)}"
 
-
+# End token endpoints
 @app.get("/api/dashboard/health")
 def api_dashboard_health():
     """Endpoint para verificar la salud de la API"""

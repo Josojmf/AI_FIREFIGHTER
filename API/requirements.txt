@@ -28,3 +28,6 @@ pyotp==2.9.0          # Para generar y verificar códigos TOTP
 qrcode[pil]==7.4.2     # Para generar códigos QR
 Pillow==10.1.0         # Para procesamiento de imágenes QR
 docker>=6.0.0
+
+#sendgrid
+sendgrid==6.9.7

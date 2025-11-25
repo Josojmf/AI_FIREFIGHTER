@@ -1,7 +1,7 @@
 # app/routes/access_tokens.py - Sistema de gestión de tokens de acceso
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, jsonify, current_app
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import Config
 import requests
 import secrets
@@ -59,7 +59,7 @@ def token_list():
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_token():
-    """Crear nuevo token de acceso"""
+    """Crear nuevo token de acceso con envío de email opcional"""
     if request.method == 'GET':
         return render_template('access_tokens/create.html')
     
@@ -67,6 +67,7 @@ def create_token():
         # Validar datos del formulario
         name = (request.form.get('name') or '').strip()
         description = (request.form.get('description') or '').strip()
+        recipient_email = (request.form.get('recipient_email') or '').strip()
         max_uses = int(request.form.get('max_uses', 1))
         expires_days = int(request.form.get('expires_days', 30))
         user_type = request.form.get('user_type', 'student')
@@ -84,9 +85,16 @@ def create_token():
             flash('Los días de expiración deben estar entre 1 y 365', 'error')
             return render_template('access_tokens/create.html')
         
+        # Validar email si se proporciona (OPCIONAL)
+        if recipient_email and '@' not in recipient_email:
+            flash('Por favor ingresa un email válido', 'error')
+            return render_template('access_tokens/create.html')
+        
         # Generar token único
         token_value = generate_token()
-        expiration_date = datetime.now() + timedelta(days=expires_days)
+        
+        # CORRECCIÓN: Usar timezone.utc correctamente
+        expiration_date = datetime.now(timezone.utc) + timedelta(days=expires_days)
         
         # Preparar datos para la API
         token_data = {
@@ -94,26 +102,35 @@ def create_token():
             'description': description,
             'token': token_value,
             'max_uses': max_uses,
-            'current_uses': 0,
             'user_type': user_type,
             'status': 'active',
             'created_by': current_user.username,
-            'created_at': datetime.now().isoformat(),
             'expires_at': expiration_date.isoformat()
         }
+        
+        # Añadir email del destinatario si se proporciona (OPCIONAL)
+        if recipient_email:
+            token_data['recipient_email'] = recipient_email
         
         headers = get_auth_headers()
         response = requests.post(
             f"{Config.API_BASE_URL}/api/access_tokens", 
             headers=headers,
             json=token_data,
-            timeout=10
+            timeout=30  # Aumentado timeout
         )
         
         if response.status_code == 201:
             data = response.json()
             if data.get('ok'):
-                flash(f'Token "{name}" creado exitosamente', 'success')
+                # Verificar si se envió email
+                email_info = data.get('email_info')
+                if email_info and email_info.get('sent'):
+                    flash(f'Token "{name}" creado y enviado por email a {recipient_email}', 'success')
+                elif email_info and not email_info.get('sent'):
+                    flash(f'Token "{name}" creado pero error al enviar email: {email_info.get("error")}', 'warning')
+                else:
+                    flash(f'Token "{name}" creado exitosamente', 'success')
                 return redirect(url_for('access_tokens.token_list'))
             else:
                 flash(data.get('message', 'Error al crear token'), 'error')
@@ -185,7 +202,7 @@ def edit_token(token_id):
             'max_uses': max_uses,
             'status': status,
             'updated_by': current_user.username,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now(timezone.utc).isoformat()
         }
         
         headers = get_auth_headers()
@@ -255,7 +272,7 @@ def revoke_token(token_id):
         response = requests.patch(
             f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/revoke", 
             headers=headers,
-            json={'revoked_by': current_user.username, 'revoked_at': datetime.now().isoformat()},
+            json={'revoked_by': current_user.username, 'revoked_at': datetime.now(timezone.utc).isoformat()},
             timeout=10
         )
         
@@ -286,7 +303,7 @@ def reactivate_token(token_id):
         response = requests.patch(
             f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/reactivate", 
             headers=headers,
-            json={'reactivated_by': current_user.username, 'reactivated_at': datetime.now().isoformat()},
+            json={'reactivated_by': current_user.username, 'reactivated_at': datetime.now(timezone.utc).isoformat()},
             timeout=10
         )
         
@@ -317,7 +334,7 @@ def reset_uses(token_id):
         response = requests.patch(
             f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/reset_uses", 
             headers=headers,
-            json={'reset_by': current_user.username, 'reset_at': datetime.now().isoformat()},
+            json={'reset_by': current_user.username, 'reset_at': datetime.now(timezone.utc).isoformat()},
             timeout=10
         )
         
