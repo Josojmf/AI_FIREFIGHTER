@@ -1,4 +1,4 @@
-# app/routes/access_tokens.py - Sistema de gestión de tokens de acceso
+# app/routes/access_tokens.py - Sistema de gestión de tokens de acceso CON DEBUG MEJORADO
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, jsonify, current_app
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta, timezone
@@ -12,8 +12,17 @@ bp = Blueprint('access_tokens', __name__, url_prefix='/access_tokens')
 def get_auth_headers():
     """Obtener headers de autenticación con token JWT"""
     token = session.get('api_token')
+    print(f"🔐 DEBUG get_auth_headers - Token en sesión: {'✅' if token else '❌'}")
     if token:
-        return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+        print(f"🔐 DEBUG Token preview: {token[:30]}...")
+        headers = {
+            'Authorization': f'Bearer {token}', 
+            'Content-Type': 'application/json'
+        }
+        print(f"🔐 DEBUG Headers preparados: {headers}")
+        return headers
+    
+    print("🔐 DEBUG No hay token en sesión")
     return {'Content-Type': 'application/json'}
 
 def generate_token(length=64):
@@ -25,37 +34,103 @@ def generate_token(length=64):
 @login_required
 def token_list():
     """Lista todos los tokens de acceso"""
-    print("🔑 Accediendo a lista de tokens")
+    print("🔑 DEBUG token_list - Iniciando obtención de tokens")
+    print(f"🔑 DEBUG Usuario autenticado: {current_user.username}")
     
     try:
         headers = get_auth_headers()
+        api_url = f"{Config.API_BASE_URL}/api/access_tokens"
+        
+        print(f"🌐 DEBUG Llamando a API:")
+        print(f"🌐 DEBUG URL: {api_url}")
+        print(f"🌐 DEBUG Headers: {headers}")
+        print(f"🌐 DEBUG API_BASE_URL config: {Config.API_BASE_URL}")
+        
         response = requests.get(
-            f"{Config.API_BASE_URL}/api/access_tokens", 
+            api_url, 
             headers=headers,
             timeout=10
         )
         
+        print(f"📡 DEBUG Respuesta recibida:")
+        print(f"📡 DEBUG Status Code: {response.status_code}")
+        print(f"📡 DEBUG Response Headers: {dict(response.headers)}")
+        print(f"📡 DEBUG Response Text: {response.text[:500]}...")
+        
         if response.status_code == 200:
             data = response.json()
+            print(f"📋 DEBUG JSON parseado: {data}")
+            
             if data.get('ok'):
                 tokens = data.get('tokens', [])
-                print(f"✅ Tokens obtenidos: {len(tokens)}")
+                print(f"✅ DEBUG Tokens obtenidos: {len(tokens)}")
+                for token in tokens:
+                    print(f"   - {token.get('name')}: {token.get('token', '')[:10]}...")
                 return render_template('access_tokens/list.html', tokens=tokens)
             else:
-                flash(data.get('message', 'Error al obtener tokens'), 'error')
+                error_msg = data.get('message', 'Error al obtener tokens')
+                print(f"❌ DEBUG Error en respuesta JSON: {error_msg}")
+                flash(error_msg, 'error')
         else:
-            flash(f'Error del servidor: {response.status_code}', 'error')
+            error_msg = f'Error del servidor: {response.status_code} - {response.text}'
+            print(f"❌ DEBUG Error HTTP: {error_msg}")
+            flash(error_msg, 'error')
     
     except requests.RequestException as e:
-        print(f"❌ Error de conexión: {e}")
-        flash('Error de conexión con el servidor', 'error')
+        print(f"❌ DEBUG Error de conexión: {e}")
+        flash(f'Error de conexión con el servidor: {str(e)}', 'error')
     except Exception as e:
-        print(f"❌ Error inesperado: {e}")
-        flash('Error interno del sistema', 'error')
+        print(f"❌ DEBUG Error inesperado: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Error interno del sistema: {str(e)}', 'error')
     
     # Fallback con lista vacía
+    print("🔄 DEBUG Usando fallback - lista vacía de tokens")
     return render_template('access_tokens/list.html', tokens=[])
 
+@bp.route('/debug-session')
+@login_required
+def debug_session():
+    """Endpoint para debuggear la sesión"""
+    debug_info = {
+        'session_keys': list(session.keys()),
+        'has_api_token': 'api_token' in session,
+        'api_token_preview': session.get('api_token', '')[:50] + '...' if session.get('api_token') else None,
+        'user_authenticated': current_user.is_authenticated,
+        'user_id': current_user.get_id(),
+        'username': current_user.username if current_user.is_authenticated else None,
+        'config_api_url': Config.API_BASE_URL,
+        'config_backoffice_url': Config.BACKOFFICE_API_BASE_URL
+    }
+    return jsonify(debug_info)
+
+@bp.route('/test-api-connection')
+@login_required
+def test_api_connection():
+    """Endpoint para testear la conexión a la API"""
+    try:
+        headers = get_auth_headers()
+        test_url = f"{Config.API_BASE_URL}/health"
+        
+        print(f"🧪 TEST Conectando a: {test_url}")
+        response = requests.get(test_url, timeout=5)
+        
+        result = {
+            'test_url': test_url,
+            'status_code': response.status_code,
+            'response': response.text,
+            'headers_sent': headers
+        }
+        
+        print(f"🧪 TEST Resultado: {result}")
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"🧪 TEST Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ... (el resto de tus funciones create_token, edit_token, delete_token, etc. se mantienen igual) ...
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_token():

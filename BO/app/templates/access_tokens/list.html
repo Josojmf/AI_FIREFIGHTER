@@ -228,36 +228,135 @@ function refreshTokens() {
 }
 
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    // Mostrar notificación temporal
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #10b981;
-      color: white;
-      padding: 1rem 1.5rem;
-      border-radius: 0.5rem;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-      z-index: 1000;
-      font-weight: 600;
-      animation: slideInRight 0.3s ease-out;
-    `;
-    notification.textContent = '✅ Token copiado al portapapeles';
-    document.body.appendChild(notification);
+  // Método 1: Usando navigator.clipboard (moderno)
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      showNotification('✅ Token copiado al portapapeles');
+    }).catch(() => {
+      fallbackCopyToClipboard(text);
+    });
+  } else {
+    fallbackCopyToClipboard(text);
+  }
+}
+
+function fallbackCopyToClipboard(text) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-999999px';
+  textArea.style.top = '-999999px';
+  textArea.style.opacity = '0';
+  
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  
+  try {
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
     
+    if (successful) {
+      showNotification('✅ Token copiado al portapapeles');
+    } else {
+      showNotification('❌ Error al copiar, intente manualmente', true);
+    }
+  } catch (err) {
+    document.body.removeChild(textArea);
+    showCopyPrompt(text);
+  }
+}
+
+function showCopyPrompt(text) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  `;
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: white;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+  `;
+  
+  modal.innerHTML = `
+    <h3 style="margin-bottom: 1rem; color: #1f2937;">Copiar Token</h3>
+    <p style="margin-bottom: 1.5rem; color: #6b7280;">Selecciona el token y cópialo manualmente:</p>
+    <textarea 
+      style="
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 0.375rem;
+        font-family: monospace;
+        resize: none;
+        background: #f9fafb;
+        margin-bottom: 1.5rem;
+      "
+      rows="4"
+      readonly
+    >${text}</textarea>
+    <button onclick="this.closest('.copy-overlay').remove()" style="
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-weight: 600;
+    ">
+      Cerrar
+    </button>
+  `;
+  
+  overlay.className = 'copy-overlay';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  
+  // Seleccionar automáticamente el texto
+  const textarea = overlay.querySelector('textarea');
+  textarea.select();
+}
+
+function showNotification(message, isError = false) {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: ${isError ? '#ef4444' : '#10b981'};
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    font-weight: 600;
+    animation: slideInRight 0.3s ease-out;
+  `;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.animation = 'fadeOut 0.3s ease-out';
     setTimeout(() => {
-      notification.style.animation = 'fadeOut 0.3s ease-out';
-      setTimeout(() => {
-        if (document.body.contains(notification)) {
-          document.body.removeChild(notification);
-        }
-      }, 300);
-    }, 2000);
-  }).catch(() => {
-    alert('Error al copiar el token');
-  });
+      if (document.body.contains(notification)) {
+        document.body.removeChild(notification);
+      }
+    }, 300);
+  }, 2000);
 }
 
 function confirmAction(action, tokenId, tokenName) {
