@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="es">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,17 +10,17 @@
 
   <!-- Fuentes -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
+
   <!-- CSS Base del layout -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
-  
+
   <!-- CSS específico de cada página -->
   {% block styles %}{% endblock %}
 </head>
 
 <body class="{% block body_class %}{% endblock %}">
   <div class="layout {% if not current_user.is_authenticated %}login-layout{% else %}dashboard-layout{% endif %}">
-    
+
     <!-- SIDEBAR - Solo visible cuando está logueado -->
     {% if current_user.is_authenticated %}
     <aside class="sidebar" id="sidebar">
@@ -37,32 +38,43 @@
       <nav class="sidebar-nav">
         <ul class="nav-menu">
           <li class="nav-item">
-            <a href="{{ url_for('dashboard.index') }}" class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
+            <a href="{{ url_for('dashboard.index') }}"
+              class="nav-link {% if request.endpoint == 'dashboard.index' %}active{% endif %}">
               <span class="nav-icon">📊</span>
               <span class="nav-text">Dashboard</span>
             </a>
           </li>
-          
+
           <li class="nav-item">
-            <a href="{{ url_for('users.user_list') }}" class="nav-link {% if 'users' in request.endpoint %}active{% endif %}">
+            <a href="{{ url_for('users.user_list') }}"
+              class="nav-link {% if 'users' in request.endpoint %}active{% endif %}">
               <span class="nav-icon">👥</span>
               <span class="nav-text">Usuarios</span>
             </a>
           </li>
-          
           <li class="nav-item">
-            <a href="{{ url_for('memory_cards.card_list') }}" class="nav-link {% if 'memory_cards' in request.endpoint %}active{% endif %}">
+            <a href="{{ url_for('access_tokens.token_list') }}"
+              class="nav-link {% if 'access_tokens' in request.endpoint %}active{% endif %}">
+              <span class="nav-icon">🔑</span>
+              <span class="nav-text">Access Tokens</span>
+            </a>
+          </li>
+
+          <li class="nav-item">
+            <a href="{{ url_for('memory_cards.card_list') }}"
+              class="nav-link {% if 'memory_cards' in request.endpoint %}active{% endif %}">
               <span class="nav-icon">🗃️</span>
               <span class="nav-text">Memory Cards</span>
             </a>
           </li>
-          
+
           <li class="nav-divider">
             <span class="divider-text">Sistema</span>
           </li>
-          
+
           <li class="nav-item">
-            <a href="{{ url_for('auth.setup_mfa') }}" class="nav-link {% if 'mfa' in request.endpoint %}active{% endif %}">
+            <a href="{{ url_for('auth.setup_mfa') }}"
+              class="nav-link {% if 'mfa' in request.endpoint %}active{% endif %}">
               <span class="nav-icon">🛡️</span>
               <span class="nav-text">Seguridad</span>
             </a>
@@ -88,7 +100,7 @@
 
     <!-- MAIN CONTENT -->
     <main class="main-content">
-      
+
       <!-- HEADER - Solo visible cuando está logueado -->
       {% if current_user.is_authenticated %}
       <header class="top-header">
@@ -98,7 +110,7 @@
             <span class="hamburger"></span>
             <span class="hamburger"></span>
           </button>
-          
+
           <div class="page-title">
             {% block page_title %}Dashboard{% endblock %}
           </div>
@@ -118,7 +130,7 @@
               <span class="user-name-sm">{{ current_user.username }}</span>
               <span class="dropdown-arrow">▼</span>
             </button>
-            
+
             <div class="user-menu-dropdown" id="userMenuDropdown">
               <div class="user-menu-header">
                 <div class="user-avatar">{{ current_user.username[0]|upper }}</div>
@@ -127,7 +139,7 @@
                   <div class="user-email">{{ current_user.email }}</div>
                 </div>
               </div>
-              
+
               <div class="user-menu-actions">
                 <a href="{{ url_for('auth.setup_mfa') }}" class="user-menu-item">
                   <span class="menu-icon">⚙️</span>
@@ -146,22 +158,22 @@
 
       <!-- FLASH MESSAGES -->
       {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-messages">
-            {% for category, message in messages %}
-              <div class="flash flash-{{ category }}" data-flash>
-                <div class="flash-icon">
-                  {% if category == 'error' %}❌
-                  {% elif category == 'warning' %}⚠️
-                  {% elif category == 'success' %}✅
-                  {% else %}ℹ️{% endif %}
-                </div>
-                <div class="flash-content">{{ message }}</div>
-                <button class="flash-close" onclick="this.parentElement.remove()">✕</button>
-              </div>
-            {% endfor %}
+      {% if messages %}
+      <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}" data-flash>
+          <div class="flash-icon">
+            {% if category == 'error' %}❌
+            {% elif category == 'warning' %}⚠️
+            {% elif category == 'success' %}✅
+            {% else %}ℹ️{% endif %}
           </div>
-        {% endif %}
+          <div class="flash-content">{{ message }}</div>
+          <button class="flash-close" onclick="this.parentElement.remove()">✕</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% endwith %}
 
       <!-- PAGE CONTENT -->
@@ -176,8 +188,9 @@
 
   <!-- JavaScript base del layout -->
   <script src="{{ url_for('static', filename='js/backoffice.js') }}"></script>
-  
+
   <!-- JavaScript específico de cada página -->
   {% block scripts %}{% endblock %}
 </body>
+
 </html>

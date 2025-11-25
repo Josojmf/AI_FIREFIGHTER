@@ -1,0 +1,370 @@
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Access Tokens - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Tokens de Acceso{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/access_tokens.css') }}">
+<style>
+/* Estilos específicos para Access Tokens */
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tokens-container">
+  
+  <!-- Header -->
+  <div class="tokens-header">
+    <div class="tokens-title">
+      <span class="icon">🔑</span>
+      <h1>Tokens de Acceso</h1>
+    </div>
+    <div class="tokens-actions">
+      <button class="btn btn-secondary" onclick="refreshTokens()">
+        <span>🔄</span>
+        Actualizar
+      </button>
+      <a href="{{ url_for('access_tokens.create_token') }}" class="btn btn-primary">
+        <span>➕</span>
+        Crear Token
+      </a>
+    </div>
+  </div>
+
+  <!-- Estadísticas -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-icon">🔑</div>
+      <div class="stat-value" id="totalTokens">{{ tokens|length }}</div>
+      <div class="stat-label">Total Tokens</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value" id="activeTokens">{{ tokens|selectattr('status', 'equalto', 'active')|list|length }}</div>
+      <div class="stat-label">Activos</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🚫</div>
+      <div class="stat-value" id="revokedTokens">{{ tokens|selectattr('status', 'equalto', 'revoked')|list|length }}</div>
+      <div class="stat-label">Revocados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-value" id="totalUses">
+        {% set total_uses = tokens|sum(attribute='current_uses') %}
+        {{ total_uses if total_uses else 0 }}
+      </div>
+      <div class="stat-label">Total Usos</div>
+    </div>
+  </div>
+
+  <!-- Tabla de tokens -->
+  <div class="tokens-table-container">
+    {% if tokens %}
+    <table class="tokens-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th>Usos</th>
+          <th>Tipo Usuario</th>
+          <th>Creado</th>
+          <th>Expira</th>
+          <th>Token</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for token in tokens %}
+        <tr>
+          <td>
+            <div>
+              <div style="font-weight: 600;">{{ token.name }}</div>
+              {% if token.description %}
+              <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
+                {{ token.description }}
+              </div>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            {% set status_class = 'active' %}
+            {% if token.status == 'revoked' %}{% set status_class = 'revoked' %}
+            {% elif token.current_uses >= token.max_uses %}{% set status_class = 'exhausted' %}
+            {% endif %}
+            <span class="token-status {{ status_class }}">
+              {{ token.status|title if token.status else 'Active' }}
+            </span>
+          </td>
+          <td>
+            <div class="usage-container">
+              <div class="usage-progress">
+                {% set usage_percent = (token.current_uses / token.max_uses * 100) if token.max_uses > 0 else 0 %}
+                {% set bar_class = '' %}
+                {% if usage_percent >= 90 %}{% set bar_class = 'danger' %}
+                {% elif usage_percent >= 70 %}{% set bar_class = 'warning' %}
+                {% endif %}
+                <div class="usage-progress-bar {{ bar_class }}" style="width: {{ usage_percent }}%;"></div>
+              </div>
+              <div class="usage-info">
+                {{ token.current_uses or 0 }} / {{ token.max_uses }} usos
+              </div>
+            </div>
+          </td>
+          <td>
+            <span style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">{{ token.user_type or 'student' }}</span>
+          </td>
+          <td>
+            <div style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">
+              {% if token.created_at_formatted %}
+                {{ token.created_at_formatted }}
+              {% else %}
+                {{ token.created_at[:10] if token.created_at else 'N/A' }}
+              {% endif %}
+            </div>
+            {% if token.created_by %}
+            <div style="font-size: 0.75rem; color: #6b7280;">
+              por {{ token.created_by }}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            <div style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">
+              {% if token.expires_at_formatted %}
+                {{ token.expires_at_formatted }}
+              {% else %}
+                {{ token.expires_at[:10] if token.expires_at else 'N/A' }}
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            <div style="font-family: monospace; font-size: 0.75rem; background: #000000; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis;">
+              <span onclick="copyToClipboard('{{ token.token }}')" style="cursor: pointer;" title="Click para copiar">
+                {{ token.token[:12] }}...
+              </span>
+            </div>
+          </td>
+          <td>
+            <div class="token-actions">
+              <a href="{{ url_for('access_tokens.edit_token', token_id=token._id) }}" 
+                 class="btn btn-sm btn-secondary" title="Editar">
+                ✏️
+              </a>
+              
+              {% if token.status != 'revoked' %}
+              <button onclick="confirmAction('revoke', '{{ token._id }}', '{{ token.name }}')" 
+                      class="btn btn-sm btn-warning" title="Revocar">
+                🚫
+              </button>
+              {% else %}
+              <button onclick="confirmAction('reactivate', '{{ token._id }}', '{{ token.name }}')" 
+                      class="btn btn-sm btn-success" title="Reactivar">
+                ✅
+              </button>
+              {% endif %}
+              
+              {% if token.current_uses > 0 %}
+              <button onclick="confirmAction('reset', '{{ token._id }}', '{{ token.name }}')" 
+                      class="btn btn-sm btn-secondary" title="Reiniciar usos">
+                🔄
+              </button>
+              {% endif %}
+              
+              <button onclick="confirmAction('delete', '{{ token._id }}', '{{ token.name }}')" 
+                      class="btn btn-sm btn-danger" title="Eliminar">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <div class="icon">🔑</div>
+      <h3>No hay tokens de acceso</h3>
+      <p>Crea tu primer token para permitir el registro de nuevos usuarios</p>
+      <a href="{{ url_for('access_tokens.create_token') }}" class="btn btn-primary">
+        <span>➕</span>
+        Crear Primer Token
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal de confirmación -->
+<div id="confirmModal" class="modal" style="display: none;">
+  <div class="modal-backdrop"></div>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="confirmTitle">Confirmar Acción</h3>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage">¿Estás seguro de realizar esta acción?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button type="button" id="confirmButton" class="btn btn-danger" onclick="executeAction()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentAction = null;
+let currentTokenId = null;
+let currentTokenName = null;
+
+function refreshTokens() {
+  window.location.reload();
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Mostrar notificación temporal
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      font-weight: 600;
+    `;
+    notification.textContent = 'Token copiado al portapapeles';
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 2000);
+  }).catch(() => {
+    alert('Error al copiar el token');
+  });
+}
+
+function confirmAction(action, tokenId, tokenName) {
+  currentAction = action;
+  currentTokenId = tokenId;
+  currentTokenName = tokenName;
+  
+  const modal = document.getElementById('confirmModal');
+  const title = document.getElementById('confirmTitle');
+  const message = document.getElementById('confirmMessage');
+  const button = document.getElementById('confirmButton');
+  
+  switch(action) {
+    case 'revoke':
+      title.textContent = 'Revocar Token';
+      message.textContent = `¿Estás seguro de revocar el token "${tokenName}"? Los usuarios no podrán usarlo para registrarse.`;
+      button.textContent = 'Revocar';
+      button.className = 'btn btn-warning';
+      break;
+    case 'reactivate':
+      title.textContent = 'Reactivar Token';
+      message.textContent = `¿Estás seguro de reactivar el token "${tokenName}"?`;
+      button.textContent = 'Reactivar';
+      button.className = 'btn btn-success';
+      break;
+    case 'reset':
+      title.textContent = 'Reiniciar Usos';
+      message.textContent = `¿Estás seguro de reiniciar el contador de usos del token "${tokenName}" a 0?`;
+      button.textContent = 'Reiniciar';
+      button.className = 'btn btn-secondary';
+      break;
+    case 'delete':
+      title.textContent = 'Eliminar Token';
+      message.textContent = `¿Estás seguro de eliminar permanentemente el token "${tokenName}"? Esta acción no se puede deshacer.`;
+      button.textContent = 'Eliminar';
+      button.className = 'btn btn-danger';
+      break;
+  }
+  
+  modal.style.display = 'block';
+}
+
+function closeModal() {
+  document.getElementById('confirmModal').style.display = 'none';
+  currentAction = null;
+  currentTokenId = null;
+  currentTokenName = null;
+}
+
+function executeAction() {
+  if (!currentAction || !currentTokenId) {
+    closeModal();
+    return;
+  }
+  
+  const form = document.createElement('form');
+  form.method = 'POST';
+  
+  switch(currentAction) {
+    case 'revoke':
+      form.action = `{{ url_for('access_tokens.revoke_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+      break;
+    case 'reactivate':
+      form.action = `{{ url_for('access_tokens.reactivate_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+      break;
+    case 'reset':
+      form.action = `{{ url_for('access_tokens.reset_uses', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+      break;
+    case 'delete':
+      form.action = `{{ url_for('access_tokens.delete_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+      break;
+  }
+  
+  // CSRF token si existe
+  const csrfToken = document.querySelector('meta[name=csrf-token]');
+  if (csrfToken) {
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrf_token';
+    csrfInput.value = csrfToken.getAttribute('content');
+    form.appendChild(csrfInput);
+  }
+  
+  document.body.appendChild(form);
+  form.submit();
+  
+  closeModal();
+}
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeModal();
+  }
+});
+
+// Actualizar estadísticas dinámicamente
+function updateStats() {
+  fetch('{{ url_for("access_tokens.token_stats") }}')
+    .then(response => response.json())
+    .then(data => {
+      if (data.total_tokens !== undefined) {
+        document.getElementById('totalTokens').textContent = data.total_tokens;
+        document.getElementById('activeTokens').textContent = data.active_tokens || 0;
+        document.getElementById('revokedTokens').textContent = data.revoked_tokens || 0;
+        document.getElementById('totalUses').textContent = data.total_uses || 0;
+      }
+    })
+    .catch(error => {
+      console.error('Error al actualizar estadísticas:', error);
+    });
+}
+
+// Actualizar estadísticas cada 30 segundos
+setInterval(updateStats, 30000);
+</script>
+{% endblock %}

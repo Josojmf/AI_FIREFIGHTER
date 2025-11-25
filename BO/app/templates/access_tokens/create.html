@@ -1,0 +1,428 @@
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Crear Token - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}Crear Nuevo Token{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+/* Estilos específicos para formulario de creación */
+.create-token-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.form-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #7c3aed 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 0.75rem 0.75rem 0 0;
+  text-align: center;
+}
+
+.form-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.form-header p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 0.875rem;
+}
+
+.form-container {
+  background: white;
+  border-radius: 0 0 0.75rem 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.form-label.required::after {
+  content: ' *';
+  color: #ef4444;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-help {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  font-size: 0.875rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+  background: #e5e7eb;
+}
+
+.preview-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.preview-title {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.token-preview {
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: white;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid #d1d5db;
+  word-break: break-all;
+  color: #6b7280;
+}
+
+.usage-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.validation-error {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .create-token-container {
+    margin: 0 1rem;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+  
+  .btn {
+    justify-content: center;
+  }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="create-token-container">
+  <div class="form-header">
+    <h1>🔑 Crear Nuevo Token</h1>
+    <p>Genera un token de acceso para permitir el registro de nuevos usuarios</p>
+  </div>
+
+  <div class="form-container">
+    <form id="createTokenForm" method="POST" action="{{ url_for('access_tokens.create_token') }}">
+      
+      <!-- Información básica -->
+      <div class="form-group">
+        <label for="name" class="form-label required">Nombre del Token</label>
+        <input type="text" id="name" name="name" class="form-input" 
+               placeholder="Ej: Token Academia Bomberos Madrid" 
+               required maxlength="100">
+        <div class="form-help">Nombre descriptivo para identificar el token</div>
+      </div>
+
+      <div class="form-group">
+        <label for="description" class="form-label">Descripción</label>
+        <textarea id="description" name="description" class="form-input form-textarea" 
+                  placeholder="Descripción opcional del propósito del token..."></textarea>
+        <div class="form-help">Descripción opcional para documentar el uso del token</div>
+      </div>
+
+      <!-- Configuración de usos -->
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="max_uses" class="form-label required">Máximo de Usos</label>
+          <input type="number" id="max_uses" name="max_uses" class="form-input" 
+                 value="50" min="1" max="1000" required>
+          <div class="form-help">Número máximo de registros permitidos</div>
+        </div>
+
+        <div class="form-group">
+          <label for="expires_days" class="form-label required">Días hasta Expiración</label>
+          <input type="number" id="expires_days" name="expires_days" class="form-input" 
+                 value="30" min="1" max="365" required>
+          <div class="form-help">Días antes de que expire el token</div>
+        </div>
+      </div>
+
+      <!-- Tipo de usuario -->
+      <div class="form-group">
+        <label for="user_type" class="form-label">Tipo de Usuario</label>
+        <select id="user_type" name="user_type" class="form-select">
+          <option value="student">Estudiante</option>
+          <option value="instructor">Instructor</option>
+          <option value="academy">Academia</option>
+          <option value="trial">Prueba</option>
+        </select>
+        <div class="form-help">Define el tipo de cuenta que se creará con este token</div>
+      </div>
+
+      <!-- Vista previa -->
+      <div class="preview-section" id="tokenPreview" style="display: none;">
+        <div class="preview-title">Vista Previa del Token</div>
+        
+        <div class="token-preview" id="tokenValue">
+          El token se generará automáticamente al crear
+        </div>
+        
+        <div class="usage-preview">
+          <span>Configuración:</span>
+          <span id="configPreview">50 usos, expira en 30 días</span>
+        </div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="form-actions">
+        <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-secondary">
+          <span>❌</span>
+          Cancelar
+        </a>
+        <button type="submit" class="btn btn-primary" id="submitButton">
+          <span>✅</span>
+          Crear Token
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('createTokenForm');
+  const nameInput = document.getElementById('name');
+  const maxUsesInput = document.getElementById('max_uses');
+  const expiresDaysInput = document.getElementById('expires_days');
+  const userTypeSelect = document.getElementById('user_type');
+  const previewSection = document.getElementById('tokenPreview');
+  const configPreview = document.getElementById('configPreview');
+  const submitButton = document.getElementById('submitButton');
+
+  // Mostrar vista previa cuando hay datos
+  function updatePreview() {
+    const name = nameInput.value.trim();
+    const maxUses = maxUsesInput.value;
+    const expiresDays = expiresDaysInput.value;
+    const userType = userTypeSelect.value;
+
+    if (name && maxUses && expiresDays) {
+      previewSection.style.display = 'block';
+      configPreview.textContent = `${maxUses} usos, expira en ${expiresDays} días, tipo: ${userType}`;
+    } else {
+      previewSection.style.display = 'none';
+    }
+  }
+
+  // Validación en tiempo real
+  function validateForm() {
+    const name = nameInput.value.trim();
+    const maxUses = parseInt(maxUsesInput.value);
+    const expiresDays = parseInt(expiresDaysInput.value);
+    
+    let isValid = true;
+    
+    // Limpiar errores anteriores
+    document.querySelectorAll('.validation-error').forEach(el => el.remove());
+    
+    // Validar nombre
+    if (!name) {
+      showError(nameInput, 'El nombre es obligatorio');
+      isValid = false;
+    } else if (name.length < 3) {
+      showError(nameInput, 'El nombre debe tener al menos 3 caracteres');
+      isValid = false;
+    }
+    
+    // Validar usos máximos
+    if (!maxUses || maxUses < 1 || maxUses > 1000) {
+      showError(maxUsesInput, 'Los usos máximos deben estar entre 1 y 1000');
+      isValid = false;
+    }
+    
+    // Validar días de expiración
+    if (!expiresDays || expiresDays < 1 || expiresDays > 365) {
+      showError(expiresDaysInput, 'Los días de expiración deben estar entre 1 y 365');
+      isValid = false;
+    }
+    
+    // Actualizar botón
+    submitButton.disabled = !isValid;
+    if (isValid) {
+      submitButton.classList.remove('btn-disabled');
+    } else {
+      submitButton.classList.add('btn-disabled');
+    }
+    
+    return isValid;
+  }
+
+  function showError(input, message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'validation-error';
+    errorDiv.textContent = message;
+    input.parentNode.appendChild(errorDiv);
+    input.style.borderColor = '#ef4444';
+  }
+
+  // Event listeners
+  [nameInput, maxUsesInput, expiresDaysInput, userTypeSelect].forEach(input => {
+    input.addEventListener('input', () => {
+      updatePreview();
+      validateForm();
+    });
+    
+    input.addEventListener('blur', validateForm);
+  });
+
+  // Validar al enviar
+  form.addEventListener('submit', function(e) {
+    if (!validateForm()) {
+      e.preventDefault();
+      
+      // Scroll al primer error
+      const firstError = document.querySelector('.validation-error');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      
+      return false;
+    }
+    
+    // Mostrar loading
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span>⏳</span> Creando Token...';
+  });
+
+  // Inicializar
+  updatePreview();
+  validateForm();
+});
+</script>
+
+<style>
+.btn-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-disabled:hover {
+  transform: none !important;
+}
+
+input[style*="border-color: #ef4444"] {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+input[style*="border-color: #ef4444"]:focus {
+  border-color: #ef4444 !important;
+}
+</style>
+{% endblock %}

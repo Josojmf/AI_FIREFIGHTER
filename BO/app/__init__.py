@@ -83,11 +83,13 @@ def create_app():
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.users import bp as users_bp
     from app.routes.memory_cards import bp as memory_cards_bp
+    from app.routes.access_tokens import bp as access_tokens_bp  # ← NUEVA LÍNEA
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(memory_cards_bp)
+    app.register_blueprint(access_tokens_bp)  # ← NUEVA LÍNEA
 
     # Health endpoint simple
     @app.get("/health")

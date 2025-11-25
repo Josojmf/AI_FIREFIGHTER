@@ -24,6 +24,10 @@ import base64
 
 from bson import ObjectId
 
+import secrets
+import string
+from datetime import timedelta
+
 load_dotenv()
 
 # --- Config ---
@@ -1391,6 +1395,566 @@ def api_dashboard_system_info():
             "last_update": datetime.now(timezone.utc).isoformat(),
             "detail": str(e)
         }), 500
+
+
+
+
+
+@app.route('/api/access_tokens', methods=['GET'])
+def get_access_tokens():
+    """Obtener todos los tokens de acceso"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        collection = db.access_tokens
+        
+        # Obtener todos los tokens
+        tokens_cursor = collection.find({})
+        tokens = []
+        
+        for token in tokens_cursor:
+            token['_id'] = str(token['_id'])
+            
+            # Calcular estado actual
+            now = datetime.now()
+            expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+            
+            if expires_at < now:
+                token['status'] = 'expired'
+            elif token.get('current_uses', 0) >= token.get('max_uses', 1):
+                token['status'] = 'exhausted'
+            
+            # Formatear fechas para mostrar
+            if 'created_at' in token:
+                token['created_at_formatted'] = datetime.fromisoformat(token['created_at']).strftime('%d/%m/%Y %H:%M')
+            if 'expires_at' in token:
+                token['expires_at_formatted'] = expires_at.strftime('%d/%m/%Y %H:%M')
+            
+            tokens.append(token)
+        
+        # Ordenar por fecha de creación (más recientes primero)
+        tokens.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
+        return jsonify({
+            'ok': True,
+            'tokens': tokens,
+            'total': len(tokens)
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al obtener tokens: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al obtener tokens: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens', methods=['POST'])
+def create_access_token():
+    """Crear nuevo token de acceso"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        data = request.get_json()
+        
+        # Validaciones
+        required_fields = ['name', 'token', 'max_uses']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({
+                    'ok': False,
+                    'message': f'El campo {field} es obligatorio'
+                }), 400
+        
+        collection = db.access_tokens
+        
+        # Verificar que el token no exista
+        existing_token = collection.find_one({'token': data['token']})
+        if existing_token:
+            return jsonify({
+                'ok': False,
+                'message': 'Este token ya existe'
+            }), 409
+        
+        # Verificar que el nombre no exista
+        existing_name = collection.find_one({'name': data['name']})
+        if existing_name:
+            return jsonify({
+                'ok': False,
+                'message': 'Ya existe un token con este nombre'
+            }), 409
+        
+        # Preparar documento
+        token_doc = {
+            'name': data['name'],
+            'description': data.get('description', ''),
+            'token': data['token'],
+            'max_uses': int(data['max_uses']),
+            'current_uses': 0,
+            'user_type': data.get('user_type', 'student'),
+            'status': 'active',
+            'created_by': data.get('created_by', 'system'),
+            'created_at': data.get('created_at', datetime.now().isoformat()),
+            'expires_at': data.get('expires_at', (datetime.now() + timedelta(days=30)).isoformat()),
+            'usage_history': []
+        }
+        
+        # Insertar en base de datos
+        result = collection.insert_one(token_doc)
+        token_doc['_id'] = str(result.inserted_id)
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token creado exitosamente',
+            'token': token_doc
+        }), 201
+    
+    except Exception as e:
+        print(f"❌ Error al crear token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al crear token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>', methods=['GET'])
+def get_access_token(token_id):
+    """Obtener token específico"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        collection = db.access_tokens
+        
+        # Buscar por ID o por valor del token
+        if len(token_id) == 24:  # ObjectId
+            token = collection.find_one({'_id': ObjectId(token_id)})
+        else:  # Token value
+            token = collection.find_one({'token': token_id})
+        
+        if not token:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        token['_id'] = str(token['_id'])
+        
+        # Calcular estado actual
+        now = datetime.now()
+        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        
+        if expires_at < now:
+            token['status'] = 'expired'
+        elif token.get('current_uses', 0) >= token.get('max_uses', 1):
+            token['status'] = 'exhausted'
+        
+        return jsonify({
+            'ok': True,
+            'token': token
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al obtener token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al obtener token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>', methods=['PUT'])
+def update_access_token(token_id):
+    """Actualizar token existente"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        data = request.get_json()
+        collection = db.access_tokens
+        
+        # Preparar campos a actualizar
+        update_fields = {}
+        allowed_fields = ['name', 'description', 'max_uses', 'status', 'updated_by', 'updated_at']
+        
+        for field in allowed_fields:
+            if field in data:
+                update_fields[field] = data[field]
+        
+        if not update_fields:
+            return jsonify({
+                'ok': False,
+                'message': 'No hay campos para actualizar'
+            }), 400
+        
+        # Actualizar documento
+        result = collection.update_one(
+            {'_id': ObjectId(token_id)},
+            {'$set': update_fields}
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token actualizado exitosamente'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al actualizar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al actualizar token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>', methods=['DELETE'])
+def delete_access_token(token_id):
+    """Eliminar token permanentemente"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        collection = db.access_tokens
+        
+        # Eliminar token
+        result = collection.delete_one({'_id': ObjectId(token_id)})
+        
+        if result.deleted_count == 0:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token eliminado permanentemente'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al eliminar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al eliminar token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>/revoke', methods=['PATCH'])
+def revoke_access_token(token_id):
+    """Revocar token (cambiar status)"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        data = request.get_json() or {}
+        collection = db.access_tokens
+        
+        # Actualizar status a revoked
+        result = collection.update_one(
+            {'_id': ObjectId(token_id)},
+            {'$set': {
+                'status': 'revoked',
+                'revoked_by': data.get('revoked_by', 'system'),
+                'revoked_at': data.get('revoked_at', datetime.now().isoformat())
+            }}
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token revocado exitosamente'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al revocar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al revocar token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>/reactivate', methods=['PATCH'])
+def reactivate_access_token(token_id):
+    """Reactivar token revocado"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        data = request.get_json() or {}
+        collection = db.access_tokens
+        
+        # Actualizar status a active
+        result = collection.update_one(
+            {'_id': ObjectId(token_id)},
+            {'$set': {
+                'status': 'active',
+                'reactivated_by': data.get('reactivated_by', 'system'),
+                'reactivated_at': data.get('reactivated_at', datetime.now().isoformat())
+            }}
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token reactivado exitosamente'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al reactivar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al reactivar token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_id>/reset_uses', methods=['PATCH'])
+def reset_token_uses(token_id):
+    """Reiniciar contador de usos"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        data = request.get_json() or {}
+        collection = db.access_tokens
+        
+        # Reiniciar current_uses a 0
+        result = collection.update_one(
+            {'_id': ObjectId(token_id)},
+            {'$set': {
+                'current_uses': 0,
+                'status': 'active',  # Reactivar automáticamente
+                'reset_by': data.get('reset_by', 'system'),
+                'reset_at': data.get('reset_at', datetime.now().isoformat())
+            }}
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Contador de usos reiniciado exitosamente'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al reiniciar usos: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al reiniciar usos: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/stats', methods=['GET'])
+def get_access_tokens_stats():
+    """Obtener estadísticas de tokens"""
+    # Verificar autenticación
+    auth_valid, auth_result = require_auth()
+    if not auth_valid:
+        return auth_result
+    
+    try:
+        collection = db.access_tokens
+        
+        # Contar tokens por status
+        total_tokens = collection.count_documents({})
+        active_tokens = collection.count_documents({'status': 'active'})
+        revoked_tokens = collection.count_documents({'status': 'revoked'})
+        
+        # Contar tokens expirados y agotados
+        now = datetime.now().isoformat()
+        expired_tokens = collection.count_documents({'expires_at': {'$lt': now}})
+        
+        # Contar tokens agotados (current_uses >= max_uses)
+        exhausted_tokens = len(list(collection.find({
+            '$expr': {'$gte': ['$current_uses', '$max_uses']}
+        })))
+        
+        # Total de usos
+        total_uses = sum([
+            token.get('current_uses', 0) 
+            for token in collection.find({}, {'current_uses': 1})
+        ])
+        
+        return jsonify({
+            'ok': True,
+            'stats': {
+                'total_tokens': total_tokens,
+                'active_tokens': active_tokens,
+                'revoked_tokens': revoked_tokens,
+                'expired_tokens': expired_tokens,
+                'exhausted_tokens': exhausted_tokens,
+                'total_uses': total_uses
+            }
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al obtener estadísticas: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al obtener estadísticas: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_value>/use', methods=['POST'])
+def use_access_token(token_value):
+    """Usar un token de acceso - endpoint público para registro de usuarios"""
+    try:
+        data = request.get_json() or {}
+        collection = db.access_tokens
+        
+        # Buscar token por valor
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        # Verificar estado del token
+        now = datetime.now()
+        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        
+        if token.get('status') != 'active':
+            return jsonify({
+                'ok': False,
+                'message': 'El token no está activo'
+            }), 403
+        
+        if expires_at < now:
+            return jsonify({
+                'ok': False,
+                'message': 'El token ha expirado'
+            }), 403
+        
+        if token.get('current_uses', 0) >= token.get('max_uses', 1):
+            return jsonify({
+                'ok': False,
+                'message': 'El token ha agotado todos sus usos'
+            }), 403
+        
+        # Incrementar uso
+        new_uses = token.get('current_uses', 0) + 1
+        update_data = {
+            'current_uses': new_uses,
+            'last_used_at': datetime.now().isoformat()
+        }
+        
+        # Si alcanzó el máximo, marcar como agotado
+        if new_uses >= token.get('max_uses', 1):
+            update_data['status'] = 'exhausted'
+        
+        # Registrar el uso
+        usage_record = {
+            'used_at': datetime.now().isoformat(),
+            'used_by': data.get('username', 'unknown'),
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent', 'unknown')
+        }
+        
+        # Actualizar token
+        collection.update_one(
+            {'token': token_value},
+            {
+                '$set': update_data,
+                '$push': {'usage_history': usage_record}
+            }
+        )
+        
+        return jsonify({
+            'ok': True,
+            'message': 'Token usado exitosamente',
+            'remaining_uses': token.get('max_uses', 1) - new_uses,
+            'user_type': token.get('user_type', 'student')
+        })
+    
+    except Exception as e:
+        print(f"❌ Error al usar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al usar token: {str(e)}'
+        }), 500
+
+@app.route('/api/access_tokens/<token_value>/validate', methods=['GET'])
+def validate_access_token(token_value):
+    """Validar token sin incrementar usos - para preview en frontend"""
+    try:
+        collection = db.access_tokens
+        
+        # Buscar token
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        # Verificar estado
+        now = datetime.now()
+        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        
+        is_valid = True
+        message = 'Token válido'
+        
+        if token.get('status') != 'active':
+            is_valid = False
+            message = f'Token {token.get("status", "inactivo")}'
+        elif expires_at < now:
+            is_valid = False
+            message = 'Token expirado'
+        elif token.get('current_uses', 0) >= token.get('max_uses', 1):
+            is_valid = False
+            message = 'Token agotado'
+        
+        return jsonify({
+            'ok': True,
+            'valid': is_valid,
+            'message': message,
+            'token_info': {
+                'name': token.get('name'),
+                'user_type': token.get('user_type', 'student'),
+                'current_uses': token.get('current_uses', 0),
+                'max_uses': token.get('max_uses', 1),
+                'remaining_uses': max(0, token.get('max_uses', 1) - token.get('current_uses', 0)),
+                'expires_at': expires_at.strftime('%d/%m/%Y') if expires_at else 'N/A'
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error al validar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al validar token: {str(e)}'
+        }), 500
+
+# ===== FIN DE ACCESS TOKENS ENDPOINTS =====
+
 
 @app.get("/api/dashboard/health")
 def api_dashboard_health():
