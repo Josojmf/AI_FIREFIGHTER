@@ -6,10 +6,6 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/access_tokens.css') }}">
-<style>
-/* Estilos específicos para Access Tokens */
-
-</style>
 {% endblock %}
 
 {% block content %}
@@ -70,18 +66,18 @@
           <th>Estado</th>
           <th>Usos</th>
           <th>Tipo Usuario</th>
-          <th>Creado</th>
-          <th>Expira</th>
+          <th class="hidden-md">Creado</th>
+          <th class="hidden-md">Expira</th>
           <th>Token</th>
           <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
         {% for token in tokens %}
-        <tr>
+        <tr style="animation-delay: {{ loop.index0 * 0.1 }}s;">
           <td>
             <div>
-              <div style="font-weight: 600;">{{ token.name }}</div>
+              <div style="font-weight: 600; color: black">{{ token.name }}</div>
               {% if token.description %}
               <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
                 {{ token.description }}
@@ -114,10 +110,10 @@
             </div>
           </td>
           <td>
-            <span style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">{{ token.user_type or 'student' }}</span>
+            <span class="token-badge">{{ token.user_type or 'student' }}</span>
           </td>
-          <td>
-            <div style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">
+          <td class="hidden-md">
+            <div class="token-badge">
               {% if token.created_at_formatted %}
                 {{ token.created_at_formatted }}
               {% else %}
@@ -130,8 +126,8 @@
             </div>
             {% endif %}
           </td>
-          <td>
-            <div style="font-size: 0.875rem; background-color: #000000; color: #ffffff; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis;">
+          <td class="hidden-md">
+            <div class="token-badge">
               {% if token.expires_at_formatted %}
                 {{ token.expires_at_formatted }}
               {% else %}
@@ -140,10 +136,9 @@
             </div>
           </td>
           <td>
-            <div style="font-family: monospace; font-size: 0.75rem; background: #000000; padding: 0.25rem 0.5rem; border-radius: 0.25rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis;">
-              <span onclick="copyToClipboard('{{ token.token }}')" style="cursor: pointer;" title="Click para copiar">
-                {{ token.token[:12] }}...
-              </span>
+            <div class="token-display" onclick="copyToClipboard('{{ token.token }}')" title="Click para copiar">
+              <span class="token-text">{{ token.token[:12] }}...</span>
+              <span class="copy-icon">📋</span>
             </div>
           </td>
           <td>
@@ -198,7 +193,7 @@
 
 <!-- Modal de confirmación -->
 <div id="confirmModal" class="modal" style="display: none;">
-  <div class="modal-backdrop"></div>
+  <div class="modal-backdrop" onclick="closeModal()"></div>
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
@@ -218,12 +213,18 @@
 
 {% block scripts %}
 <script>
+// JavaScript unificado para todas las páginas de tokens
 let currentAction = null;
 let currentTokenId = null;
 let currentTokenName = null;
 
 function refreshTokens() {
-  window.location.reload();
+  const refreshBtn = document.querySelector('.btn-secondary');
+  refreshBtn.classList.add('loading');
+  
+  setTimeout(() => {
+    window.location.reload();
+  }, 500);
 }
 
 function copyToClipboard(text) {
@@ -238,15 +239,21 @@ function copyToClipboard(text) {
       color: white;
       padding: 1rem 1.5rem;
       border-radius: 0.5rem;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
       z-index: 1000;
       font-weight: 600;
+      animation: slideInRight 0.3s ease-out;
     `;
-    notification.textContent = 'Token copiado al portapapeles';
+    notification.textContent = '✅ Token copiado al portapapeles';
     document.body.appendChild(notification);
     
     setTimeout(() => {
-      document.body.removeChild(notification);
+      notification.style.animation = 'fadeOut 0.3s ease-out';
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 300);
     }, 2000);
   }).catch(() => {
     alert('Error al copiar el token');
@@ -262,6 +269,15 @@ function confirmAction(action, tokenId, tokenName) {
   const title = document.getElementById('confirmTitle');
   const message = document.getElementById('confirmMessage');
   const button = document.getElementById('confirmButton');
+  
+  // Añadir efecto de vibración al botón presionado
+  const clickedButton = event.target.closest('.btn');
+  if (clickedButton) {
+    clickedButton.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      clickedButton.style.transform = '';
+    }, 150);
+  }
   
   switch(action) {
     case 'revoke':
@@ -294,7 +310,12 @@ function confirmAction(action, tokenId, tokenName) {
 }
 
 function closeModal() {
-  document.getElementById('confirmModal').style.display = 'none';
+  const modal = document.getElementById('confirmModal');
+  modal.style.animation = 'fadeOut 0.3s ease-out';
+  setTimeout(() => {
+    modal.style.display = 'none';
+    modal.style.animation = '';
+  }, 300);
   currentAction = null;
   currentTokenId = null;
   currentTokenName = null;
@@ -306,38 +327,44 @@ function executeAction() {
     return;
   }
   
-  const form = document.createElement('form');
-  form.method = 'POST';
+  const confirmButton = document.getElementById('confirmButton');
+  const originalText = confirmButton.textContent;
+  confirmButton.textContent = 'Procesando...';
+  confirmButton.disabled = true;
+  confirmButton.classList.add('loading');
   
-  switch(currentAction) {
-    case 'revoke':
-      form.action = `{{ url_for('access_tokens.revoke_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
-      break;
-    case 'reactivate':
-      form.action = `{{ url_for('access_tokens.reactivate_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
-      break;
-    case 'reset':
-      form.action = `{{ url_for('access_tokens.reset_uses', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
-      break;
-    case 'delete':
-      form.action = `{{ url_for('access_tokens.delete_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
-      break;
-  }
-  
-  // CSRF token si existe
-  const csrfToken = document.querySelector('meta[name=csrf-token]');
-  if (csrfToken) {
-    const csrfInput = document.createElement('input');
-    csrfInput.type = 'hidden';
-    csrfInput.name = 'csrf_token';
-    csrfInput.value = csrfToken.getAttribute('content');
-    form.appendChild(csrfInput);
-  }
-  
-  document.body.appendChild(form);
-  form.submit();
-  
-  closeModal();
+  setTimeout(() => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    
+    switch(currentAction) {
+      case 'revoke':
+        form.action = `{{ url_for('access_tokens.revoke_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        break;
+      case 'reactivate':
+        form.action = `{{ url_for('access_tokens.reactivate_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        break;
+      case 'reset':
+        form.action = `{{ url_for('access_tokens.reset_uses', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        break;
+      case 'delete':
+        form.action = `{{ url_for('access_tokens.delete_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        break;
+    }
+    
+    // CSRF token si existe
+    const csrfToken = document.querySelector('meta[name=csrf-token]');
+    if (csrfToken) {
+      const csrfInput = document.createElement('input');
+      csrfInput.type = 'hidden';
+      csrfInput.name = 'csrf_token';
+      csrfInput.value = csrfToken.getAttribute('content');
+      form.appendChild(csrfInput);
+    }
+    
+    document.body.appendChild(form);
+    form.submit();
+  }, 1000);
 }
 
 // Cerrar modal con Escape
@@ -347,16 +374,71 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// Tooltips personalizados
+document.addEventListener('DOMContentLoaded', function() {
+  // Efecto de aparición escalonada para las filas de la tabla
+  const tableRows = document.querySelectorAll('.tokens-table tbody tr');
+  tableRows.forEach((row, index) => {
+    row.style.animationDelay = `${index * 0.1}s`;
+  });
+
+  // Tooltips mejorados
+  const tooltips = document.querySelectorAll('[title]');
+  tooltips.forEach(tooltip => {
+    tooltip.addEventListener('mouseenter', function(e) {
+      // Crear tooltip personalizado
+      const tooltipText = this.getAttribute('title');
+      const tooltipEl = document.createElement('div');
+      tooltipEl.className = 'custom-tooltip';
+      tooltipEl.textContent = tooltipText;
+      document.body.appendChild(tooltipEl);
+      
+      const rect = this.getBoundingClientRect();
+      tooltipEl.style.left = `${rect.left + rect.width / 2}px`;
+      tooltipEl.style.top = `${rect.top - 10}px`;
+      tooltipEl.style.transform = 'translateX(-50%) translateY(-100%)';
+      
+      this.setAttribute('title', '');
+    });
+    
+    tooltip.addEventListener('mouseleave', function() {
+      const tooltipEl = document.querySelector('.custom-tooltip');
+      if (tooltipEl) {
+        this.setAttribute('title', tooltipEl.textContent);
+        tooltipEl.remove();
+      }
+    });
+  });
+
+  // Efecto de carga para acciones
+  const actionButtons = document.querySelectorAll('.token-actions .btn');
+  actionButtons.forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      if (this.classList.contains('btn-danger') || 
+          this.classList.contains('btn-warning')) {
+        this.classList.add('loading');
+        setTimeout(() => {
+          this.classList.remove('loading');
+        }, 1500);
+      }
+    });
+  });
+
+  // Forzar aplicación de estilos de modo oscuro
+  applyDarkModeStyles();
+});
+
 // Actualizar estadísticas dinámicamente
 function updateStats() {
   fetch('{{ url_for("access_tokens.token_stats") }}')
     .then(response => response.json())
     .then(data => {
       if (data.total_tokens !== undefined) {
-        document.getElementById('totalTokens').textContent = data.total_tokens;
-        document.getElementById('activeTokens').textContent = data.active_tokens || 0;
-        document.getElementById('revokedTokens').textContent = data.revoked_tokens || 0;
-        document.getElementById('totalUses').textContent = data.total_uses || 0;
+        // Animación de conteo
+        animateCounter('totalTokens', data.total_tokens);
+        animateCounter('activeTokens', data.active_tokens || 0);
+        animateCounter('revokedTokens', data.revoked_tokens || 0);
+        animateCounter('totalUses', data.total_uses || 0);
       }
     })
     .catch(error => {
@@ -364,7 +446,54 @@ function updateStats() {
     });
 }
 
+// Animación de contador
+function animateCounter(elementId, targetValue) {
+  const element = document.getElementById(elementId);
+  const currentValue = parseInt(element.textContent);
+  const duration = 1000;
+  const step = (targetValue - currentValue) / (duration / 16);
+  let current = currentValue;
+
+  const timer = setInterval(() => {
+    current += step;
+    if ((step > 0 && current >= targetValue) || (step < 0 && current <= targetValue)) {
+      clearInterval(timer);
+      current = targetValue;
+    }
+    element.textContent = Math.round(current);
+  }, 16);
+}
+
 // Actualizar estadísticas cada 30 segundos
 setInterval(updateStats, 30000);
+
+// Detectar y aplicar modo oscuro inmediatamente
+function applyDarkModeStyles() {
+  if (document.body.classList.contains('dark-mode')) {
+    console.log('Modo oscuro detectado - aplicando correcciones inmediatas');
+    
+    // Aplicar estilos directamente a las stats cards
+    const statCards = document.querySelectorAll('.stat-card');
+    statCards.forEach(card => {
+      card.style.background = '#1f2937';
+      card.style.borderColor = '#374151';
+      card.style.color = '#f9fafb';
+    });
+    
+    const statValues = document.querySelectorAll('.stat-value');
+    statValues.forEach(value => {
+      value.style.color = '#f9fafb';
+    });
+    
+    const statLabels = document.querySelectorAll('.stat-label');
+    statLabels.forEach(label => {
+      label.style.color = '#d1d5db';
+    });
+  }
+}
+
+// Ejecutar inmediatamente y en cada cambio
+setTimeout(applyDarkModeStyles, 500);
+setTimeout(applyDarkModeStyles, 1000);
 </script>
 {% endblock %}
