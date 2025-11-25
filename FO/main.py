@@ -211,6 +211,7 @@ def register_local_fallback(username, password, email):
         return render_template('register.html')
 
 def login_local_fallback(username, password):
+    """Fallback local para login - CORREGIDO"""
     import hashlib
     USERS_FILE = 'users_local.json'
 
@@ -223,26 +224,30 @@ def login_local_fallback(username, password):
                 return {}
         return {}
 
-    def hash_password(pwd): return hashlib.sha256(pwd.encode()).hexdigest()
+    def hash_password(pwd): 
+        return hashlib.sha256(pwd.encode()).hexdigest()
 
     users = load_users()
     key = username.strip().lower()
     if key not in users:
-        flash("âŒ Credenciales incorrectas")
+        flash("❌ Credenciales incorrectas")
         return render_template('login.html')
 
     data = users[key]
     if not data.get('active', True):
-        flash("âŒ Usuario desactivado")
+        flash("❌ Usuario desactivado")
         return render_template('login.html')
+        
     if data['password'] != hash_password(password):
-        flash("âŒ Credenciales incorrectas")
+        flash("❌ Credenciales incorrectas")
         return render_template('login.html')
 
     session['user'] = key
-    flash('âœ… SesiÃ³n iniciada (modo local)')
+    session['user_id'] = f"local_{key}"  # ID local
+    session['user_role'] = 'user'
+    
+    flash('✅ Sesión iniciada (modo local)')
     return redirect(url_for('home'))
-
 from chat_model import chat_model
 
 @app.route('/api/chat/ask', methods=['POST'])
@@ -297,6 +302,8 @@ def chat_ask():
             "response": f"Error en el servidor: {str(e)}",
             "success": False
         }), 500
+        
+        
     
 @app.route('/api/chat/status', methods=['GET'])
 def chat_status():
@@ -346,30 +353,70 @@ def register():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
-        email = request.form.get('email', f"{username}@firefighter.com")
-        payload = {'username': username, 'password': password, 'email': email}
+        email = request.form.get('email', '').strip()  # Cambio importante
+        access_token = request.form.get('access_token', '').strip()
+        
+        print(f"🔍 Frontend - Datos del formulario:")
+        print(f"   - Username: {username}")
+        print(f"   - Email: {email}")
+        print(f"   - Token: {access_token}")
+        print(f"   - Password length: {len(password)}")
+        
+        if not access_token:
+            flash('❌ Token de acceso requerido para el registro')
+            return render_template('register.html')
+            
+        # Si no se proporciona email, usar uno por defecto basado en username
+        if not email:
+            email = f"{username}@firefighter.com"
+            print(f"🔍 Email automático generado: {email}")
+            
+        payload = {
+            'username': username, 
+            'password': password, 
+            'email': email,
+            'access_token': access_token
+        }
 
         try:
-            _safe_print(f"ðŸ”— POST {API_BASE_URL}/register")
+            _safe_print(f"📤 POST {API_BASE_URL}/register")
             res = requests.post(f"{API_BASE_URL}/register", json=payload, timeout=10)
-            data = res.json() if res.content else {}
+            
+            print(f"🔍 Respuesta API - Status: {res.status_code}")
+            
+            # Manejar respuesta vacía
+            if not res.content:
+                flash('❌ Error: Respuesta vacía del servidor')
+                return render_template('register.html')
+                
+            data = res.json()
+            print(f"🔍 Respuesta API - Data: {data}")
+            
             if res.status_code == 201:
-                flash('âœ… Registro exitoso. Ahora puedes iniciar sesiÃ³n.')
+                flash('✅ Registro exitoso. Ahora puedes iniciar sesión.')
                 return redirect(url_for('login'))
+            elif res.status_code == 400:
+                error_msg = data.get("detail", "Error durante el registro.")
+                flash(f'❌ {error_msg}')
+                print(f"❌ Error 400: {error_msg}")
             elif res.status_code == 409:
-                flash(f'âŒ {data.get("detail", "El usuario ya existe.")}')
+                flash(f'❌ {data.get("detail", "El usuario ya existe.")}')
             else:
-                flash(f'âŒ {data.get("detail", "Error durante el registro.")}')
+                flash(f'❌ Error {res.status_code}: {data.get("detail", "Error durante el registro.")}')
+                
         except requests.exceptions.ConnectionError:
-            flash('âš ï¸ API no disponible. Usando registro local.')
-            return register_local_fallback(username, password, email)
+            flash('⚠️ API no disponible. El registro con tokens no está disponible en modo local.')
         except requests.exceptions.Timeout:
-            flash('âŒ Tiempo de espera agotado. IntÃ©ntalo nuevamente.')
+            flash('❌ Tiempo de espera agotado. Inténtalo nuevamente.')
+        except json.JSONDecodeError:
+            flash('❌ Error: Respuesta inválida del servidor')
+            print(f"❌ JSON decode error. Response text: {res.text}")
         except Exception as e:
-            flash(f'âŒ Error inesperado: {str(e)}')
-            return register_local_fallback(username, password, email)
+            flash(f'❌ Error inesperado: {str(e)}')
+            print(f"❌ Exception: {e}")
 
     return render_template('register.html')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -378,28 +425,50 @@ def login():
         password = request.form['password']
 
         try:
-            _safe_print(f"ðŸ”— POST {API_BASE_URL}/login")
+            _safe_print(f"📤 POST {API_BASE_URL}/login")
             res = requests.post(f"{API_BASE_URL}/login", json={"username": username, "password": password}, timeout=10)
-            data = res.json() if res.content else {}
+            
+            print(f"🔍 Respuesta login - Status: {res.status_code}")
+            
+            if not res.content:
+                flash('❌ Error: Respuesta vacía del servidor')
+                return render_template('login.html')
+                
+            data = res.json()
+            print(f"🔍 Respuesta login - Data: {data}")
+            
             if res.status_code == 200:
-                session['user'] = data['user']['username']
-                session['user_id'] = data['user']['id']
-                session['user_role'] = data['user'].get('role', 'user')
-                flash('âœ… SesiÃ³n iniciada correctamente')
+                # CORREGIDO: Manejar correctamente la respuesta
+                user_data = data.get('user', {})
+                
+                session['user'] = user_data.get('username', username)
+                session['user_id'] = user_data.get('id', '')  # Usar 'id' en lugar de 'user_id'
+                session['user_role'] = user_data.get('role', 'user')
+                
+                # Guardar token en sesión si está disponible
+                if 'access_token' in data:
+                    session['access_token'] = data['access_token']
+                
+                flash('✅ Sesión iniciada correctamente')
                 return redirect(url_for('home'))
             else:
-                flash(data.get("detail", "Credenciales incorrectas"))
+                error_msg = data.get("detail", "Credenciales incorrectas")
+                flash(f'❌ {error_msg}')
+                
         except requests.exceptions.ConnectionError:
-            flash('âš ï¸ API no disponible. Usando autenticaciÃ³n local.')
+            flash('⚠️ API no disponible. Usando autenticación local.')
             return login_local_fallback(username, password)
         except requests.exceptions.Timeout:
-            flash('âŒ Tiempo de espera agotado. IntÃ©ntalo nuevamente.')
+            flash('❌ Tiempo de espera agotado. Inténtalo nuevamente.')
+        except json.JSONDecodeError:
+            flash('❌ Error: Respuesta inválida del servidor')
+            print(f"❌ JSON decode error. Response text: {res.text}")
         except Exception as e:
-            flash(f'âŒ Error de conexiÃ³n: {str(e)}')
+            flash(f'❌ Error de conexión: {str(e)}')
+            print(f"❌ Exception en login: {e}")
             return login_local_fallback(username, password)
 
     return render_template('login.html')
-
 
 # --- Rutas generales ---
 @app.route("/", endpoint="home")

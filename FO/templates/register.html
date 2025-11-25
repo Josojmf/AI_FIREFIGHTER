@@ -25,7 +25,7 @@
 <section class="auth-section">
   <div class="container">
     <div class="auth-layout">
-      
+
       <!-- Left Side - Form -->
       <div class="auth-form-container">
         <!-- Header -->
@@ -64,19 +64,9 @@
                 <span class="label-required">*</span>
               </label>
               <div class="input-wrapper">
-                <input 
-                  type="text" 
-                  id="username"
-                  name="username" 
-                  class="form-input" 
-                  placeholder="Elige tu nombre de usuario"
-                  required
-                  autocomplete="username"
-                  minlength="3"
-                  maxlength="24"
-                  pattern="[a-zA-Z0-9]+"
-                  title="Solo letras y números, entre 3-24 caracteres"
-                >
+                <input type="text" id="username" name="username" class="form-input"
+                  placeholder="Elige tu nombre de usuario" required autocomplete="username" minlength="3" maxlength="24"
+                  pattern="[a-zA-Z0-9]+" title="Solo letras y números, entre 3-24 caracteres">
                 <div class="input-validation" id="usernameValidation"></div>
                 <div class="input-focus-border"></div>
               </div>
@@ -90,18 +80,12 @@
                 <span class="label-required">*</span>
               </label>
               <div class="input-wrapper">
-                <input 
-                  type="email" 
-                  id="email"
-                  name="email" 
-                  class="form-input" 
-                  placeholder="tu.email@ejemplo.com"
-                  required
-                  autocomplete="email"
-                >
+                <input type="email" id="email" name="email" class="form-input" placeholder="tu.email@ejemplo.com"
+                  required autocomplete="email">
                 <div class="input-validation" id="emailValidation"></div>
                 <div class="input-focus-border"></div>
               </div>
+              <div class="input-hint">Usa un email válido para recuperar tu cuenta</div>
             </div>
 
             <div class="form-group">
@@ -111,22 +95,15 @@
                 <span class="label-required">*</span>
               </label>
               <div class="input-wrapper">
-                <input 
-                  type="password" 
-                  id="password"
-                  name="password" 
-                  class="form-input" 
-                  placeholder="Crea una contraseña segura"
-                  required
-                  autocomplete="new-password"
-                  minlength="8"
-                >
-                <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar u ocultar contraseña">
+                <input type="password" id="password" name="password" class="form-input"
+                  placeholder="Crea una contraseña segura" required autocomplete="new-password" minlength="8">
+                <button type="button" class="password-toggle" id="togglePassword"
+                  aria-label="Mostrar u ocultar contraseña">
                   <span class="toggle-icon">👁️</span>
                 </button>
                 <div class="input-focus-border"></div>
               </div>
-              
+
               <!-- Password Strength Indicator -->
               <div class="password-strength" id="passwordStrength">
                 <div class="strength-bar">
@@ -161,18 +138,26 @@
                 <span class="label-required">*</span>
               </label>
               <div class="input-wrapper">
-                <input 
-                  type="password" 
-                  id="confirmPassword"
-                  name="confirmPassword" 
-                  class="form-input" 
-                  placeholder="Repite tu contraseña"
-                  required
-                  autocomplete="new-password"
-                >
+                <input type="password" id="confirmPassword" name="confirmPassword" class="form-input"
+                  placeholder="Repite tu contraseña" required autocomplete="new-password">
                 <div class="input-validation" id="confirmValidation"></div>
                 <div class="input-focus-border"></div>
               </div>
+            </div>
+
+            <div class="form-group">
+              <label for="access_token" class="form-label">
+                <span class="label-icon">🔑</span>
+                <span class="label-text">Token de Acceso</span>
+                <span class="label-required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input type="text" id="access_token" name="access_token" class="form-input"
+                  placeholder="Ingresa tu token de acceso" required autocomplete="off">
+                <div class="input-validation" id="tokenValidation"></div>
+                <div class="input-focus-border"></div>
+              </div>
+              <div class="input-hint">Token requerido para crear una cuenta. Sin token no podrás registrarte.</div>
             </div>
 
             <button type="button" class="step-button" id="nextStep">
@@ -211,9 +196,9 @@
                 <input type="checkbox" name="terms" class="checkbox-input" required>
                 <span class="checkbox-custom"></span>
                 <span class="checkbox-label">
-                  Acepto los 
-                  <a href="#" class="terms-link" target="_blank">términos y condiciones</a> 
-                  y la 
+                  Acepto los
+                  <a href="#" class="terms-link" target="_blank">términos y condiciones</a>
+                  y la
                   <a href="#" class="terms-link" target="_blank">política de privacidad</a>
                 </span>
               </label>
@@ -235,7 +220,7 @@
                   <span class="btn-text">Atrás</span>
                 </span>
               </button>
-              
+
               <button type="submit" class="step-button btn-primary" id="submitForm">
                 <span class="btn-content">
                   <span class="btn-text">Crear cuenta</span>
@@ -253,7 +238,7 @@
         <!-- Footer -->
         <div class="auth-footer">
           <p class="auth-footer-text">
-            ¿Ya tienes cuenta? 
+            ¿Ya tienes cuenta?
             <a href="{{ url_for('login') }}" class="auth-link">Inicia sesión aquí</a>
           </p>
         </div>
@@ -266,10 +251,10 @@
             <span class="badge-icon">🎯</span>
             <span class="badge-text">Tu futuro te espera</span>
           </div>
-          
+
           <h2 class="info-title">Únete a miles de bomberos</h2>
           <p class="info-description">
-            Forma parte de la comunidad más grande de preparación de oposiciones de bombero. 
+            Forma parte de la comunidad más grande de preparación de oposiciones de bombero.
             Acceso inmediato a contenido profesional y certificaciones oficiales.
           </p>
 
@@ -325,17 +310,17 @@
 
   <!-- Status Messages -->
   {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      <div class="auth-notifications">
-        {% for msg in messages %}
-          <div class="notification error">
-            <span class="notification-icon">⚠️</span>
-            <span class="notification-text">{{ msg }}</span>
-            <button type="button" class="notification-close">✕</button>
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
+  {% if messages %}
+  <div class="auth-notifications">
+    {% for msg in messages %}
+    <div class="notification error">
+      <span class="notification-icon">⚠️</span>
+      <span class="notification-text">{{ msg }}</span>
+      <button type="button" class="notification-close">✕</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
   {% endwith %}
 </section>
 {% endblock %}

@@ -50,6 +50,37 @@ document.addEventListener('DOMContentLoaded', () => {
     currentStep = step;
   }
 
+// En register.js, añade esta función de validación para el token
+function validateToken() {
+    const tokenInput = document.getElementById('access_token');
+    const tokenValue = tokenInput.value.trim();
+    const nextButton = document.getElementById('nextStep');
+    
+    if (!tokenValue) {
+        // Deshabilitar botón si el token está vacío
+        nextButton.disabled = true;
+        nextButton.style.opacity = '0.6';
+        nextButton.style.cursor = 'not-allowed';
+        return false;
+    } else {
+        // Habilitar botón si hay token
+        nextButton.disabled = false;
+        nextButton.style.opacity = '1';
+        nextButton.style.cursor = 'pointer';
+        return true;
+    }
+}
+
+// Y añade este event listener al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    const tokenInput = document.getElementById('access_token');
+    if (tokenInput) {
+        tokenInput.addEventListener('input', validateToken);
+        // Validar inicialmente
+        validateToken();
+    }
+});
+
   function validateStep1() {
     const u = (usernameInput.value || '').trim();
     const e = (emailInput.value || '').trim();

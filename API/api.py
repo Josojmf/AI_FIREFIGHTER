@@ -92,19 +92,99 @@ def make_jwt(payload: dict) -> str:
     to_encode = {**payload, "iat": int(now.timestamp()), "exp": int(exp.timestamp())}
     return jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
 
+# Reemplaza la validación de email con esta versión más flexible
+
 def validate_register(data):
+    """Validar datos de registro con email más permisivo"""
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "")
 
+    # Validar username
     if not USERNAME_RE.match(username):
-        return False, "Usuario inválido (3-24 chars, solo letras y números)."
+        return False, "Usuario inválido (3-24 caracteres, solo letras y números)."
+    
+    # Validar email con regex más permisivo
+    if not email:
+        return False, "Email requerido."
+    
+    # Regex de email más flexible para testing
+    # Permite TLD de 1 carácter y dominios complejos
+    EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{1,}$')
+    
     if not EMAIL_RE.match(email):
-        return False, "Email inválido."
+        # Para debugging más detallado
+        print(f"❌ Email inválido detectado: '{email}'")
+        print(f"   - Caracteres especiales: {any(c in email for c in '!$%^&*() ')}")
+        print(f"   - Tiene @: {'@' in email}")
+        if '@' in email:
+            parts = email.split('@')
+            print(f"   - Parte local: '{parts[0]}'")
+            print(f"   - Parte dominio: '{parts[1]}'")
+            if '.' in parts[1]:
+                domain_parts = parts[1].split('.')
+                print(f"   - Subdominio: '{domain_parts[0]}'")
+                print(f"   - TLD: '{domain_parts[-1]}' (longitud: {len(domain_parts[-1])})")
+        return False, "Email inválido. Formato: usuario@dominio.ext"
+    
+    # Validar password
     if len(password) < 8:
         return False, "La contraseña debe tener al menos 8 caracteres."
+    
     return True, ""
 
+def validate_register_testing(data):
+    """Validación de registro MÁS PERMISIVA para testing"""
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "")
+
+    # Validar username
+    if not USERNAME_RE.match(username):
+        return False, "Usuario inválido (3-24 caracteres, solo letras y números)."
+    
+    # Validación MUY básica de email - solo verifica que tenga @ y .
+    if not email:
+        return False, "Email requerido."
+    
+    # Validación mínima: debe tener @ y al menos un punto después del @
+    if '@' not in email:
+        return False, "Email debe contener @"
+    
+    local_part, domain_part = email.split('@', 1)
+    if '.' not in domain_part:
+        return False, "Dominio de email debe contener un punto"
+    
+    if not local_part or not domain_part:
+        return False, "Email inválido"
+    
+    # Validar password
+    if len(password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres."
+    
+    print(f"✅ Email aceptado: '{email}'")
+    return True, ""
+
+# También mejora la función de validación de email para debugging
+def is_valid_email(email):
+    """Función auxiliar para validar email con debugging"""
+    if not email or not isinstance(email, str):
+        return False
+    
+    email = email.strip().lower()
+    
+    # Patrón de email más robusto
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+    is_valid = bool(re.match(pattern, email))
+    
+    if not is_valid:
+        print(f"🔍 Validación email falló: '{email}'")
+        print(f"   - Tiene @: {'@' in email}")
+        print(f"   - Longitud: {len(email)}")
+        print(f"   - Partes con @: {email.split('@')}")
+        
+    return is_valid
 def verify_jwt(token: str):
     """Verificar y decodificar JWT"""
     try:
@@ -139,6 +219,16 @@ def require_auth(required_role=None):
         return False, (jsonify({"ok": False, "detail": "Permisos insuficientes"}), 403)
 
     return True, payload
+
+def normalize_datetime(dt):
+    """Normalizar datetime para tener timezone UTC"""
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 # --- MFA Functions ---
 def generate_mfa_secret():
@@ -186,20 +276,114 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+# Token verification and user retrieval
+
+def validate_access_token(token_value):
+    """Validar token de acceso para registro"""
+    try:
+        collection = db.access_tokens
+        
+        # Buscar token
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return False, "Token no encontrado"
+        
+        # Verificar estado
+        now = datetime.now(timezone.utc)
+        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        
+        if token.get('status') != 'active':
+            return False, f"Token {token.get('status', 'inactivo')}"
+        
+        if expires_at < now:
+            return False, "Token expirado"
+        
+        if token.get('current_uses', 0) >= token.get('max_uses', 1):
+            return False, "Token agotado"
+        
+        return True, token
+        
+    except Exception as e:
+        return False, f"Error validando token: {str(e)}"
+
+def use_access_token(token_value, username):
+    """Usar un token de acceso y registrar el uso"""
+    try:
+        collection = db.access_tokens
+        
+        # Buscar token
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return False, "Token no encontrado"
+        
+        # Incrementar uso
+        new_uses = token.get('current_uses', 0) + 1
+        update_data = {
+            'current_uses': new_uses,
+            'last_used_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Si alcanzó el máximo, marcar como agotado
+        if new_uses >= token.get('max_uses', 1):
+            update_data['status'] = 'exhausted'
+        
+        # Registrar el uso
+        usage_record = {
+            'used_at': datetime.now(timezone.utc).isoformat(),
+            'used_by': username,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent', 'unknown')
+        }
+        
+        # Actualizar token
+        result = collection.update_one(
+            {'token': token_value},
+            {
+                '$set': update_data,
+                '$push': {'usage_history': usage_record}
+            }
+        )
+        
+        return True, "Token usado exitosamente"
+        
+    except Exception as e:
+        return False, f"Error usando token: {str(e)}"
+
 
 # --- Routes ---
 @app.post("/api/register")
 def api_register():
     try:
         data = request.get_json(force=True, silent=True) or {}
+        
+        print(f"🔍 Datos recibidos en registro: {data}")  # Debug
+        
+        # Validar token de acceso
+        access_token = data.get("access_token", "").strip()
+        if not access_token:
+            return jsonify({"ok": False, "detail": "Token de acceso requerido para el registro"}), 400
+        
+        # Validar token
+        token_valid, token_result = validate_access_token(access_token)
+        if not token_valid:
+            return jsonify({"ok": False, "detail": token_result}), 400
+        
+        token_obj = token_result
+        
+        # Continuar con validación normal
         ok, err = validate_register(data)
         if not ok:
+            print(f"❌ Validación falló: {err}")  # Debug
             return jsonify({"ok": False, "detail": err}), 400
 
         username = data["username"].strip()
         email = data["email"].strip().lower()
         password = data["password"]
         role = data.get("role", "user")
+
+        print(f"🔍 Procesando registro: user={username}, email={email}")  # Debug
 
         # Verificar si ya existe
         existing_user = users.find_one({
@@ -208,6 +392,11 @@ def api_register():
         if existing_user:
             field = "usuario" if existing_user.get("username") == username else "email"
             return jsonify({"ok": False, "detail": f"El {field} ya existe."}), 409
+
+        # Usar el token antes de crear el usuario
+        token_used, use_result = use_access_token(access_token, username)
+        if not token_used:
+            return jsonify({"ok": False, "detail": use_result}), 400
 
         # 🔥 ESTRUCTURA EMBEBIDA: Usuario con leitner_progress
         doc = {
@@ -220,7 +409,12 @@ def api_register():
             "status": "active",
             "mfa_enabled": False,
             "mfa_secret": "",
-            # 🎯 LEITNER PROGRESS PARA TODOS LOS USUARIOS
+            "registered_with_token": access_token,
+            "token_info": {
+                "token_name": token_obj.get("name"),
+                "token_user_type": token_obj.get("user_type", "student"),
+                "registered_at": datetime.now(timezone.utc).isoformat()
+            },
             "leitner_progress": {
                 "cards": [],
                 "stats": {
@@ -244,47 +438,25 @@ def api_register():
                 "created_at": datetime.now(timezone.utc),
                 "auto_populated": False
             }
-            
-            # Intentar auto-poblar desde memory_cards
-            try:
-                if "memory_cards" in db.list_collection_names():
-                    memory_cards = list(db["memory_cards"].find({}))
-                    if memory_cards:
-                        backoffice_cards = [{
-                            "id": str(card["_id"]), "title": card.get("title", ""),
-                            "content": card.get("content", ""), "category": card.get("category", "general"),
-                            "difficulty": card.get("difficulty", "medium"), "created_at": card.get("created_at"),
-                            "created_by": card.get("created_by", "admin"), "migrated_from": "memory_cards"
-                        } for card in memory_cards]
-                        doc["backoffice_cards"].update({
-                            "cards": backoffice_cards, "total_cards": len(backoffice_cards),
-                            "categories": list(set(c["category"] for c in backoffice_cards)),
-                            "auto_populated": True
-                        })
-            except Exception:
-                pass  # Ignorar errores de auto-población
 
         users.insert_one(doc)
         
-        # Log y respuesta
-        components = ["leitner_progress"]
-        if role == "admin":
-            components.append(f"backoffice_cards ({doc['backoffice_cards']['total_cards']} cards)")
-            
-        app.logger.info(f"Usuario '{username}' creado con estructura embebida: {components}")
+        print(f"✅ Usuario '{username}' creado exitosamente con email '{email}'")
         
         return jsonify({
             "ok": True, 
-            "detail": "Cuenta creada con estructura embebida.",
+            "detail": "Cuenta creada exitosamente.",
             "username": username,
+            "email": email,
             "embedded_structure": True,
-            "components": components
+            "token_used": True
         }), 201
 
     except Exception as e:
-        app.logger.error(f"Error en registro embebido: {e}")
-        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
+        print(f"❌ Error crítico en registro: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500  
 @app.post("/api/login")
 def api_login():
     try:
@@ -301,6 +473,21 @@ def api_login():
 
         if not user_doc or not verify_password(password, user_doc["password_hash"]):
             return jsonify({"ok": False, "detail": "Credenciales incorrectas."}), 401
+
+        # VERIFICAR TOKEN DE ACCESO ACTIVO - CORREGIDO
+        access_token_used = user_doc.get("registered_with_token")
+        if access_token_used:
+            try:
+                # Verificar si el token sigue activo
+                token_valid, token_result = validate_access_token(access_token_used)
+                if not token_valid:
+                    # Si el token está inactivo, permitir login pero mostrar advertencia
+                    print(f"⚠️ Usuario '{username}' tiene token inactivo: {token_result}")
+                    # NO bloquear el login, solo registrar la advertencia
+                    # En producción podrías decidir bloquear el acceso aquí
+            except Exception as token_error:
+                print(f"⚠️ Error verificando token para '{username}': {token_error}")
+                # Continuar con el login aunque falle la verificación del token
 
         if user_doc.get("status") != "active":
             return jsonify({"ok": False, "detail": "Cuenta desactivada."}), 401
@@ -320,17 +507,24 @@ def api_login():
             if not secret or not verify_mfa_token(secret, mfa_token):
                 return jsonify({"ok": False, "detail": "Token MFA inválido"}), 401
 
-        # Crear JWT
-        token = make_jwt({
+        # Crear JWT - CORREGIDO: usar user_id correctamente
+        token_payload = {
             "user_id": user_doc["_id"],
             "username": user_doc["username"],
             "role": user_doc.get("role", "user")
-        })
+        }
+        
+        # Asegurar que user_id es string
+        if isinstance(token_payload["user_id"], ObjectId):
+            token_payload["user_id"] = str(token_payload["user_id"])
+        
+        token = make_jwt(token_payload)
 
         return jsonify({
             "ok": True,
             "access_token": token,
             "user": {
+                "id": str(user_doc["_id"]),  # Asegurar que es string
                 "username": user_doc["username"], 
                 "email": user_doc["email"],
                 "role": user_doc.get("role", "user"),
@@ -340,8 +534,46 @@ def api_login():
 
     except Exception as e:
         app.logger.error(f"Error en login: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
+ 
+@app.post("/api/validate-token")
+def api_validate_token():
+    """Endpoint público para validar tokens antes del registro"""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        token_value = data.get("token", "").strip()
+        
+        if not token_value:
+            return jsonify({"ok": False, "valid": False, "detail": "Token requerido"}), 400
+        
+        token_valid, token_result = validate_access_token(token_value)
+        
+        if token_valid:
+            return jsonify({
+                "ok": True,
+                "valid": True,
+                "detail": "Token válido",
+                "token_info": {
+                    "name": token_result.get("name"),
+                    "user_type": token_result.get("user_type", "student"),
+                    "current_uses": token_result.get("current_uses", 0),
+                    "max_uses": token_result.get("max_uses", 1),
+                    "remaining_uses": max(0, token_result.get("max_uses", 1) - token_result.get("current_uses", 0))
+                }
+            })
+        else:
+            return jsonify({
+                "ok": False,
+                "valid": False,
+                "detail": token_result
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"ok": False, "valid": False, "detail": "Error validando token"}), 500
+    
+    
 @app.post("/api/forgot-password")
 def api_forgot_password():
     try:
@@ -1453,7 +1685,7 @@ def get_access_tokens():
 
 @app.route('/api/access_tokens', methods=['POST'])
 def create_access_token():
-    """Crear nuevo token de acceso"""
+    """Crear nuevo token de acceso - CORREGIDO timezone"""
     # Verificar autenticación
     auth_valid, auth_result = require_auth()
     if not auth_valid:
@@ -1489,7 +1721,7 @@ def create_access_token():
                 'message': 'Ya existe un token con este nombre'
             }), 409
         
-        # Preparar documento
+        # Preparar documento CON TIMEZONE
         token_doc = {
             'name': data['name'],
             'description': data.get('description', ''),
@@ -1499,8 +1731,8 @@ def create_access_token():
             'user_type': data.get('user_type', 'student'),
             'status': 'active',
             'created_by': data.get('created_by', 'system'),
-            'created_at': data.get('created_at', datetime.now().isoformat()),
-            'expires_at': data.get('expires_at', (datetime.now() + timedelta(days=30)).isoformat()),
+            'created_at': datetime.now(timezone.utc).isoformat(),  # CON TIMEZONE
+            'expires_at': data.get('expires_at', (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()),  # CON TIMEZONE
             'usage_history': []
         }
         
@@ -1521,6 +1753,68 @@ def create_access_token():
             'message': f'Error al crear token: {str(e)}'
         }), 500
 
+@app.route('/api/access_tokens/<token_value>/validate', methods=['GET'])
+def validate_access_token_endpoint(token_value):
+    """Validar token sin incrementar usos - CORREGIDO timezone"""
+    try:
+        collection = db.access_tokens
+        
+        # Buscar token
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return jsonify({
+                'ok': False,
+                'message': 'Token no encontrado'
+            }), 404
+        
+        # Verificar estado CON TIMEZONE CORRECTO
+        now = datetime.now(timezone.utc)
+        expires_at_str = token.get('expires_at')
+        
+        is_valid = True
+        message = 'Token válido'
+        
+        if token.get('status') != 'active':
+            is_valid = False
+            message = f'Token {token.get("status", "inactivo")}'
+        elif expires_at_str:
+            try:
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if expires_at < now:
+                    is_valid = False
+                    message = 'Token expirado'
+            except Exception as e:
+                is_valid = False
+                message = f'Error en fecha de expiración: {str(e)}'
+        
+        if token.get('current_uses', 0) >= token.get('max_uses', 1):
+            is_valid = False
+            message = 'Token agotado'
+        
+        return jsonify({
+            'ok': True,
+            'valid': is_valid,
+            'message': message,
+            'token_info': {
+                'name': token.get('name'),
+                'user_type': token.get('user_type', 'student'),
+                'current_uses': token.get('current_uses', 0),
+                'max_uses': token.get('max_uses', 1),
+                'remaining_uses': max(0, token.get('max_uses', 1) - token.get('current_uses', 0)),
+                'expires_at': expires_at_str
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error al validar token: {e}")
+        return jsonify({
+            'ok': False,
+            'message': f'Error al validar token: {str(e)}'
+        }), 500
+        
 @app.route('/api/access_tokens/<token_id>', methods=['GET'])
 def get_access_token(token_id):
     """Obtener token específico"""
@@ -1772,7 +2066,7 @@ def reset_token_uses(token_id):
 
 @app.route('/api/access_tokens/stats', methods=['GET'])
 def get_access_tokens_stats():
-    """Obtener estadísticas de tokens"""
+    """Obtener estadísticas de tokens - CORREGIDO timezone"""
     # Verificar autenticación
     auth_valid, auth_result = require_auth()
     if not auth_valid:
@@ -1786,9 +2080,12 @@ def get_access_tokens_stats():
         active_tokens = collection.count_documents({'status': 'active'})
         revoked_tokens = collection.count_documents({'status': 'revoked'})
         
-        # Contar tokens expirados y agotados
-        now = datetime.now().isoformat()
-        expired_tokens = collection.count_documents({'expires_at': {'$lt': now}})
+        # Contar tokens expirados y agotados CON TIMEZONE CORRECTO
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Para tokens expirados, usar consulta con timezone
+        expired_tokens_cursor = collection.find({'expires_at': {'$lt': now}})
+        expired_tokens = len(list(expired_tokens_cursor))
         
         # Contar tokens agotados (current_uses >= max_uses)
         exhausted_tokens = len(list(collection.find({
@@ -1819,7 +2116,6 @@ def get_access_tokens_stats():
             'ok': False,
             'message': f'Error al obtener estadísticas: {str(e)}'
         }), 500
-
 @app.route('/api/access_tokens/<token_value>/use', methods=['POST'])
 def use_access_token(token_value):
     """Usar un token de acceso - endpoint público para registro de usuarios"""
@@ -1902,7 +2198,7 @@ def use_access_token(token_value):
 
 @app.route('/api/access_tokens/<token_value>/validate', methods=['GET'])
 def validate_access_token(token_value):
-    """Validar token sin incrementar usos - para preview en frontend"""
+    """Validar token de acceso para registro - CORREGIDO timezone"""
     try:
         collection = db.access_tokens
         
@@ -1910,50 +2206,86 @@ def validate_access_token(token_value):
         token = collection.find_one({'token': token_value})
         
         if not token:
-            return jsonify({
-                'ok': False,
-                'message': 'Token no encontrado'
-            }), 404
+            return False, "Token no encontrado"
         
         # Verificar estado
-        now = datetime.now()
-        expires_at = datetime.fromisoformat(token.get('expires_at', now.isoformat()))
+        now = datetime.now(timezone.utc)  # Ya tiene timezone
+        expires_at_str = token.get('expires_at')
         
-        is_valid = True
-        message = 'Token válido'
+        if not expires_at_str:
+            return False, "Token sin fecha de expiración"
+        
+        # Convertir expires_at a datetime con timezone
+        try:
+            if isinstance(expires_at_str, str):
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+            else:
+                # Si es datetime object, asegurar timezone
+                expires_at = expires_at_str.replace(tzinfo=timezone.utc) if expires_at_str.tzinfo is None else expires_at_str
+        except Exception as e:
+            return False, f"Error en formato de fecha: {str(e)}"
+        
+        # Asegurar que ambas fechas tengan timezone
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
         
         if token.get('status') != 'active':
-            is_valid = False
-            message = f'Token {token.get("status", "inactivo")}'
-        elif expires_at < now:
-            is_valid = False
-            message = 'Token expirado'
-        elif token.get('current_uses', 0) >= token.get('max_uses', 1):
-            is_valid = False
-            message = 'Token agotado'
+            return False, f"Token {token.get('status', 'inactivo')}"
         
-        return jsonify({
-            'ok': True,
-            'valid': is_valid,
-            'message': message,
-            'token_info': {
-                'name': token.get('name'),
-                'user_type': token.get('user_type', 'student'),
-                'current_uses': token.get('current_uses', 0),
-                'max_uses': token.get('max_uses', 1),
-                'remaining_uses': max(0, token.get('max_uses', 1) - token.get('current_uses', 0)),
-                'expires_at': expires_at.strftime('%d/%m/%Y') if expires_at else 'N/A'
-            }
-        })
+        if expires_at < now:
+            return False, "Token expirado"
+        
+        if token.get('current_uses', 0) >= token.get('max_uses', 1):
+            return False, "Token agotado"
+        
+        return True, token
         
     except Exception as e:
-        print(f"❌ Error al validar token: {e}")
-        return jsonify({
-            'ok': False,
-            'message': f'Error al validar token: {str(e)}'
-        }), 500
+        return False, f"Error validando token: {str(e)}"
 
-# ===== FIN DE ACCESS TOKENS ENDPOINTS =====
+def use_access_token(token_value, username):
+    """Usar un token de acceso y registrar el uso - CORREGIDO timezone"""
+    try:
+        collection = db.access_tokens
+        
+        # Buscar token
+        token = collection.find_one({'token': token_value})
+        
+        if not token:
+            return False, "Token no encontrado"
+        
+        # Incrementar uso
+        new_uses = token.get('current_uses', 0) + 1
+        update_data = {
+            'current_uses': new_uses,
+            'last_used_at': datetime.now(timezone.utc).isoformat()  # Usar timezone
+        }
+        
+        # Si alcanzó el máximo, marcar como agotado
+        if new_uses >= token.get('max_uses', 1):
+            update_data['status'] = 'exhausted'
+        
+        # Registrar el uso
+        usage_record = {
+            'used_at': datetime.now(timezone.utc).isoformat(),  # Usar timezone
+            'used_by': username,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent', 'unknown')
+        }
+        
+        # Actualizar token
+        result = collection.update_one(
+            {'token': token_value},
+            {
+                '$set': update_data,
+                '$push': {'usage_history': usage_record}
+            }
+        )
+        
+        return True, "Token usado exitosamente"
+        
+    except Exception as e:
+        return False, f"Error usando token: {str(e)}"
 
 
 @app.get("/api/dashboard/health")
