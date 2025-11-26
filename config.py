@@ -29,7 +29,7 @@ class Config:
     JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
     
     # Email SendGrid
-    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "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")
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
     SENDGRID_SENDER_EMAIL = os.getenv("SENDGRID_SENDER_EMAIL", "onfiretesting@outlook.es")
     SENDGRID_SENDER_NAME = os.getenv("SENDGRID_SENDER_NAME", "FirefighterAI")
     
