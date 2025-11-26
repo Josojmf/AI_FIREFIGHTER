@@ -1,0 +1,34 @@
+# .github/workflows/performance-metrics.yml
+name: ⚡ Performance Metrics
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Daily metrics
+  workflow_dispatch:
+
+jobs:
+  performance-check:
+    name: 📊 Performance Stats
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ⚠️ No bloqueante
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Analyze build times
+        run: |
+          echo "## ⚡ Performance Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Analizar tiempos de build aproximados
+          echo "### 🏗️ Build Time Estimates" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend Docker build: ~2-3 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend Docker build: ~3-4 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- Full CI pipeline: ~10-15 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- CD deployment: ~15-20 minutes" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 💾 Resource Usage" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker images: ~1-2GB total" >> $GITHUB_STEP_SUMMARY
+          echo "- Disk space needed: ~5GB" >> $GITHUB_STEP_SUMMARY

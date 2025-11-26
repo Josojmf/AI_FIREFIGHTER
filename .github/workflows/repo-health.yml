@@ -1,0 +1,60 @@
+# .github/workflows/repo-health.yml
+name: 🩺 Repository Health
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly health check
+  workflow_dispatch:
+
+jobs:
+  repo-health:
+    name: 🔍 Health Check
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ⚠️ No bloqueante
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Repository health analysis
+        run: |
+          echo "## 🩺 Repository Health Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check for large files
+          echo "### 📁 File Size Analysis" >> $GITHUB_STEP_SUMMARY
+          find . -type f -size +5M -not -path "./.git/*" | head -5 | while read file; do
+            size=$(du -h "$file" | cut -f1)
+            echo "⚠️ Large file: $file ($size)" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          # Check for sensitive files
+          echo "### 🔒 Security Checks" >> $GITHUB_STEP_SUMMARY
+          if find . -name "*.env" -o -name ".env.*" | grep -q "."; then
+            echo "❌ Found .env files (check if they should be ignored)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No .env files found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Dependencies check
+          echo "### 📦 Dependencies Status" >> $GITHUB_STEP_SUMMARY
+          if [ -f "requirements.txt" ]; then
+            count=$(wc -l < requirements.txt)
+            echo "✅ Requirements.txt: $count dependencies" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check README
+        run: |
+          echo "### 📚 Documentation Check" >> $GITHUB_STEP_SUMMARY
+          if [ -f "README.md" ]; then
+            readme_lines=$(wc -l < README.md)
+            if [ "$readme_lines" -lt 10 ]; then
+              echo "⚠️ README is very short ($readme_lines lines)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ README looks good ($readme_lines lines)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "❌ No README.md found" >> $GITHUB_STEP_SUMMARY
+          fi

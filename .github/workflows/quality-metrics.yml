@@ -1,0 +1,55 @@
+# .github/workflows/quality-metrics.yml
+name: 📈 Quality Metrics
+
+on:
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly metrics
+  workflow_dispatch:
+
+jobs:
+  code-metrics:
+    name: 📊 Code Quality Report
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ⚠️ No bloqueante
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate metrics report
+        run: |
+          echo "## 📈 Code Quality Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Lines of code
+          total_lines=$(find . -name "*.py" -o -name "*.js" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
+          echo "### 📝 Code Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Lines**: $total_lines" >> $GITHUB_STEP_SUMMARY
+          
+          # File counts
+          python_files=$(find . -name "*.py" -not -path "*/__pycache__/*" | wc -l)
+          docker_files=$(find . -name "Dockerfile" -o -name "*.yml" -o -name "*.yaml" | wc -l)
+          echo "- **Python Files**: $python_files" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker/Compose Files**: $docker_files" >> $GITHUB_STEP_SUMMARY
+          
+          # Last commit info
+          echo "### 🔄 Recent Activity" >> $GITHUB_STEP_SUMMARY
+          echo "- **Last Commit**: $(git log -1 --pretty=format:'%h - %s')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Author**: $(git log -1 --pretty=format:'%an')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create status badges
+        run: |
+          mkdir -p badges
+          # Crear badges básicos
+          echo '{"schemaVersion": 1, "label": "Metrics", "message": "Active", "color": "green"}' > badges/metrics.json
+
+      - name: Upload metrics artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-metrics
+          path: badges/
+          retention-days: 7

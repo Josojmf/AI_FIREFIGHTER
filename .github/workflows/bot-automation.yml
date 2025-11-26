@@ -1,0 +1,54 @@
+# .github/workflows/bot-automation.yml
+name: 🤖 Auto-Bot Management
+
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  issue-triage:
+    name: 🎫 Auto-Label Issues
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ⚠️ No bloqueante
+    
+    steps:
+      - name: Auto-label issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            // Auto-label based on content
+            const title = issue.title.toLowerCase();
+            const body = issue.body?.toLowerCase() || '';
+            
+            if (title.includes('bug') || title.includes('error') || body.includes('bug')) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['bug', 'triage']
+              });
+            }
+            
+            if (title.includes('feature') || body.includes('feature request')) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['enhancement']
+              });
+            }
+
+  pr-size-label:
+    name: 📏 PR Size Labeler
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ⚠️ No bloqueante
+    
+    steps:
+      - name: Label PR by size
+        uses: pawsaw/size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
