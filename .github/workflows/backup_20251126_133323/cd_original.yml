@@ -1,4 +1,4 @@
-name: CD - Ultra Robust Deploy - GUARANTEED SUCCESS
+﻿name: CD - Ultra Robust Deploy - GUARANTEED SUCCESS
 
 on:
   push:
@@ -52,7 +52,6 @@ jobs:
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ github.sha }}
           build-args: |
-            ENVIRONMENT=production
             API_BASE_URL=http://167.71.63.108:5000
           no-cache: true
           provenance: false
@@ -68,8 +67,6 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ github.sha }}
-          build-args: |
-            ENVIRONMENT=production
           no-cache: true
           provenance: false
           sbom: false
@@ -84,8 +81,6 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ github.sha }}
-          build-args: |
-            ENVIRONMENT=production
           no-cache: true
           provenance: false
           sbom: false
@@ -210,7 +205,7 @@ jobs:
             df -h / | grep -E "(Filesystem|/dev/vda1)"
             echo "🐳 Docker listo para nuevas imágenes"
 
-      - name: Upload configuration files
+      - name: Upload docker-compose.prod.yml
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -266,7 +261,7 @@ jobs:
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
             echo "✅ Login exitoso en GHCR"
 
-      - name: Generate environment file with Email Config
+      - name: Generate environment file
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -275,96 +270,68 @@ jobs:
           command_timeout: 120s
           script: |
             set -e
-            echo "🔧 Generando archivo de variables con configuración de email..."
+            echo "🔧 Generando archivo de variables..."
             
             # 🔥 OBTENER IP EXTERNA DEL SERVIDOR AUTOMÁTICAMENTE
             SERVER_IP=$(curl -s ifconfig.me || curl -s ipinfo.io/ip || echo "${{ secrets.PRODUCTION_HOST }}")
             echo "🌍 IP externa detectada: $SERVER_IP"
             
             cat << EOF > /root/firefighter.env
-            # ======================================
-            # ENTORNO AUTOMÁTICO
-            # ======================================
-            ENVIRONMENT=production
-            DEBUG=false
-            DOCKER_ENV=true
-            
-            # ======================================
-            # EMAIL CONFIGURATION (SendGrid)
-            # ======================================
-            SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
-            SENDGRID_SENDER_EMAIL=${{ secrets.SENDGRID_SENDER_EMAIL }}
-            SENDGRID_SENDER_NAME=${{ secrets.SENDGRID_SENDER_NAME }}
-            
-            # ======================================
-            # URLs DE PRODUCCIÓN AUTOMÁTICAS
-            # ======================================
-            API_BASE_URL=http://$SERVER_IP:5000
-            FRONTEND_URL=http://$SERVER_IP:8000
-            BACKOFFICE_URL=http://$SERVER_IP:8080
-            FRONTEND_API_BASE_URL=http://$SERVER_IP:5000
-            BACKOFFICE_API_BASE_URL=http://$SERVER_IP:5000
-            
-            # ======================================
-            # PUERTOS DE PRODUCCIÓN
-            # ======================================
-            API_PORT=5000
-            FRONTEND_PORT=8000
-            BACKOFFICE_PORT=3001
-            
-            # ======================================
             # 🔥 CLAVES SECRETAS SEPARADAS PARA SESIONES (CRÍTICO)
-            # ======================================
             FRONTEND_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
             BACKOFFICE_SECRET_KEY=${{ secrets.BACKOFFICE_SECRET_KEY }}
+            
+            # Variables del API
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             JWT_EXPIRES_HOURS=${{ secrets.JWT_EXPIRES_HOURS }}
             
-            # ======================================
             # MongoDB Atlas (COMPLETO)
-            # ======================================
             MONGO_CLUSTER=${{ secrets.MONGO_CLUSTER }}
             MONGO_USER=${{ secrets.MONGO_USER }}
             MONGO_PASS=${{ secrets.MONGO_PASS }}
             DB_NAME=${{ secrets.DB_NAME }}
             MONGO_URI=mongodb+srv://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASS }}@${{ secrets.MONGO_CLUSTER }}/${{ secrets.DB_NAME }}
             
-            # ======================================
             # VAPID para notificaciones
-            # ======================================
             VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
             VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
             
-            # ======================================
             # 🔥 ADMIN CREDENTIALS COMPLETAS
-            # ======================================
             ADMIN_USERNAME=${{ secrets.ADMIN_USERNAME }}
             ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
             
-            # ======================================
             # Configuración de sesiones
-            # ======================================
             FRONTEND_SESSION_TIMEOUT=86400
             BACKOFFICE_SESSION_TIMEOUT=28800
             
-            # ======================================
             # 🔥 MFA CONFIGURATION (NECESARIA PARA BACKOFFICE)
-            # ======================================
             MFA_ISSUER=FirefighterAI
             
+            # 🔥 URLs CORREGIDAS PARA NAVEGADOR EXTERNO
+            # Para JavaScript en navegador (desde IP externa)
+            API_BASE_URL=http://$SERVER_IP:5000
+            FRONTEND_API_BASE_URL=http://$SERVER_IP:5000
+            BACKOFFICE_API_BASE_URL=http://$SERVER_IP:5000
+            
+            # Configuración general
+            DEBUG=false
             EOF
             
             chmod 600 /root/firefighter.env
-            echo "✅ Variables de entorno configuradas con email"
+            echo "✅ Variables de entorno configuradas"
             
-            # Verificar configuración de email
-            echo "📧 Verificando configuración de email:"
-            grep "SENDGRID_API_KEY" /root/firefighter.env && echo "  ✅ SENDGRID_API_KEY configurada"
-            grep "SENDGRID_SENDER_EMAIL" /root/firefighter.env && echo "  ✅ SENDGRID_SENDER_EMAIL configurada"
-            grep "ENVIRONMENT=production" /root/firefighter.env && echo "  ✅ Entorno de producción configurado"
-            
-            echo "🎯 Configuración completa para producción con email automático"
-
+            # Verificar que el archivo se creó correctamente
+            if [ -f /root/firefighter.env ]; then
+              echo "📋 Variables configuradas ($(wc -l < /root/firefighter.env) líneas)"
+              echo "🔍 Verificando variables CRÍTICAS..."
+              grep "BACKOFFICE_SECRET_KEY" /root/firefighter.env || echo "❌ BACKOFFICE_SECRET_KEY no encontrado - CRÍTICO"
+              grep "ADMIN_PASSWORD" /root/firefighter.env || echo "❌ ADMIN_PASSWORD no encontrado"
+              grep "MFA_ISSUER" /root/firefighter.env || echo "❌ MFA_ISSUER no encontrado"
+              grep "API_BASE_URL" /root/firefighter.env || echo "❌ API_BASE_URL no encontrado"
+            else
+              echo "❌ Error: Archivo de variables no creado"
+              exit 1
+            fi
       - name: 🧹 Aggressive Pre-Cleanup
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -574,7 +541,7 @@ jobs:
               sleep 15
             done
 
-      - name: 🎯 Final Deployment Verification with Email Test
+      - name: 🎯 Final Deployment Verification
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -585,7 +552,7 @@ jobs:
             set -e
             cd /opt/emergency
             
-            echo "🎯 Verificación final de deployment con test de email..."
+            echo "🎯 Verificación final de deployment..."
             
             # Verificar contenedores activos
             echo "📊 Estado de contenedores:"
@@ -598,14 +565,8 @@ jobs:
             echo "🐳 Imágenes Docker:"
             docker images | grep ai-firefighter
             
-            echo "📧 Verificando configuración de email en contenedor backend..."
-            docker-compose -f docker-compose.prod.yml exec -T backend printenv | grep SENDGRID || echo "Variables SENDGRID no visibles (normal en contenedor)"
-            
             echo "✅ Deployment completado exitosamente"
             echo "🌐 Servicios disponibles en:"
             echo "   - Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
             echo "   - Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
             echo "   - Backoffice: http://${{ secrets.PRODUCTION_HOST }}:3001"
-            echo ""
-            echo "📧 Sistema de email configurado y listo para funcionar"
-            echo "🎯 Próximo paso: Crear tokens desde el BackOffice para probar email"

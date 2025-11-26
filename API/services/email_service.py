@@ -7,18 +7,30 @@ from datetime import datetime
 class EmailService:
     def __init__(self):
         """SendGrid - Implementación oficial"""
-        # Tu API Key real
-        self.api_key = "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"
-        self.sender_email = "onfiretesting@outlook.es"
-        self.sender_name = "FirefighterAI"
+        # API Key desde variables de entorno - MÁS SEGURO
+        self.api_key = os.getenv("SENDGRID_API_KEY")
+        self.sender_email = os.getenv("SENDGRID_SENDER_EMAIL", "onfiretesting@outlook.es")
+        self.sender_name = os.getenv("SENDGRID_SENDER_NAME", "FirefighterAI")
+        
+        # URL base para enlaces de registro
+        self.base_url = os.getenv("FRONTEND_URL", "http://localhost:8000")
+        
+        # Logs de configuración
+        print(f"📧 EmailService inicializado:")
+        print(f"   - API Key: {self.api_key[:20]}...")
+        print(f"   - Sender: {self.sender_email}")
+        print(f"   - Base URL: {self.base_url}")
         
     def send_token_email(self, recipient_email, token_name, token_value, max_uses, expires_at=None, created_by="system"):
         """Enviar email usando la librería oficial de SendGrid"""
-        print(f"🚀 ENVIANDO EMAIL (SendGrid Oficial) a: {recipient_email}")
+        print(f"\n🚀 ENVIANDO EMAIL (SendGrid Oficial) a: {recipient_email}")
+        print(f"🎯 Token: {token_name} | Valor: {token_value[:20]}...")
         
         try:
             expires_str = self._format_expires_date(expires_at)
-            register_url = f"http://localhost:8000/register?token={token_value}"
+            register_url = f"{self.base_url}/register?token={token_value}"
+            
+            print(f"🔗 Register URL: {register_url}")
             
             # Crear el mensaje según la documentación oficial
             message = Mail(
@@ -30,10 +42,15 @@ class EmailService:
             )
             
             # Crear cliente SendGrid
+            print(f"🔑 Creando cliente SendGrid con API key: {self.api_key[:20]}...")
             sg = SendGridAPIClient(self.api_key)
             
             print("📤 Enviando con SendGrid API Client...")
             response = sg.send(message)
+            
+            print(f"📡 Respuesta SendGrid:")
+            print(f"   - Status Code: {response.status_code}")
+            print(f"   - Headers: {dict(response.headers) if hasattr(response, 'headers') else 'No headers'}")
             
             if response.status_code == 202:
                 print(f"✅ ✅ ✅ EMAIL ENVIADO CORRECTAMENTE a: {recipient_email}")
@@ -41,13 +58,18 @@ class EmailService:
                 return True
             else:
                 print(f"❌ Error SendGrid: {response.status_code}")
-                print(f"❌ Headers: {response.headers}")
-                print(f"❌ Body: {response.body}")
+                if hasattr(response, 'headers'):
+                    print(f"❌ Headers: {response.headers}")
+                if hasattr(response, 'body'):
+                    print(f"❌ Body: {response.body}")
                 self._show_token_console(recipient_email, token_name, token_value, max_uses, expires_at, created_by)
                 return False
                 
         except Exception as e:
             print(f"❌ Error en SendGrid: {str(e)}")
+            print(f"❌ Tipo de error: {type(e).__name__}")
+            import traceback
+            print(f"❌ Traceback: {traceback.format_exc()}")
             self._show_token_console(recipient_email, token_name, token_value, max_uses, expires_at, created_by)
             return False
     
@@ -106,7 +128,7 @@ class EmailService:
             
             <p><strong>📝 Instrucciones alternativas:</strong></p>
             <ol>
-                <li>Visita: <a href="http://localhost:8000/register">http://localhost:8000/register</a></li>
+                <li>Visita: <a href="{self.base_url}/register">{self.base_url}/register</a></li>
                 <li>Pega el token: <code style="background: #f1f1f1; padding: 2px 5px; border-radius: 3px;">{token_value}</code></li>
                 <li>Completa tus datos personales</li>
             </ol>
@@ -138,7 +160,7 @@ ENLACE DIRECTO DE REGISTRO:
 
 INSTRUCCIONES:
 1. Haz clic en el enlace arriba O
-2. Ve a: http://localhost:8000/register
+2. Ve a: {self.base_url}/register
 3. Pega este token: {token_value}
 4. Completa tus datos personales
 
@@ -151,12 +173,12 @@ El equipo de FirefighterAI
     def _show_token_console(self, recipient_email, token_name, token_value, max_uses, expires_at, created_by):
         """Mostrar en consola si falla el envío"""
         expires_str = self._format_expires_date(expires_at)
-        register_url = f"http://localhost:8000/register?token={token_value}"
+        register_url = f"{self.base_url}/register?token={token_value}"
         
         print("\n" + "="*80)
         print("📧 EMAIL NO ENVIADO - USA ESTOS DATOS MANUALMENTE")
         print("="*80)
-        print(f"📍 DESTINATARIO: {recipient_email}")
+        print(f"📮 DESTINATARIO: {recipient_email}")
         print(f"🔑 TOKEN: {token_value}")
         print(f"🌐 ENLACE DIRECTO: {register_url}")
         print(f"🏷️  NOMBRE: {token_name}")
@@ -170,6 +192,8 @@ El equipo de FirefighterAI
 email_service = EmailService()
 
 def send_token_email(recipient_email, token_name, token_value, max_uses, expires_at=None, created_by="system"):
+    """Función wrapper para mantener compatibilidad"""
+    print(f"🔄 Wrapper send_token_email llamado para: {recipient_email}")
     return email_service.send_token_email(
         recipient_email=recipient_email,
         token_name=token_name,
