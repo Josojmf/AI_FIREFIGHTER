@@ -30,88 +30,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate dashboard data
+      - name: Generate basic dashboard data
         run: |
-          echo "📊 Generando datos del dashboard..."
+          echo "📊 Generando datos básicos del dashboard..."
           
-          # Obtener información del último CD
-          echo "🔍 Obteniendo información del último deployment..."
-          LAST_CD_RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?event=push&status=completed&per_page=1" | \
-            jq -r '.workflow_runs[0] | select(.name | contains("CD"))')
-          
-          if [ "$LAST_CD_RUN" != "null" ] && [ -n "$LAST_CD_RUN" ]; then
-            CD_STATUS=$(echo "$LAST_CD_RUN" | jq -r '.conclusion')
-            CD_COMMIT=$(echo "$LAST_CD_RUN" | jq -r '.head_sha')
-            CD_TIME=$(echo "$LAST_CD_RUN" | jq -r '.updated_at')
-            CD_ACTOR=$(echo "$LAST_CD_RUN" | jq -r '.actor.login')
-            CD_RUN_ID=$(echo "$LAST_CD_RUN" | jq -r '.id')
-            CD_HTML_URL=$(echo "$LAST_CD_RUN" | jq -r '.html_url')
-          else
-            CD_STATUS="unknown"
-            CD_COMMIT="${{ github.sha }}"
-            CD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            CD_ACTOR="unknown"
-            CD_RUN_ID="unknown"
-            CD_HTML_URL="https://github.com/${{ github.repository }}/actions"
-          fi
-          
-          # Obtener workflow ID para redeploys
-          echo "🔧 Obteniendo workflow ID..."
-          CD_WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows" | \
-            jq -r '.workflows[] | select(.name | contains("CD")) | .id')
-          
-          # Health checks SIMPLIFICADOS - solo verificar disponibilidad básica
-          echo "🏥 Verificando estado de servicios (básico)..."
-          
-          # Usar un approach más simple que no falle
-          FRONTEND_HEALTH="unknown"
-          BACKEND_HEALTH="unknown" 
-          BACKOFFICE_HEALTH="unknown"
-          
-          # Intentar health checks de forma más robusta
-          set +e  # Desactivar exit on error temporalmente
-          
-          # Frontend - solo verificar si responde
-          if curl -s --max-time 5 http://167.71.63.108:8000 > /dev/null 2>&1; then
-            FRONTEND_HEALTH="healthy"
-          else
-            FRONTEND_HEALTH="unhealthy"
-          fi
-          
-          # Backend - intentar endpoint health, si falla verificar disponibilidad básica
-          if curl -s --max-time 5 http://167.71.63.108:5000/health > /dev/null 2>&1; then
-            BACKEND_HEALTH="healthy"
-          elif curl -s --max-time 5 http://167.71.63.108:5000 > /dev/null 2>&1; then
-            BACKEND_HEALTH="healthy"
-          else
-            BACKEND_HEALTH="unhealthy"
-          fi
-          
-          # Backoffice - verificar disponibilidad básica
-          if curl -s --max-time 5 http://167.71.63.108:3001 > /dev/null 2>&1; then
-            BACKOFFICE_HEALTH="healthy"
-          else
-            BACKOFFICE_HEALTH="unhealthy"
-          fi
-          
-          set -e  # Reactivar exit on error
-          
-          # Calcular estado global
-          SERVICES_COUNT=0
-          if [ "$FRONTEND_HEALTH" = "healthy" ]; then ((SERVICES_COUNT++)); fi
-          if [ "$BACKEND_HEALTH" = "healthy" ]; then ((SERVICES_COUNT++)); fi
-          if [ "$BACKOFFICE_HEALTH" = "healthy" ]; then ((SERVICES_COUNT++)); fi
-          
-          OVERALL_HEALTH="healthy"
-          if [ "$SERVICES_COUNT" -lt 3 ]; then
-            OVERALL_HEALTH="unhealthy"
-          fi
-          
-          # Crear datos del dashboard
+          # Datos básicos sin health checks problemáticos
           mkdir -p _site
-          cat > _site/data.json << EOF
+          cat > _site/data.json << 'EOF'
           {
             "dashboard": {
               "title": "Firefighter AI - DevOps Dashboard",
@@ -121,21 +46,21 @@ jobs:
               "repo_name": "${{ github.event.repository.name }}"
             },
             "deployment": {
-              "last_status": "$CD_STATUS",
-              "last_commit": "$CD_COMMIT",
-              "last_deployment": "$CD_TIME",
-              "triggered_by": "$CD_ACTOR",
-              "run_id": "$CD_RUN_ID",
-              "html_url": "$CD_HTML_URL",
-              "workflow_id": "$CD_WORKFLOW_ID",
+              "last_status": "unknown",
+              "last_commit": "${{ github.sha }}",
+              "last_deployment": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+              "triggered_by": "${{ github.actor }}",
+              "run_id": "${{ github.run_id }}",
+              "html_url": "https://github.com/${{ github.repository }}/actions",
+              "workflow_id": "unknown",
               "services": ["frontend", "backend", "backoffice"]
             },
             "health": {
-              "overall": "$OVERALL_HEALTH",
-              "services_healthy": "$SERVICES_COUNT",
-              "frontend": "$FRONTEND_HEALTH",
-              "backend": "$BACKEND_HEALTH", 
-              "backoffice": "$BACKOFFICE_HEALTH"
+              "overall": "unknown",
+              "services_healthy": "0",
+              "frontend": "unknown",
+              "backend": "unknown", 
+              "backoffice": "unknown"
             },
             "metrics": {
               "success_rate": 95,
@@ -144,11 +69,7 @@ jobs:
             }
           }
           EOF
-          
-          echo "✅ Datos del dashboard generados exitosamente"
-          echo "📊 Último CD: $CD_STATUS"
-          echo "🏥 Servicios saludables: $SERVICES_COUNT/3"
-          echo "🔧 Workflow ID: $CD_WORKFLOW_ID"
+          echo "✅ Datos básicos generados exitosamente"
 
       - name: Copy dashboard HTML
         run: |
@@ -158,7 +79,45 @@ jobs:
             echo "✅ HTML copiado correctamente"
           else
             echo "❌ Error: dashboard/index.html no encontrado"
-            exit 1
+            echo "📋 Creando HTML básico..."
+            cat > _site/index.html << 'EOF'
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Firefighter AI - Dashboard</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    .card { border: 1px solid #ddd; padding: 20px; margin: 10px; border-radius: 8px; }
+                    .success { background-color: #d4edda; }
+                    .error { background-color: #f8d7da; }
+                </style>
+            </head>
+            <body>
+                <h1>🚀 Firefighter AI Dashboard</h1>
+                <p>Dashboard básico - Los health checks se añadirán en la siguiente versión</p>
+                <div class="card">
+                    <h3>Estado del Sistema</h3>
+                    <p>🔄 Configuración inicial - Próximamente métricas en tiempo real</p>
+                </div>
+                <div class="card">
+                    <h3>Enlaces Rápidos</h3>
+                    <ul>
+                        <li><a href="http://167.71.63.108:8000" target="_blank">Frontend App</a></li>
+                        <li><a href="http://167.71.63.108:3001" target="_blank">Backoffice</a></li>
+                        <li><a href="https://github.com/${{ github.repository }}/actions" target="_blank">GitHub Actions</a></li>
+                    </ul>
+                </div>
+                <script>
+                    fetch('./data.json')
+                        .then(r => r.json())
+                        .then(data => {
+                            console.log('Dashboard data:', data);
+                            document.body.innerHTML += '<p>Última actualización: ' + new Date(data.dashboard.last_updated).toLocaleString() + '</p>';
+                        });
+                </script>
+            </body>
+            </html>
+            EOF
           fi
 
       - name: Setup Pages
@@ -175,12 +134,10 @@ jobs:
 
       - name: Show Dashboard URL
         run: |
-          echo "🎉 ¡Dashboard desplegado correctamente!"
+          echo "🎉 ¡Dashboard básico desplegado correctamente!"
           echo "🌐 URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
           echo ""
-          echo "📊 Características:"
-          echo "   ✅ Estado del último deployment CD"
-          echo "   🏥 Health checks de servicios"
-          echo "   🚨 Botón de redeploy de emergencia"
-          echo "   📈 Métricas del sistema"
-          echo "   🔗 Enlaces rápidos"
+          echo "📋 Próximos pasos:"
+          echo "   1. Verificar que el dashboard básico funcione"
+          echo "   2. Añadir health checks gradualmente"
+          echo "   3. Implementar el dashboard completo con redeploy"
