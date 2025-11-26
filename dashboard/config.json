@@ -1,0 +1,21 @@
+{
+  "repository": "Josojmf/AI_Firefighter",
+  "refresh_interval": 3600000,
+  "widgets": [
+    {
+      "name": "ci_metrics",
+      "type": "success_rate",
+      "source": "ci.yml"
+    },
+    {
+      "name": "deployment_history", 
+      "type": "timeline",
+      "source": "cd.yml"
+    },
+    {
+      "name": "quality_metrics",
+      "type": "gauge",
+      "source": "quality-metrics.yml"
+    }
+  ]
+}
