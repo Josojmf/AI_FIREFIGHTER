@@ -28,7 +28,7 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
     JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
     
-    # Email SendGrid
+    # Email SendGrid - SIN VALORES HARDCODEADOS
     SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
     SENDGRID_SENDER_EMAIL = os.getenv("SENDGRID_SENDER_EMAIL", "onfiretesting@outlook.es")
     SENDGRID_SENDER_NAME = os.getenv("SENDGRID_SENDER_NAME", "FirefighterAI")
@@ -60,7 +60,7 @@ class DevelopmentConfig(Config):
         print(f"🌐 API URL: {cls.API_BASE_URL}")
         print(f"🖥️  Frontend URL: {cls.FRONTEND_URL}")
         print(f"⚙️  BackOffice URL: {cls.BACKOFFICE_URL}")
-        print(f"📧 SendGrid API Key: {cls.SENDGRID_API_KEY[:20]}...")
+        print(f"📧 SendGrid API Key: {cls.SENDGRID_API_KEY[:20]}..." if cls.SENDGRID_API_KEY else "📧 SendGrid API Key: ❌ NO CONFIGURADO")
         print(f"📮 Sender Email: {cls.SENDGRID_SENDER_EMAIL}")
         print("="*50)
 
