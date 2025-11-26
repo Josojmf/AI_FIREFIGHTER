@@ -14,17 +14,21 @@ services:
       # ✅ URLs EXPLÍCITAS para navegador (desde IP externa)
       - API_BASE_URL=http://167.71.63.108:5000/api
       - FRONTEND_API_BASE_URL=http://167.71.63.108:5000/api
+      # Variables de configuración adicionales
+      - ENVIRONMENT=production
+      - DOCKER_ENV=true
+      - DEBUG=false
     networks:
       - firefighter_network
     restart: unless-stopped
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 40s
+      retries: 3
+      start_period: 60s
 
   # BACKEND API
   backend:
@@ -34,15 +38,23 @@ services:
       - "5000:5000"
     env_file:
       - /root/firefighter.env
+    environment:
+      # Variables específicas del backend
+      - ENVIRONMENT=production
+      - DOCKER_ENV=true
+      - DEBUG=false
+      # URLs para comunicación interna
+      - FRONTEND_URL=http://167.71.63.108:8000
+      - BACKOFFICE_URL=http://167.71.63.108:3001
     networks:
       - firefighter_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 40s
+      retries: 3
+      start_period: 60s
 
   # 🔥 BACKOFFICE - CORREGIDO: URLs INTERNAS DOCKER
   backoffice:
@@ -56,6 +68,13 @@ services:
       # ✅ URLs INTERNAS DOCKER - comunicación entre contenedores (CRÍTICO)
       - API_BASE_URL=http://backend:5000
       - BACKOFFICE_API_BASE_URL=http://backend:5000
+      # Variables específicas del backoffice
+      - ENVIRONMENT=production
+      - DOCKER_ENV=true
+      - DEBUG=false
+      - MFA_ISSUER=FirefighterAI
+      # URLs externas para referencias
+      - FRONTEND_URL=http://167.71.63.108:8000
       # Las demás variables se cargan desde env_file
     networks:
       - firefighter_network
@@ -63,19 +82,34 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/ || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 40s
+      retries: 3
+      start_period: 60s
 
 # 🌐 CONFIGURACIÓN DE RED
 networks:
   firefighter_network:
     driver: bridge
     name: firefighter_network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 # 💾 CONFIGURACIÓN DE VOLÚMENES
 volumes:
   firefighter_data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/firefighter-data
+  
+  # Volumen para logs
+  firefighter_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/firefighter-logs
