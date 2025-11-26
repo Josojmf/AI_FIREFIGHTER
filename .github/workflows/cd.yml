@@ -52,6 +52,7 @@ jobs:
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ github.sha }}
           build-args: |
+            ENVIRONMENT=production
             API_BASE_URL=http://167.71.63.108:5000
           no-cache: true
           provenance: false
@@ -67,6 +68,8 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ github.sha }}
+          build-args: |
+            ENVIRONMENT=production
           no-cache: true
           provenance: false
           sbom: false
@@ -81,6 +84,8 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ github.sha }}
+          build-args: |
+            ENVIRONMENT=production
           no-cache: true
           provenance: false
           sbom: false
@@ -261,7 +266,7 @@ jobs:
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
             echo "✅ Login exitoso en GHCR"
 
-      - name: Generate environment file
+      - name: Generate environment file with EMAIL CONFIG
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -270,7 +275,7 @@ jobs:
           command_timeout: 120s
           script: |
             set -e
-            echo "🔧 Generando archivo de variables..."
+            echo "🔧 Generando archivo de variables con configuración de EMAIL..."
             
             # 🔥 OBTENER IP EXTERNA DEL SERVIDOR AUTOMÁTICAMENTE
             SERVER_IP=$(curl -s ifconfig.me || curl -s ipinfo.io/ip || echo "${{ secrets.PRODUCTION_HOST }}")
@@ -313,12 +318,21 @@ jobs:
             FRONTEND_API_BASE_URL=http://$SERVER_IP:5000
             BACKOFFICE_API_BASE_URL=http://$SERVER_IP:5000
             
+            # 📧 EMAIL CONFIGURATION (SENDGRID) - ¡NUEVO!
+            SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
+            SENDGRID_SENDER_EMAIL=${{ secrets.SENDGRID_SENDER_EMAIL }}
+            SENDGRID_SENDER_NAME=${{ secrets.SENDGRID_SENDER_NAME }}
+            
+            # 🔧 ENVIRONMENT DETECTION
+            ENVIRONMENT=production
+            DOCKER_ENV=true
+            
             # Configuración general
             DEBUG=false
             EOF
             
             chmod 600 /root/firefighter.env
-            echo "✅ Variables de entorno configuradas"
+            echo "✅ Variables de entorno configuradas CON EMAIL"
             
             # Verificar que el archivo se creó correctamente
             if [ -f /root/firefighter.env ]; then
@@ -328,10 +342,13 @@ jobs:
               grep "ADMIN_PASSWORD" /root/firefighter.env || echo "❌ ADMIN_PASSWORD no encontrado"
               grep "MFA_ISSUER" /root/firefighter.env || echo "❌ MFA_ISSUER no encontrado"
               grep "API_BASE_URL" /root/firefighter.env || echo "❌ API_BASE_URL no encontrado"
+              grep "SENDGRID_API_KEY" /root/firefighter.env || echo "❌ SENDGRID_API_KEY no encontrado - EMAIL NO FUNCIONARÁ"
+              echo "✅ Variables críticas verificadas"
             else
               echo "❌ Error: Archivo de variables no creado"
               exit 1
             fi
+
       - name: 🧹 Aggressive Pre-Cleanup
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -428,7 +445,7 @@ jobs:
             
             echo "✅ Pull de imágenes completado"
 
-      - name: 🚀 Start Services with Health Verification
+      - name: 🚀 Start Services with Health Verification - IMPROVED
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.PRODUCTION_HOST }}
@@ -439,7 +456,7 @@ jobs:
             set -e
             cd /opt/emergency
             
-            echo "🚀 Iniciando servicios con verificación de salud..."
+            echo "🚀 Iniciando servicios con verificación de salud mejorada..."
             
             # Verificar que docker-compose.prod.yml existe
             if [ ! -f docker-compose.prod.yml ]; then
@@ -449,13 +466,17 @@ jobs:
             
             # Iniciar todos los servicios
             echo "🔄 Levantando contenedores..."
-            docker-compose -f docker-compose.prod.yml up -d --remove-orphans --force-recreate
+            if ! docker-compose -f docker-compose.prod.yml up -d --remove-orphans --force-recreate; then
+              echo "❌ Error al levantar contenedores - Mostrando logs:"
+              docker-compose -f docker-compose.prod.yml logs --tail=50
+              exit 1
+            fi
             
             # Esperar inicio inicial
             echo "⏳ Esperando inicio de servicios (30s)..."
             sleep 30
             
-            # Verificación robusta de salud
+            # Verificación robusta de salud - MEJORADA
             echo "🔍 Verificación de salud de contenedores..."
             MAX_RETRIES=24  # 6 minutos total
             RETRY_COUNT=0
@@ -475,6 +496,9 @@ jobs:
                   HEALTHY_CONTAINERS=$((HEALTHY_CONTAINERS + 1))
                 else
                   echo "  ⚠️ $container: Not ready"
+                  # Mostrar logs del contenedor que falla
+                  echo "  📄 Logs de $container:"
+                  docker logs $container --tail=10 2>/dev/null || true
                 fi
               done
               
@@ -525,7 +549,7 @@ jobs:
                 echo "📋 Estado final de contenedores:"
                 docker-compose -f docker-compose.prod.yml ps
                 echo "📄 Logs recientes para debug:"
-                docker-compose -f docker-compose.prod.yml logs --tail=10 || true
+                docker-compose -f docker-compose.prod.yml logs --tail=20 || true
                 
                 # No fallar el deploy si los contenedores están corriendo
                 if [ "$HEALTHY_CONTAINERS" -ge 2 ]; then
@@ -565,8 +589,13 @@ jobs:
             echo "🐳 Imágenes Docker:"
             docker images | grep ai-firefighter
             
+            # Verificar configuración de email
+            echo "📧 Verificando configuración de email:"
+            grep "SENDGRID_API_KEY" /root/firefighter.env >/dev/null && echo "✅ EMAIL configurado" || echo "❌ EMAIL no configurado"
+            
             echo "✅ Deployment completado exitosamente"
             echo "🌐 Servicios disponibles en:"
             echo "   - Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000"
             echo "   - Backend: http://${{ secrets.PRODUCTION_HOST }}:5000"
             echo "   - Backoffice: http://${{ secrets.PRODUCTION_HOST }}:3001"
+            echo "📧 Email de prueba: Crear token desde BackOffice para verificar"
