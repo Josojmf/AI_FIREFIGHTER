@@ -23,25 +23,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download deployment artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cd-deployment-data
-          path: artifacts/
-
-      - name: Generate dashboard data
+      - name: Generate dashboard data from workflow
         run: |
-          echo "📈 Generando datos para dashboard..."
+          echo "📈 Generando datos para dashboard desde el último CD..."
           
-          # Crear datos básicos del dashboard
-          DASHBOARD_DATA=$(cat << EOF
+          # Usar la API de GitHub para obtener datos del último workflow
+          DEPLOYMENT_DATA=$(cat << EOF
           {
             "last_updated": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "deployments": {
-              "last_success": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-              "total_count": 1,
-              "success_rate": 100,
-              "last_status": "success"
+            "deployment": {
+              "id": "${{ github.event.workflow_run.id }}",
+              "status": "${{ github.event.workflow_run.conclusion }}",
+              "commit_sha": "${{ github.event.workflow_run.head_sha }}",
+              "triggered_by": "${{ github.event.workflow_run.actor.login }}",
+              "run_number": "${{ github.event.workflow_run.run_number }}"
             },
             "services": {
               "frontend": "running",
@@ -54,9 +49,11 @@ jobs:
           EOF
           )
           
-          echo "$DASHBOARD_DATA" > dashboard-data.json
+          echo "$DEPLOYMENT_DATA" > dashboard-data.json
           mkdir -p _site
-          echo "$DASHBOARD_DATA" > _site/data.json
+          echo "$DEPLOYMENT_DATA" > _site/data.json
+          
+          echo "✅ Datos del dashboard generados"
 
       - name: Create simple dashboard HTML
         run: |
@@ -106,12 +103,12 @@ jobs:
                   <div class="bg-white rounded-lg shadow p-6">
                       <h2 class="text-2xl font-bold mb-4 text-gray-800">
                           <i class="fas fa-history mr-2"></i>
-                          Historial Reciente
+                          Último Deployment
                       </h2>
                       <div id="deploymentHistory">
                           <div class="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
                               <div>
-                                  <p class="font-semibold">Deployment #${{ github.run_id }}</p>
+                                  <p class="font-semibold" id="deploymentId">Deployment #${{ github.event.workflow_run.id }}</p>
                                   <p class="text-sm text-gray-500" id="currentTime">$(date -u +"%Y-%m-%d %H:%M:%S")</p>
                               </div>
                               <span class="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
@@ -130,7 +127,18 @@ jobs:
                           document.getElementById('lastDeploy').textContent = 
                               new Date(data.last_updated).toLocaleString();
                           document.getElementById('deployStatus').textContent = 
-                              data.deployments.last_status === 'success' ? '✅ Éxito' : '❌ Fallo';
+                              data.deployment.status === 'success' ? '✅ Éxito' : '❌ Fallo';
+                          document.getElementById('deploymentId').textContent = 
+                              'Deployment #' + data.deployment.run_number;
+                          
+                          // Cambiar color según estado
+                          if (data.deployment.status !== 'success') {
+                              document.querySelector('#deploymentHistory div').classList.remove('bg-green-50', 'border-green-200');
+                              document.querySelector('#deploymentHistory div').classList.add('bg-red-50', 'border-red-200');
+                              document.querySelector('#deploymentHistory span').classList.remove('bg-green-100', 'text-green-800');
+                              document.querySelector('#deploymentHistory span').classList.add('bg-red-100', 'text-red-800');
+                              document.querySelector('#deploymentHistory span').textContent = '❌ Failed';
+                          }
                       })
                       .catch(error => {
                           console.error('Error loading dashboard data:', error);
