@@ -15,7 +15,7 @@ foreach ($file in $files) {
 # Git commit y push
 git add .
 git commit -m "$Message - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-git push origin main
+git push origin main --force
 
 Write-Host "✅ Deploy iniciado - GitHub Actions se encargará del resto" -ForegroundColor Green
 Write-Host "🌐 URLs de producción:" -ForegroundColor Cyan
