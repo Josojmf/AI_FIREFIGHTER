@@ -2,7 +2,7 @@ from waitress import serve
 from app import create_app
 
 # Crear la aplicación Flask mediante factory
-app = create_app()
+app = create_app() 
 
 if __name__ == "__main__":
     print("🚀 Firefighter Backoffice (Waitress) iniciando...")
