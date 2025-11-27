@@ -10,9 +10,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from waitress import serve
 from app import create_app
-# Cache en memoria para BackOffice
-from simple_memory_cache import memory_cache, cache_result, get_cache_stats
-
 
 app = create_app()
 

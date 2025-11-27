@@ -1,7 +1,4 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
-# Cache en memoria para Frontend
-from simple_memory_cache import memory_cache, cache_result
-
 import requests
 import json
 import os

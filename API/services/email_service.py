@@ -8,7 +8,7 @@ class EmailService:
     def __init__(self):
         """SendGrid - Implementación oficial"""
         # API Key desde variables de entorno - MÁS SEGURO
-        self.api_key = os.getenv("SENDGRID_API_KEY")
+        self.api_key = os.getenv("SENDGRID_API_KEY") or "SG.xxxxxxx.yyyyyyy"
         self.sender_email = os.getenv("SENDGRID_SENDER_EMAIL", "onfiretesting@outlook.es")
         self.sender_name = os.getenv("SENDGRID_SENDER_NAME", "FirefighterAI")
         

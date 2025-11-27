@@ -12,12 +12,6 @@ from threading import Thread
 import time
 
 from flask import Flask, request, jsonify
-# Cache en memoria para performance
-from simple_memory_cache import (
-    memory_cache, cache_result, cache_user_data, 
-    cache_cards_data, invalidate_user_cache, get_cache_stats
-)
-
 from flask_cors import CORS
 from pymongo import MongoClient, ASCENDING
 from pymongo.errors import DuplicateKeyError
@@ -2480,28 +2474,6 @@ def api_dashboard_health():
 @app.get("/")
 def root():
     return jsonify({"ok": True, "service": "Firefighter API", "status": "running"}), 200
-
-
-# Endpoints para monitoreo del cache
-@app.route('/api/cache/stats', methods=['GET'])
-def get_cache_statistics():
-    """Estadisticas del cache de memoria"""
-    try:
-        stats = get_cache_stats()
-        stats['timestamp'] = datetime.now().isoformat()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/cache/clear', methods=['POST'])
-def clear_memory_cache():
-    """Limpiar cache de memoria"""
-    try:
-        memory_cache.clear()
-        return jsonify({"message": "Cache cleared successfully"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     print("🚀 Auth API iniciando...")
