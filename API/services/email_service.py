@@ -102,7 +102,7 @@ class EmailService:
 <body>
     <div class="container">
         <div class="header">
-            <h1 style="margin: 0; font-size: 28px;">🚒 FirefighterAI</h1>
+            <h1 style="margin: 0; font-size: 28px;">🚒 Onfire AI</h1>
             <h2 style="margin: 10px 0 0 0; font-size: 20px;">Token de Acceso</h2>
         </div>
         
