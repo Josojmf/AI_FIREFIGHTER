@@ -1,0 +1,249 @@
+/* ========================================
+   SSO Components - Shared Styles
+   ======================================== */
+
+/* Auth Divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  width: 100%;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+}
+
+.divider-text {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* SSO Buttons Container */
+.sso-buttons,
+.sso-buttons-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.sso-buttons-top {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* SSO Button Base Styles */
+.sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.875rem 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.sso-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sso-btn:hover::before {
+  opacity: 1;
+}
+
+.sso-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.sso-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.sso-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* SSO Icon */
+.sso-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* SSO Text */
+.sso-text {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+/* Google Button Specific */
+.sso-google:hover {
+  background: linear-gradient(135deg,
+    rgba(66, 133, 244, 0.15) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  border-color: rgba(66, 133, 244, 0.3);
+}
+
+/* Facebook Button Specific */
+.sso-facebook:hover {
+  background: linear-gradient(135deg,
+    rgba(24, 119, 242, 0.15) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  border-color: rgba(24, 119, 242, 0.3);
+}
+
+/* Loading State for SSO Buttons */
+.sso-btn.loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.sso-btn.loading .sso-icon {
+  animation: ssoSpin 1s linear infinite;
+}
+
+@keyframes ssoSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* SSO Success/Error Feedback */
+.sso-btn.success {
+  background: rgba(52, 168, 83, 0.2);
+  border-color: rgba(52, 168, 83, 0.5);
+}
+
+.sso-btn.error {
+  background: rgba(234, 67, 53, 0.2);
+  border-color: rgba(234, 67, 53, 0.5);
+  animation: ssoShake 0.5s ease;
+}
+
+@keyframes ssoShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+/* Responsive Design */
+@media (min-width: 640px) {
+  .sso-buttons,
+  .sso-buttons-top {
+    flex-direction: row;
+  }
+
+  .sso-btn {
+    flex: 1;
+  }
+
+  .sso-text {
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .sso-btn {
+    padding: 1rem 1.25rem;
+  }
+
+  .divider-text {
+    font-size: 0.8125rem;
+  }
+}
+
+/* Dark Mode Adjustments */
+@media (prefers-color-scheme: dark) {
+  .divider-line {
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.15) 50%,
+      transparent 100%
+    );
+  }
+
+  .sso-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .sso-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
+/* Accessibility */
+.sso-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .sso-btn {
+    border-width: 2px;
+  }
+
+  .divider-line {
+    height: 2px;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .sso-btn,
+  .sso-btn::before,
+  .sso-icon {
+    transition: none;
+    animation: none;
+  }
+
+  .sso-btn:hover {
+    transform: none;
+  }
+}

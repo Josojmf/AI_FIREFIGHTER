@@ -29,10 +29,9 @@ import io
 import base64
 
 from bson import ObjectId
-
 import secrets
 import string
-from datetime import timedelta
+import hashlib
 
 from services.email_service import send_token_email
 
@@ -56,7 +55,40 @@ JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
 
 # --- App ---
 app = Flask(__name__)
-CORS(app)
+
+# Configurar CORS para permitir requests desde el frontend
+# Build CORS origins dynamically from environment
+cors_origins = [
+    # Desarrollo local
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+# Add production origins from environment variable
+production_url = os.getenv("PRODUCTION_URL")  # e.g., "http://167.71.63.108"
+if production_url:
+    cors_origins.extend([
+        f"{production_url}:8000",
+        f"{production_url}:8080",  # BackOffice
+        f"{production_url}:3000",
+        production_url
+    ])
+
+# Add ngrok URL from environment variable
+ngrok_url = os.getenv("NGROK_URL")  # e.g., "https://your-domain.ngrok-free.dev"
+if ngrok_url:
+    cors_origins.append(ngrok_url)
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": cors_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
 # --- DB ---
 try:
@@ -66,6 +98,7 @@ try:
     db = client[DB_NAME]
     users = db["users"]
     resets = db["password_resets"]
+    admin_users = db["Adm_Users"]  # ← AÑADIR ESTA LÍNEA
     
     # Índices (se crean al arrancar)
     users.create_index([("username", ASCENDING)], unique=True)
@@ -241,8 +274,19 @@ def normalize_datetime(dt):
 
 # --- MFA Functions ---
 def generate_mfa_secret():
-    """Generar secreto MFA"""
-    return pyotp.random_base32()
+    """Generar secreto MFA VÁLIDO (solo caracteres base32)"""
+    # Base32 válido: A-Z, 2-7 (sin 0,1,8,9)
+    import secrets
+    import string
+    
+    # Caracteres válidos para base32
+    base32_chars = string.ascii_uppercase + "234567"
+    
+    # Generar 32 caracteres aleatorios válidos
+    secret = ''.join(secrets.choice(base32_chars) for _ in range(32))
+    
+    print(f"🔑 SECRETO GENERADO (válido): {secret}")
+    return secret
 
 def generate_qr_code(username, secret):
     """Generar código QR para MFA"""
@@ -478,7 +522,9 @@ def api_login():
 
         # Buscar usuario por username o email
         q = {"$or": [{"username": username.lower()}, {"email": username.lower()}]}
-        user_doc = users.find_one(q)
+        user_doc = admin_users.find_one(q)
+        if not user_doc:
+            user_doc = users.find_one(q)
 
         if not user_doc or not verify_password(password, user_doc["password_hash"]):
             return jsonify({"ok": False, "detail": "Credenciales incorrectas."}), 401
@@ -546,7 +592,330 @@ def api_login():
         import traceback
         traceback.print_exc()
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
- 
+
+
+# 🔗 SSO ENDPOINTS
+@app.route('/api/auth/sso-login', methods=['POST'])
+def sso_login():
+    """
+    Endpoint para login/registro via SSO (Google, Facebook, etc)
+    Integra con tu sistema MongoDB/JWT existente
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "Datos requeridos"
+            }), 400
+
+        # Validar datos SSO
+        required_fields = ['provider', 'provider_id', 'email', 'name']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({
+                    "success": False,
+                    "message": f"Campo requerido: {field}"
+                }), 400
+
+        provider = data['provider']
+        provider_id = data['provider_id']
+        email = data['email'].lower()
+        name = data['name']
+        photo = data.get('photo', '')
+        verified = data.get('verified', False)
+
+        print(f"🔥 Login SSO: {provider} - {email}")
+
+        # 🔍 Buscar usuario existente por email
+        existing_user = users.find_one({"email": email})
+
+        if existing_user:
+            print(f"✅ Usuario existente encontrado: {email}")
+
+            # Actualizar info del proveedor SSO si no existe
+            sso_providers = existing_user.get('sso_providers', {})
+            if provider not in sso_providers:
+                print(f"🔄 Añadiendo proveedor {provider} al usuario existente")
+                sso_providers[provider] = {
+                    'provider_id': provider_id,
+                    'connected_at': datetime.utcnow(),
+                    'photo_url': photo
+                }
+
+                # Actualizar usuario
+                users.update_one(
+                    {"_id": existing_user["_id"]},
+                    {
+                        "$set": {
+                            "sso_providers": sso_providers,
+                            "last_login": datetime.utcnow(),
+                            f"profile.photo_url": photo if photo else existing_user.get('profile', {}).get('photo_url'),
+                            "status": "active"
+                        }
+                    }
+                )
+
+            user_data = existing_user
+
+        else:
+            print(f"🆕 Creando nuevo usuario SSO: {email}")
+
+            # Crear nuevo usuario con datos SSO
+            new_user = {
+                "username": f"{provider}_{provider_id[:8]}",  # Username único
+                "email": email,
+                "password_hash": None,  # Sin contraseña para SSO
+                "role": "user",
+                "status": "active",
+                "created_at": datetime.utcnow(),
+                "last_login": datetime.utcnow(),
+                "email_verified": verified,
+                "mfa_enabled": False,
+                "mfa_secret": None,
+                "sso_providers": {
+                    provider: {
+                        'provider_id': provider_id,
+                        'connected_at': datetime.utcnow(),
+                        'photo_url': photo
+                    }
+                },
+                "profile": {
+                    "full_name": name,
+                    "photo_url": photo,
+                    "auth_method": f"sso_{provider}"
+                },
+                # 🔥 Estructura Leitner vacía para nuevos usuarios
+                "leitner_data": {
+                    "boxes": {
+                        "1": [], "2": [], "3": [], "4": [], "5": []
+                    },
+                    "total_cards": 0,
+                    "last_study": None,
+                    "streak": 0,
+                    "study_time_minutes": 0
+                },
+                "settings": {
+                    "study_reminders": True,
+                    "daily_goal": 20,
+                    "theme": "light"
+                }
+            }
+
+            try:
+                result = users.insert_one(new_user)
+                new_user["_id"] = result.inserted_id
+                user_data = new_user
+                print("✅ Usuario SSO creado exitosamente")
+
+            except DuplicateKeyError as e:
+                if "username" in str(e):
+                    # Username duplicado, generar uno nuevo
+                    timestamp = int(datetime.utcnow().timestamp())
+                    new_user["username"] = f"{provider}_{timestamp}"
+                    result = users.insert_one(new_user)
+                    new_user["_id"] = result.inserted_id
+                    user_data = new_user
+                else:
+                    return jsonify({
+                        "success": False,
+                        "message": "Email ya registrado con otro método"
+                    }), 400
+
+        # 🎫 Generar JWT (usar tu función existente)
+        token_payload = {
+            "user_id": str(user_data["_id"]),
+            "username": user_data["username"],
+            "email": user_data["email"],
+            "role": user_data["role"],
+            "auth_method": f"sso_{provider}",
+            "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRES_HOURS),
+            "iat": datetime.utcnow()
+        }
+
+        token = jwt.encode(token_payload, JWT_SECRET, algorithm="HS256")
+
+        # 📊 Preparar respuesta del usuario (sin datos sensibles)
+        user_response = {
+            "id": str(user_data["_id"]),
+            "username": user_data["username"],
+            "email": user_data["email"],
+            "role": user_data["role"],
+            "profile": user_data.get("profile", {}),
+            "auth_method": f"sso_{provider}",
+            "sso_providers": list(user_data.get("sso_providers", {}).keys()),
+            "email_verified": user_data.get("email_verified", False),
+            "leitner_stats": {
+                "total_cards": user_data.get("leitner_data", {}).get("total_cards", 0),
+                "streak": user_data.get("leitner_data", {}).get("streak", 0)
+            }
+        }
+
+        print(f"🎉 Login SSO exitoso: {email} via {provider}")
+
+        return jsonify({
+            "success": True,
+            "message": f"Autenticado correctamente con {provider.title()}",
+            "user": user_response,
+            "token": token,
+            "is_new_user": existing_user is None
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error en SSO login: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": "Error interno del servidor"
+        }), 500
+
+
+@app.route('/api/auth/link-sso', methods=['POST'])
+def link_sso_account():
+    """
+    Vincular cuenta SSO a usuario existente (para usuarios que ya tienen cuenta normal)
+    """
+    try:
+        # Verificar autenticación actual
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({"success": False, "message": "Token requerido"}), 401
+
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            current_user_id = payload['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"success": False, "message": "Token expirado"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"success": False, "message": "Token inválido"}), 401
+
+        data = request.get_json()
+        provider = data.get('provider')
+        provider_id = data.get('provider_id')
+        photo_url = data.get('photo', '')
+
+        if not provider or not provider_id:
+            return jsonify({
+                "success": False,
+                "message": "Datos del proveedor requeridos"
+            }), 400
+
+        # Verificar que el proveedor no esté ya vinculado a otra cuenta
+        existing_link = users.find_one({
+            f"sso_providers.{provider}.provider_id": provider_id,
+            "_id": {"$ne": ObjectId(current_user_id)}
+        })
+
+        if existing_link:
+            return jsonify({
+                "success": False,
+                "message": f"Esta cuenta de {provider} ya está vinculada a otro usuario"
+            }), 400
+
+        # Vincular proveedor al usuario actual
+        result = users.update_one(
+            {"_id": ObjectId(current_user_id)},
+            {
+                "$set": {
+                    f"sso_providers.{provider}": {
+                        "provider_id": provider_id,
+                        "connected_at": datetime.utcnow(),
+                        "photo_url": photo_url
+                    }
+                }
+            }
+        )
+
+        if result.modified_count > 0:
+            return jsonify({
+                "success": True,
+                "message": f"Cuenta de {provider.title()} vinculada exitosamente"
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Error vinculando cuenta"
+            }), 500
+
+    except Exception as e:
+        print(f"❌ Error vinculando SSO: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": "Error interno del servidor"
+        }), 500
+
+
+@app.route('/api/auth/unlink-sso', methods=['POST'])
+def unlink_sso_account():
+    """
+    Desvincular cuenta SSO (solo si el usuario tiene contraseña o múltiples SSO)
+    """
+    try:
+        # Verificar autenticación
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({"success": False, "message": "Token requerido"}), 401
+
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            current_user_id = payload['user_id']
+        except:
+            return jsonify({"success": False, "message": "Token inválido"}), 401
+
+        data = request.get_json()
+        provider = data.get('provider')
+
+        if not provider:
+            return jsonify({
+                "success": False,
+                "message": "Proveedor requerido"
+            }), 400
+
+        # Obtener usuario actual
+        user = users.find_one({"_id": ObjectId(current_user_id)})
+        if not user:
+            return jsonify({"success": False, "message": "Usuario no encontrado"}), 404
+
+        sso_providers = user.get('sso_providers', {})
+        has_password = user.get('password_hash') is not None
+
+        # Verificar que no sea el único método de autenticación
+        if len(sso_providers) == 1 and not has_password and provider in sso_providers:
+            return jsonify({
+                "success": False,
+                "message": "No puedes desvincular tu único método de autenticación. Configura una contraseña primero."
+            }), 400
+
+        # Desvincular proveedor
+        result = users.update_one(
+            {"_id": ObjectId(current_user_id)},
+            {"$unset": {f"sso_providers.{provider}": ""}}
+        )
+
+        if result.modified_count > 0:
+            return jsonify({
+                "success": True,
+                "message": f"Cuenta de {provider.title()} desvinculada"
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Proveedor no encontrado"
+            }), 404
+
+    except Exception as e:
+        print(f"❌ Error desvinculando SSO: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": "Error interno del servidor"
+        }), 500
+
+
 @app.post("/api/validate-token")
 def api_validate_token():
     """Endpoint público para validar tokens antes del registro"""
@@ -1043,20 +1412,17 @@ def api_get_user_progress(user_id):
 # --- MFA Endpoints ---
 @app.post("/api/users/<user_id>/mfa/generate")
 def api_generate_mfa_qr(user_id):
-    """Generar QR code para MFA de un usuario - CORREGIDO"""
+    """Generar QR code para MFA - VERSIÓN CORREGIDA DEFINITIVA"""
     try:
         # Verificar autenticación
         authorized, auth_result = require_auth()
         if not authorized:
             return auth_result
         
-        # Buscar usuario por ID (manejar ObjectId y string)
-        user_doc = None
-        try:
-            user_doc = users.find_one({"_id": user_id})
-        except:
-            pass
+        print(f"🔐 GENERANDO NUEVO MFA - Usuario: {user_id}")
         
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
         if not user_doc:
             try:
                 user_doc = users.find_one({"_id": ObjectId(user_id)})
@@ -1066,40 +1432,74 @@ def api_generate_mfa_qr(user_id):
         if not user_doc:
             return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
         
-        # Generar nuevo secreto MFA (siempre generar nuevo para setup)
-        mfa_secret = generate_mfa_secret()
+        print(f"✅ Usuario encontrado: {user_doc['username']}")
+        
+        # 🔥 FORZAR NUEVO SECRETO VÁLIDO
+        mfa_secret = pyotp.random_base32()
+        print(f"🔑🔑🔑 NUEVO SECRETO VÁLIDO: {mfa_secret}")
+        
+        # VERIFICAR que el secreto es válido
+        try:
+            test_totp = pyotp.TOTP(mfa_secret)
+            test_code = test_totp.now()
+            print(f"✅ Secreto verificado - Código de prueba: {test_code}")
+        except Exception as e:
+            print(f"❌❌❌ ERROR: Secreto inválido: {e}")
+            return jsonify({"ok": False, "detail": "Error generando secreto MFA"}), 500
         
         # Generar QR code
         qr_code_data = generate_qr_code(user_doc["username"], mfa_secret)
+        print(f"📷 QR generado correctamente")
         
-        # Actualizar usuario con el nuevo secreto (pero no habilitar aún)
-        users.update_one(
+        # 🔥 ACTUALIZAR EN BASE DE DATOS
+        result = users.update_one(
             {"_id": user_doc["_id"]},
             {"$set": {
                 "mfa_secret": mfa_secret,
-                "mfa_enabled": False,  # No habilitar hasta verificación
+                "mfa_enabled": False,
                 "updated_at": datetime.now(timezone.utc)
             }}
         )
         
-        # Generar códigos de respaldo
-        backup_codes = [f"BACKUP-{i+1:02d}-{token_urlsafe(4).upper()}" for i in range(5)]
+        print(f"📝 BD actualizada: {result.modified_count} documentos")
+        
+        # 🔥 VERIFICACIÓN CRÍTICA: Leer de nuevo para confirmar
+        user_verified = users.find_one({"_id": user_doc["_id"]})
+        stored_secret = user_verified.get("mfa_secret") if user_verified else None
+        
+        if stored_secret != mfa_secret:
+            print(f"❌❌❌ ERROR CRÍTICO: Secreto no se guardó correctamente")
+            print(f"   Esperado: {mfa_secret}")
+            print(f"   Obtenido: {stored_secret}")
+            return jsonify({"ok": False, "detail": "Error guardando secreto MFA"}), 500
+        
+        print(f"✅✅✅ SECRETO GUARDADO CORRECTAMENTE: {stored_secret}")
+        
+        # Generar manual entry key
+        manual_entry_key = f"{mfa_secret[:4]} {mfa_secret[4:8]} {mfa_secret[8:12]} {mfa_secret[12:16]}"
+        
+        # Código actual para referencia
+        current_code = pyotp.TOTP(mfa_secret).now()
         
         return jsonify({
             "ok": True,
             "qr_code": qr_code_data,
-            "secret": mfa_secret,
-            "backup_codes": backup_codes,
+            "secret": mfa_secret,  # Enviar el secreto completo
+            "manual_entry_key": manual_entry_key,
+            "current_code_test": current_code,
             "detail": "Escanea el QR con tu app de autenticación"
         })
         
     except Exception as e:
-        app.logger.error(f"Error generando MFA QR para usuario {user_id}: {e}")
+        print(f"❌ Error generando MFA: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
-
+    
+    
 @app.post("/api/users/<user_id>/mfa/verify-setup")
 def api_verify_mfa_setup(user_id):
-    """Verificar configuración MFA con token - ENDPOINT FALTANTE"""
+    """Verificar configuración MFA - VERSIÓN CORREGIDA DEFINITIVA"""
     try:
         # Verificar autenticación
         authorized, auth_result = require_auth()
@@ -1107,16 +1507,17 @@ def api_verify_mfa_setup(user_id):
             return auth_result
         
         data = request.json
-        if not data or 'token' not in data:
-            return jsonify({"ok": False, "detail": "Token MFA requerido"}), 400
+        if not data:
+            return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
         
-        # Buscar usuario por ID (manejar ObjectId y string)
-        user_doc = None
-        try:
-            user_doc = users.find_one({"_id": user_id})
-        except:
-            pass
+        mfa_code = data.get('token') or data.get('code')
+        if not mfa_code:
+            return jsonify({"ok": False, "detail": "Código MFA requerido"}), 400
         
+        print(f"🔐 VERIFICANDO MFA - Usuario: {user_id}, Código: {mfa_code}")
+        
+        # Buscar usuario
+        user_doc = users.find_one({"_id": user_id})
         if not user_doc:
             try:
                 user_doc = users.find_one({"_id": ObjectId(user_id)})
@@ -1126,17 +1527,35 @@ def api_verify_mfa_setup(user_id):
         if not user_doc:
             return jsonify({"ok": False, "detail": "Usuario no encontrado"}), 404
         
-        # Verificar que tiene secreto MFA configurado
+        # Verificar secreto MFA
         mfa_secret = user_doc.get("mfa_secret")
+        print(f"🔑 SECRETO EN BD: {mfa_secret}")
+        
         if not mfa_secret:
             return jsonify({"ok": False, "detail": "MFA no configurado. Genera un QR primero."}), 400
         
-        # Verificar token MFA
-        if not verify_mfa_token(mfa_secret, data['token']):
+        # 🔥 VERIFICACIÓN COMPLETA
+        try:
+            totp = pyotp.TOTP(mfa_secret)
+            current_code = totp.now()
+            print(f"🕒 CÓDIGO ACTUAL ESPERADO: {current_code}")
+            print(f"🔍 CÓDIGO INGRESADO: {mfa_code}")
+            
+            # Verificar con ventana amplia
+            is_valid = totp.verify(mfa_code, valid_window=2)
+            print(f"📱 RESULTADO: {'✅ VÁLIDO' if is_valid else '❌ INVÁLIDO'}")
+            
+        except Exception as e:
+            print(f"❌ Error en verificación MFA: {e}")
+            is_valid = False
+        
+        if not is_valid:
             return jsonify({"ok": False, "detail": "Token MFA inválido"}), 400
         
-        # Si la verificación es exitosa, habilitar MFA
-        users.update_one(
+        # Habilitar MFA
+        print(f"✅ VERIFICACIÓN EXITOSA - Habilitando MFA")
+        
+        result = users.update_one(
             {"_id": user_doc["_id"]},
             {"$set": {
                 "mfa_enabled": True,
@@ -1144,14 +1563,18 @@ def api_verify_mfa_setup(user_id):
             }}
         )
         
+        print(f"📝 MFA HABILITADO: {result.modified_count} documentos")
+        
         return jsonify({
             "ok": True,
             "detail": "MFA configurado y habilitado correctamente"
         })
         
     except Exception as e:
-        app.logger.error(f"Error verificando setup MFA para usuario {user_id}: {e}")
-        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500
+        print(f"❌ Error verificando setup MFA: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "detail": "Error interno del servidor"}), 500  
 
 @app.post("/api/users/<user_id>/mfa/enable")
 def api_enable_user_mfa(user_id):
@@ -1163,19 +1586,24 @@ def api_enable_user_mfa(user_id):
             return auth_result
         
         data = request.json
-        if not data or 'token' not in data:
-            return jsonify({"ok": False, "detail": "Token MFA requerido"}), 400
+        if not data:
+            return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
+        
+        # 🔥 FIX: Aceptar tanto 'token' como 'code' para compatibilidad
+        mfa_code = data.get('token') or data.get('code')
+        if not mfa_code:
+            return jsonify({"ok": False, "detail": "Código MFA requerido"}), 400
         
         # Buscar usuario
         user_doc = None
         try:
-            user_doc = users.find_one({"_id": user_id})
+            user_doc = admin_users.find_one({"_id": user_id})
         except:
             pass
         
         if not user_doc:
             try:
-                user_doc = users.find_one({"_id": ObjectId(user_id)})
+                user_doc = admin_users.find_one({"_id": ObjectId(user_id)})
             except:
                 pass
         
@@ -1188,11 +1616,11 @@ def api_enable_user_mfa(user_id):
             return jsonify({"ok": False, "detail": "Primero debes generar un código QR"}), 400
         
         # Verificar token MFA
-        if not verify_mfa_token(mfa_secret, data['token']):
+        if not verify_mfa_token(mfa_secret, mfa_code):
             return jsonify({"ok": False, "detail": "Token MFA inválido"}), 400
         
         # Habilitar MFA
-        users.update_one(
+        admin_users.update_one(
             {"_id": user_doc["_id"]},
             {"$set": {
                 "mfa_enabled": True,
@@ -1263,8 +1691,13 @@ def api_verify_user_mfa(user_id):
     """Verificar token MFA de un usuario - CORREGIDO"""
     try:
         data = request.json
-        if not data or 'token' not in data:
-            return jsonify({"ok": False, "detail": "Token MFA requerido"}), 400
+        if not data:
+            return jsonify({"ok": False, "detail": "Datos requeridos"}), 400
+        
+        # 🔥 FIX: Aceptar tanto 'token' como 'code' para compatibilidad
+        mfa_code = data.get('token') or data.get('code')
+        if not mfa_code:
+            return jsonify({"ok": False, "detail": "Código MFA requerido"}), 400
         
         # Buscar usuario
         user_doc = None
@@ -1287,7 +1720,7 @@ def api_verify_user_mfa(user_id):
         if not mfa_secret or not user_doc.get("mfa_enabled"):
             return jsonify({"ok": False, "detail": "MFA no habilitado"}), 400
         
-        if verify_mfa_token(mfa_secret, data['token']):
+        if verify_mfa_token(mfa_secret, mfa_code):
             return jsonify({
                 "ok": True,
                 "detail": "Token MFA válido"
@@ -1449,7 +1882,7 @@ def get_system_logs_simulation(lines=20):
         "Performance optimization applied"
     ]
     
-    endpoints = ["/api/users", "/api/login", "/api/dashboard", "/api/health", "/api/memory-cards"]
+    endpoints = ["/api/users", "/api/login", "/api/register", "/api/health", "/api/memory-cards"]
     
     logs = []
     base_time = datetime.now(timezone.utc)

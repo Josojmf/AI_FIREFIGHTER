@@ -1,7 +1,7 @@
 {% extends "backoffice_layout.html" %}
 
-{% block title %}Configuración MFA - Onfire AI BackOffice{% endblock %}
-{% block page_title %}Configuración MFA{% endblock %}
+{% block title %}ConfiguraciÃ³n MFA - FirefighterAI BackOffice{% endblock %}
+{% block page_title %}ConfiguraciÃ³n MFA{% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -486,7 +486,7 @@
                     <div class="mfa-code-section">
                         <h4 style="color: #f8fafc; margin-bottom: 16px;">
                             <i class="fas fa-check-circle" style="color: #10b981; margin-right: 8px;"></i>
-                            Verificar Código
+                            Verificar CÃ³digo
                         </h4>
                         <p style="color: #94a3b8; margin-bottom: 20px;">
                             Ingresa el código de 6 dígitos que aparece en tu aplicación authenticator:
@@ -539,7 +539,7 @@
                         <input type="password" 
                                name="password" 
                                class="password-input" 
-                               placeholder="Ingresa tu contraseña actual"
+                               placeholder="Ingresa tu contraseÃ±a actual"
                                required>
                         <br>
                         <button type="submit" class="btn btn-danger">
@@ -554,7 +554,7 @@
         <div class="mfa-section" style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #334155;">
             <p style="color: #94a3b8; margin-bottom: 16px;">
                 <i class="fas fa-question-circle" style="margin-right: 8px;"></i>
-                ¿Necesitas ayuda?
+                Â¿Necesitas ayuda?
             </p>
             <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
                 <a href="{{ url_for('dashboard.index') }}" class="btn" style="background: #475569; color: #f8fafc;">
@@ -576,7 +576,7 @@ const HAS_QR_CODE = (function() {
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔐 Setup MFA página cargada');
+    console.log('ðŸ” Setup MFA pÃ¡gina cargada');
     
     initializeMfaCodeInput();
     
@@ -715,10 +715,10 @@ if (verifyForm) {
         const code = hiddenInput ? hiddenInput.value : '';
         if (code.length !== 6) {
             e.preventDefault();
-            alert('Por favor ingresa un código de 6 dígitos');
+            alert('Por favor ingresa un cÃ³digo de 6 dÃ­gitos');
             return false;
         }
-        console.log('✅ Enviando verificación MFA');
+        console.log('âœ… Enviando verificaciÃ³n MFA');
     });
 }
 
