@@ -3,7 +3,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 
 # Conectar a MongoDB
-client = MongoClient("mongodb+srv://joso:XyGItdDKpWkfJfjT@cluster0.yzzh9ig.mongodb.net/")
+client = MongoClient("mongodb+srv://joso:pass@cluster0.yzzh9ig.mongodb.net/")
 db = client["FIREFIGHTER"]
 users = db["users"]
 
