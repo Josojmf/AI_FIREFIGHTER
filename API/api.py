@@ -249,8 +249,14 @@ def require_auth(required_role=None):
         detail = payload if isinstance(payload, str) else "Token inválido"
         return False, (jsonify({"ok": False, "detail": detail}), 401)
 
-    # Verificar que el usuario aún existe y está activo
+    # Buscar usuario por user_id primero, luego por username como fallback
     user_doc = users.find_one({"_id": payload.get("user_id")})
+    if not user_doc:
+        # Fallback: buscar por username si no se encuentra por _id
+        user_doc = users.find_one({"username": payload.get("username")})
+        if user_doc:
+            print(f"🔄 Usuario encontrado por username fallback: {payload.get('username')}")
+    
     if not user_doc:
         return False, (jsonify({"ok": False, "detail": "Usuario no encontrado"}), 401)
     
@@ -1222,7 +1228,7 @@ def api_get_users():
         users_list = []
         for user in users.find({}):
             users_list.append({
-                "id": user["_id"],
+                "id": str(user["_id"]),
                 "username": user["username"],
                 "email": user["email"],
                 "role": user.get("role", "user"),
