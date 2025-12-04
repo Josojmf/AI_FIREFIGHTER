@@ -72,6 +72,7 @@ if production_url:
     cors_origins.extend([
         f"{production_url}:8000",
         f"{production_url}:8080",  # BackOffice
+        f"{production_url}:3001",  # BackOffice production port
         f"{production_url}:3000",
         production_url
     ])
