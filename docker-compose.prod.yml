@@ -30,7 +30,7 @@ services:
       retries: 3
       start_period: 60s
 
-  # BACKEND API
+  # 🔥 BACKEND API - AÑADIDA PRODUCTION_URL PARA CORS
   backend:
     image: ghcr.io/josojmf/ai-firefighter-backend:latest
     container_name: firefighter_backend
@@ -43,6 +43,8 @@ services:
       - ENVIRONMENT=production
       - DOCKER_ENV=true
       - DEBUG=false
+      # ✅ AÑADIDO: PRODUCTION_URL para configuración CORS
+      - PRODUCTION_URL=http://167.71.63.108
       # URLs para comunicación interna
       - FRONTEND_URL=http://167.71.63.108:8000
       - BACKOFFICE_URL=http://167.71.63.108:3001
@@ -56,7 +58,7 @@ services:
       retries: 3
       start_period: 60s
 
-  # 🔥 BACKOFFICE - CORREGIDO: URLs INTERNAS DOCKER
+  # 🔥 BACKOFFICE - CONFIGURACIÓN HÍBRIDA: HOSTNAME + IP BACKUP
   backoffice:
     image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
     container_name: firefighter_backoffice
@@ -65,9 +67,11 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # ✅ URLs INTERNAS DOCKER - comunicación entre contenedores (CRÍTICO)
+      # ✅ URLs INTERNAS DOCKER - comunicación entre contenedores
       - API_BASE_URL=http://backend:5000
       - BACKOFFICE_API_BASE_URL=http://backend:5000
+      # ✅ FALLBACK: IP directa para casos de DNS issues
+      - API_FALLBACK_URL=http://172.20.0.2:5000
       # Variables específicas del backoffice
       - ENVIRONMENT=production
       - DOCKER_ENV=true
@@ -88,7 +92,7 @@ services:
       retries: 3
       start_period: 60s
 
-# 🌐 CONFIGURACIÓN DE RED
+# 🌐 CONFIGURACIÓN DE RED - OPTIMIZADA PARA DNS
 networks:
   firefighter_network:
     driver: bridge
@@ -96,6 +100,11 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+      driver: default
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.driver.mtu: "1500"
 
 # 💾 CONFIGURACIÓN DE VOLÚMENES
 volumes:
@@ -113,3 +122,4 @@ volumes:
       type: none
       o: bind
       device: /opt/firefighter-logs
+
