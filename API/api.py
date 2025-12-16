@@ -298,6 +298,16 @@ async def health_basic():
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
         }
+        
+from routes.auth import LoginRequest, login as auth_login
+
+@app.post("/api/login")
+async def api_login_compat(request: LoginRequest):
+    """
+    Endpoint de compatibilidad para /api/login
+    Reutiliza la lógica del router de auth.
+    """
+    return await auth_login(request)
 
 # ============================================================================
 # MAIN
