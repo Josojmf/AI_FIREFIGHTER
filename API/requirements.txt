@@ -7,6 +7,7 @@ python-multipart==0.0.18  # Para form data y file uploads
 
 # Database
 pymongo==4.5.0
+motor==3.4.0
 
 # Security
 bcrypt==4.0.1
@@ -43,4 +44,5 @@ gevent==23.9.1
 prometheus-fastapi-instrumentator==7.0.0  # Opcional: métricas Prometheus
 
 uvloop==0.17.0  # Opcional: event loop rápido para uvicorn
-httptools==0.6.3  # Opcional: parser HTTP rápido para uvicorn (compatible con uvicorn 0.32.1
+httptools==0.6.3  # Opcional: parser HTTP rápido para uvicorn (compatible con uvicorn 0.32.1)
+email-validator==2.2.0
