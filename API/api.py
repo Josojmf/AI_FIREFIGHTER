@@ -13,7 +13,7 @@ import bcrypt
 import jwt
 from typing import Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
@@ -22,9 +22,6 @@ import uvicorn
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from dotenv import load_dotenv
-
-# Cache
-from simple_memory_cache import get_cache_stats, clear_cache
 
 load_dotenv()
 
@@ -169,6 +166,10 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# ============================================================================
+# MIDDLEWARE
+# ============================================================================
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -178,87 +179,122 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware de debug
+@app.middleware("http")
+async def debug_middleware(request: Request, call_next):
+    print(f"🔍 DEBUG: {request.method} {request.url.path}")
+    
+    # Solo mostrar headers en debug
+    if os.getenv("DEBUG", "false").lower() == "true":
+        print(f"🔍 DEBUG Headers: {dict(request.headers)}")
+        if "referer" in request.headers:
+            print(f"🔍 DEBUG Referer: {request.headers['referer']}")
+    
+    response = await call_next(request)
+    
+    print(f"🔍 DEBUG Response Status: {response.status_code}")
+    if response.status_code in [301, 302, 303, 307, 308]:
+        print(f"🔍 DEBUG Redirect to: {response.headers.get('location')}")
+    
+    return response
+
 # ============================================================================
 # IMPORTAR Y REGISTRAR ROUTERS
 # ============================================================================
 
 routers_loaded = []
 
+print("=" * 60)
+print("📦 CARGANDO ROUTERS...")
+print("=" * 60)
+
 # 1. AUTH Router
 try:
+    print("🔍 Intentando cargar router Auth...")
     from routes.auth import router as auth_router
     app.include_router(auth_router, prefix="/api", tags=["Authentication"])
-    routers_loaded.append("✅ Auth (5 endpoints)")
+    routers_loaded.append("✅ Auth")
     print("✅ Router Auth registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Auth: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 2. USERS Router
 try:
+    print("🔍 Intentando cargar router Users...")
     from routes.users import router as users_router
     app.include_router(users_router, prefix="/api", tags=["Users"])
-    routers_loaded.append("✅ Users (6 endpoints)")
+    routers_loaded.append("✅ Users")
     print("✅ Router Users registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Users: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 3. MEMORY CARDS Router
 try:
+    print("🔍 Intentando cargar router Memory Cards...")
     from routes.memory_cards import router as cards_router
     app.include_router(cards_router, prefix="/api", tags=["Memory Cards"])
-    routers_loaded.append("✅ Memory Cards (9 endpoints)")
+    routers_loaded.append("✅ Memory Cards")
     print("✅ Router Memory Cards registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Memory Cards: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 4. ACCESS TOKENS Router
 try:
+    print("🔍 Intentando cargar router Access Tokens...")
     from routes.access_tokens import router as tokens_router
     app.include_router(tokens_router, prefix="/api", tags=["Access Tokens"])
-    routers_loaded.append("✅ Access Tokens (8 endpoints)")
+    routers_loaded.append("✅ Access Tokens")
     print("✅ Router Access Tokens registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Access Tokens: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 5. DOCKER Router
 try:
+    print("🔍 Intentando cargar router Docker...")
     from routes.docker import router as docker_router
     app.include_router(docker_router, prefix="/api", tags=["Docker"])
-    routers_loaded.append("✅ Docker (6 endpoints)")
+    routers_loaded.append("✅ Docker")
     print("✅ Router Docker registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Docker: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 6. ADMIN Router
 try:
+    print("🔍 Intentando cargar router Admin...")
     from routes.admin import router as admin_router
     app.include_router(admin_router, prefix="/api", tags=["Admin"])
-    routers_loaded.append("✅ Admin (7 endpoints)")
+    routers_loaded.append("✅ Admin")
     print("✅ Router Admin registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Admin: {e}")
+    import traceback
+    traceback.print_exc()
 
 # 7. HEALTH Router
 try:
+    print("🔍 Intentando cargar router Health...")
     from routes.health import router as health_router
     app.include_router(health_router, prefix="/api", tags=["Health"])
-    routers_loaded.append("✅ Health (5 endpoints)")
+    routers_loaded.append("✅ Health")
     print("✅ Router Health registrado")
 except Exception as e:
     print(f"❌ No se pudo cargar router Health: {e}")
+    import traceback
+    traceback.print_exc()
 
 print("=" * 60)
 print(f"📦 Routers cargados: {len(routers_loaded)}/7")
 print("=" * 60)
-
-# 8. RUNTIME CONFIG Router
-try:
-    from routes.runtime_config import router as runtime_config_router
-    app.include_router(runtime_config_router, tags=["Runtime Config"])
-    print("✅ Router Runtime Config registrado")
-except Exception as e:
-    print(f"❌ No se pudo cargar Runtime Config: {e}")
-
 
 # ============================================================================
 # ENDPOINTS GENERALES
@@ -298,16 +334,77 @@ async def health_basic():
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
         }
-        
-from routes.auth import LoginRequest, login as auth_login
+
+# ============================================================================
+# ENDPOINTS DE COMPATIBILIDAD
+# ============================================================================
 
 @app.post("/api/login")
-async def api_login_compat(request: LoginRequest):
-    """
-    Endpoint de compatibilidad para /api/login
-    Reutiliza la lógica del router de auth.
-    """
-    return await auth_login(request)
+async def api_login_compat(request: Dict[str, Any]):
+    """Endpoint de compatibilidad para /api/login"""
+    try:
+        from models.auth_models import LoginRequest
+        
+        # Validar request
+        login_request = LoginRequest(**request)
+        
+        # Buscar usuario
+        query = {"$or": [
+            {"username": login_request.username},
+            {"email": login_request.username}
+        ]}
+        
+        user_doc = await db.users.find_one(query)
+        if not user_doc:
+            user_doc = await db.admin_users.find_one(query)
+        
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+        
+        # Verificar contraseña
+        password_field = "password_hash" if "password_hash" in user_doc else "password"
+        if not verify_password(login_request.password, user_doc[password_field]):
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+        
+        # Verificar estado
+        if user_doc.get("status") != "active":
+            raise HTTPException(status_code=401, detail="Cuenta desactivada")
+        
+        # Verificar MFA
+        if user_doc.get("mfa_enabled", False) and not login_request.mfa_token:
+            raise HTTPException(status_code=401, detail="Token MFA requerido")
+        
+        # Actualizar último login
+        await db.users.update_one(
+            {"_id": user_doc["_id"]},
+            {"$set": {"last_login": datetime.utcnow()}}
+        )
+        
+        # Crear token
+        token_payload = {
+            "user_id": str(user_doc["_id"]),
+            "username": user_doc["username"],
+            "role": user_doc.get("role", "user")
+        }
+        token = make_jwt(token_payload)
+        
+        return {
+            "ok": True,
+            "access_token": token,
+            "user": {
+                "id": str(user_doc["_id"]),
+                "username": user_doc["username"],
+                "email": user_doc.get("email", ""),
+                "role": user_doc.get("role", "user"),
+                "mfa_enabled": user_doc.get("mfa_enabled", False)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error en login compat: {e}")
+        raise HTTPException(status_code=500, detail="Error interno")
 
 # ============================================================================
 # MAIN

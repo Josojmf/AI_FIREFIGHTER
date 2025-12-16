@@ -4,7 +4,7 @@ Models Package - Pydantic Models for FirefighterAI API
 """
 
 from .auth_models import (
-    RegisterRequest,
+    RegisterRequest,  # ¡¡ASEGÚRATE DE QUE ESTÁ!!
     LoginRequest,
     SSOLoginRequest,
     PasswordResetRequest,
@@ -21,13 +21,16 @@ from .user_models import (
     UserUpdate,
     UserResponse,
     UserListResponse,
+    UserStats,
 )
 
 from .card_models import (
+    MemoryCardBase,
     MemoryCardCreate,
     MemoryCardUpdate,
     MemoryCardResponse,
     MemoryCardReview,
+    MemoryCardReviewRequest,
     BulkMemoryCardCreate,
     MemoryCardStats,
 )
@@ -42,7 +45,7 @@ from .token_models import (
 
 __all__ = [
     # Auth
-    "RegisterRequest",
+    "RegisterRequest",  # ¡¡ASEGÚRATE DE QUE ESTÁ!!
     "LoginRequest",
     "SSOLoginRequest",
     "PasswordResetRequest",
@@ -57,11 +60,14 @@ __all__ = [
     "UserUpdate",
     "UserResponse",
     "UserListResponse",
+    "UserStats",
     # Cards
+    "MemoryCardBase",
     "MemoryCardCreate",
     "MemoryCardUpdate",
     "MemoryCardResponse",
     "MemoryCardReview",
+    "MemoryCardReviewRequest",
     "BulkMemoryCardCreate",
     "MemoryCardStats",
     # Tokens

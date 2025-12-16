@@ -1,18 +1,19 @@
 """
-Auth Routes - Authentication endpoints (STANDALONE)
-===================================================
-No requiere carpetas models/, utils/, dependencies/ externas
+Auth Routes - Authentication endpoints PARA PRODUCCIÓN
+=======================================================
+Versión compatible con Docker, Swarm y Backoffice
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, EmailStr
 import bcrypt
 import jwt
 import os
+
+router = APIRouter()
 
 # ============================================================================
 # CONFIGURACIÓN
@@ -22,31 +23,16 @@ JWT_SECRET = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
 JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
 
 # ============================================================================
-# PYDANTIC MODELS
+# PYDANTIC MODELS (importar desde models)
 # ============================================================================
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-    mfa_token: Optional[str] = None
-
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
-    email: EmailStr
-    name: str
-    access_token: Optional[str] = None
-
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-class PasswordResetConfirm(BaseModel):
-    token: str
-    new_password: str
-
-class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
+from models.auth_models import (
+    LoginRequest,
+    RegisterRequest,
+    PasswordResetRequest,
+    PasswordResetConfirm,
+    ChangePasswordRequest
+)
 
 # ============================================================================
 # UTILS
@@ -81,7 +67,7 @@ security = HTTPBearer()
 
 async def require_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """Dependency para requerir usuario autenticado"""
-    from api import db  # Import local para evitar circular
+    from api import db
     
     token = credentials.credentials
     payload = decode_jwt(token)
@@ -91,6 +77,9 @@ async def require_user(credentials: HTTPAuthorizationCredentials = Depends(secur
     username = payload.get("username")
     user = await db.users.find_one({"username": username})
     if not user:
+        user = await db.admin_users.find_one({"username": username})
+    
+    if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     
     return {
@@ -99,11 +88,10 @@ async def require_user(credentials: HTTPAuthorizationCredentials = Depends(secur
         "user_id": str(user["_id"])
     }
 
-# ============================================================================
-# ROUTER
-# ============================================================================
-
-router = APIRouter()
+async def require_admin(user_data: dict = Depends(require_user)) -> dict:
+    if user_data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Requiere permisos de administrador")
+    return user_data
 
 # ============================================================================
 # ENDPOINTS
@@ -111,8 +99,8 @@ router = APIRouter()
 
 @router.post("/login")
 async def login(request: LoginRequest):
-    """Login endpoint"""
-    from api import db  # Import local
+    """Login endpoint - COMPATIBLE con backoffice y Docker"""
+    from api import db
     
     try:
         username = request.username.strip()
@@ -121,42 +109,71 @@ async def login(request: LoginRequest):
         if not username or not password:
             raise HTTPException(status_code=400, detail="Usuario y contraseña requeridos")
 
-        # Buscar usuario
+        print(f"🔐 Login intento para: {username}")
+
+        # Buscar usuario en admin_users primero, luego en users
         query = {"$or": [{"username": username.lower()}, {"email": username.lower()}]}
         user_doc = await db.admin_users.find_one(query)
         if not user_doc:
             user_doc = await db.users.find_one(query)
 
-        if not user_doc or not verify_password(password, user_doc["password_hash"]):
+        if not user_doc:
+            print(f"❌ Usuario no encontrado: {username}")
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+        
+        # Verificar contraseña (soporta ambos formatos)
+        password_field = None
+        for field in ["password_hash", "password"]:
+            if field in user_doc:
+                password_field = field
+                break
+        
+        if not password_field or not verify_password(password, user_doc[password_field]):
+            print(f"❌ Contraseña incorrecta para: {username}")
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
+        # Verificar estado
         if user_doc.get("status") != "active":
             raise HTTPException(status_code=401, detail="Cuenta desactivada")
 
-        # Actualizar último login
-        await db.users.update_one(
-            {"_id": user_doc["_id"]},
-            {"$set": {"last_login": datetime.utcnow()}}
-        )
+        # Verificar MFA si está habilitado
+        if user_doc.get("mfa_enabled", False):
+            if not request.mfa_token:
+                raise HTTPException(status_code=401, detail="Token MFA requerido")
+            # Aquí implementar verificación MFA
 
-        # Crear JWT
+        # Actualizar último login
+        update_op = {"$set": {"last_login": datetime.utcnow()}}
+        if "admin_users" in str(db.admin_users) and user_doc.get("_id"):
+            await db.admin_users.update_one({"_id": user_doc["_id"]}, update_op)
+        else:
+            await db.users.update_one({"_id": user_doc["_id"]}, update_op)
+
+        # Crear JWT - VERSIÓN COMPATIBLE
         token_payload = {
             "user_id": str(user_doc["_id"]),
             "username": user_doc["username"],
-            "role": user_doc.get("role", "user")
+            "role": user_doc.get("role", "user"),
+            "type": "access_token"
         }
         
         token = make_jwt(token_payload)
 
+        print(f"✅ Login exitoso para: {username}")
+
+        # 🔥 RESPUESTA COMPATIBLE con Docker Swarm y Backoffice
         return {
             "ok": True,
             "access_token": token,
+            "token": token,  # Alias para compatibilidad
             "user": {
                 "id": str(user_doc["_id"]),
                 "username": user_doc["username"],
-                "email": user_doc["email"],
+                "email": user_doc.get("email", ""),
+                "name": user_doc.get("name", ""),
                 "role": user_doc.get("role", "user"),
-                "mfa_enabled": user_doc.get("mfa_enabled", False)
+                "mfa_enabled": user_doc.get("mfa_enabled", False),
+                "status": user_doc.get("status", "active")
             }
         }
 
@@ -164,17 +181,21 @@ async def login(request: LoginRequest):
         raise
     except Exception as e:
         print(f"❌ Error en login: {e}")
-        raise HTTPException(status_code=500, detail="Error interno")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 
 @router.post("/register")
 async def register(request: RegisterRequest):
     """Register endpoint"""
-    from api import db  # Import local
+    from api import db
     
     try:
         username = request.username.strip().lower()
         email = request.email.strip().lower()
+        
+        print(f"📝 Registro intento para: {username} ({email})")
         
         # Verificar duplicados
         existing = await db.users.find_one({
@@ -183,7 +204,7 @@ async def register(request: RegisterRequest):
         if existing:
             raise HTTPException(status_code=409, detail="Usuario o email ya existe")
         
-        # Crear usuario con sistema Leitner embebido
+        # Crear usuario
         user_doc = {
             "_id": str(uuid4()),
             "username": username,
@@ -196,22 +217,31 @@ async def register(request: RegisterRequest):
             "last_login": None,
             "email_verified": False,
             "mfa_enabled": False,
-            "leitner_system": {
-                "boxes": {"1": [], "2": [], "3": [], "4": [], "5": [], "6": []},
-                "created_at": datetime.utcnow(),
-                "last_study": None,
-                "total_cards": 0
-            }
+            "metadata": {}
         }
         
         await db.users.insert_one(user_doc)
         
+        # Crear token automáticamente
+        token_payload = {
+            "user_id": user_doc["_id"],
+            "username": username,
+            "role": "user"
+        }
+        token = make_jwt(token_payload)
+        
+        print(f"✅ Usuario registrado: {username}")
+        
         return {
             "ok": True,
+            "access_token": token,
             "detail": "Cuenta creada exitosamente",
-            "username": username,
-            "email": email,
-            "embedded_structure": True
+            "user": {
+                "id": user_doc["_id"],
+                "username": username,
+                "email": email,
+                "role": "user"
+            }
         }
         
     except HTTPException:
@@ -254,8 +284,11 @@ async def forgot_password(request: PasswordResetRequest):
         
         await db.resets.insert_one(reset_doc)
         
-        # TODO: Enviar email
-        print(f"🔑 Reset token: {reset_token}")
+        # TODO: Enviar email en producción
+        if os.getenv("ENVIRONMENT") == "production":
+            print(f"📧 Enviando email de reset a: {email}")
+        else:
+            print(f"🔑 Token de reset (DEV): {reset_token}")
         
         return {
             "ok": True,
@@ -263,7 +296,7 @@ async def forgot_password(request: PasswordResetRequest):
         }
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error en forgot-password: {e}")
         raise HTTPException(status_code=500, detail="Error interno")
 
 
@@ -304,7 +337,7 @@ async def reset_password(request: PasswordResetConfirm):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error en reset-password: {e}")
         raise HTTPException(status_code=500, detail="Error interno")
 
 
@@ -318,23 +351,36 @@ async def change_password(
     
     try:
         username = user_data["username"]
+        user_id = user_data["user_id"]
+        
+        print(f"🔐 Cambio de contraseña para: {username}")
         
         # Buscar usuario
         user = await db.users.find_one({"username": username})
         if not user:
+            user = await db.admin_users.find_one({"username": username})
+        
+        if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
         # Verificar contraseña actual
-        if not verify_password(request.old_password, user["password_hash"]):
+        password_field = "password_hash" if "password_hash" in user else "password"
+        if not verify_password(request.old_password, user[password_field]):
             raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
         
         # Actualizar contraseña
         new_hash = hash_password(request.new_password)
         
-        await db.users.update_one(
-            {"username": username},
-            {"$set": {"password_hash": new_hash}}
-        )
+        if "admin_users" in str(db.admin_users) and user.get("role") == "admin":
+            await db.admin_users.update_one(
+                {"username": username},
+                {"$set": {password_field: new_hash}}
+            )
+        else:
+            await db.users.update_one(
+                {"username": username},
+                {"$set": {password_field: new_hash}}
+            )
         
         return {
             "ok": True,
@@ -344,5 +390,50 @@ async def change_password(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error en change-password: {e}")
         raise HTTPException(status_code=500, detail="Error interno")
+
+
+@router.get("/me")
+async def get_current_user(user_data: Dict[str, Any] = Depends(require_user)):
+    """Obtener información del usuario actual"""
+    from api import db
+    
+    try:
+        username = user_data["username"]
+        
+        user = await db.users.find_one({"username": username})
+        if not user:
+            user = await db.admin_users.find_one({"username": username})
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        return {
+            "ok": True,
+            "user": {
+                "id": str(user["_id"]),
+                "username": user["username"],
+                "email": user.get("email", ""),
+                "role": user.get("role", "user"),
+                "mfa_enabled": user.get("mfa_enabled", False),
+                "status": user.get("status", "active"),
+                "created_at": user.get("created_at"),
+                "last_login": user.get("last_login")
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Error en /me: {e}")
+        raise HTTPException(status_code=500, detail="Error interno")
+
+
+@router.get("/health")
+async def auth_health():
+    """Health check para el router de auth"""
+    return {
+        "ok": True,
+        "service": "auth",
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }

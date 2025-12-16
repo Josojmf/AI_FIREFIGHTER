@@ -1,10 +1,12 @@
+version: '3.8'
+
 services:
 
   # =========================
-  # 🔥 BACKEND (API)
+  # 🔥 BACKEND (API) - CONSTRUIDO LOCALMENTE
   # =========================
   backend:
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
+    build: ./API  # ¡CONSTRUYE LOCALMENTE!
     container_name: backend-dev
     ports:
       - "5000:5000"
@@ -13,9 +15,12 @@ services:
     environment:
       FLASK_ENV: development
       REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development  # Asegura modo desarrollo
+      DEBUG: "true"  # Activa debug
     depends_on:
       redis:
         condition: service_healthy
+    command: python main.py  # ¡FORZAR python main.py!
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
       interval: 20s

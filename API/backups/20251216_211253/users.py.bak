@@ -9,11 +9,29 @@ from datetime import datetime
 from bson import ObjectId
 from bson.errors import InvalidId
 
-# IMPORTAR DEPENDENCIES CORRECTAMENTE
+router = APIRouter()
+
+# ============================================================================
+# DEPENDENCIAS - FIXED VERSION
+# ============================================================================
+
+async def require_user():
+    """Dependency para usuario autenticado"""
+    # Import the actual dependency function, don't call it!
+    from dependencies.auth import require_user as auth_require_user
+    # Return the dependency itself (FastAPI will call it)
+    return Depends(auth_require_user)
+
+async def require_admin():
+    """Dependency para admin"""
+    # Import the actual dependency function
+    from dependencies.auth import require_admin as auth_require_admin
+    # Return the dependency itself (FastAPI will call it)
+    return Depends(auth_require_admin)
+
+# Better approach: Import directly at the top
 from dependencies.auth import require_user as dep_require_user
 from dependencies.auth import require_admin as dep_require_admin
-
-router = APIRouter()
 
 # ============================================================================
 # ENDPOINTS
@@ -27,6 +45,7 @@ async def list_users(admin_data: Dict = Depends(dep_require_admin)):
         
         print(f"🔍 GET /api/users - Admin: {admin_data['username']}")
         
+        # Obtener usuarios
         cursor = db.users.find({}, {
             'password': 0,
             'password_hash': 0,
@@ -35,10 +54,12 @@ async def list_users(admin_data: Dict = Depends(dep_require_admin)):
         
         users_list = await cursor.to_list(length=1000)
         
+        # Procesar usuarios
         processed_users = []
         for user in users_list:
             user_data = serialize_doc(user)
             
+            # Asegurar campos requeridos
             user_data.setdefault('email_verified', False)
             user_data.setdefault('mfa_enabled', False)
             user_data.setdefault('has_leitner_progress', False)
@@ -47,6 +68,7 @@ async def list_users(admin_data: Dict = Depends(dep_require_admin)):
             user_data.setdefault('status', 'active')
             user_data.setdefault('role', 'user')
             
+            # Formatear fechas
             for date_field in ['created_at', 'last_login']:
                 if date_field in user_data and isinstance(user_data[date_field], datetime):
                     user_data[date_field] = user_data[date_field].isoformat()
@@ -69,6 +91,7 @@ async def get_user(user_id: str, user_data: Dict = Depends(dep_require_user)):
     try:
         from api import db, serialize_doc
         
+        # Verificar permisos
         if user_data.get('role') != 'admin' and user_data.get('user_id') != user_id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
         
@@ -78,13 +101,16 @@ async def get_user(user_id: str, user_data: Dict = Depends(dep_require_user)):
             oid = ObjectId(user_id)
             user = await db.users.find_one({"_id": oid})
         except InvalidId:
+            # Buscar por username
             user = await db.users.find_one({"username": user_id})
         
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
+        # Serializar
         result_user_data = serialize_doc(user)
         
+        # Asegurar campos
         result_user_data.setdefault('email_verified', False)
         result_user_data.setdefault('mfa_enabled', False)
         result_user_data.setdefault('has_leitner_progress', False)
@@ -112,13 +138,16 @@ async def get_current_user(user_data: Dict = Depends(dep_require_user)):
             oid = ObjectId(user_id)
             user = await db.users.find_one({"_id": oid})
         except InvalidId:
+            # Buscar por username
             user = await db.users.find_one({"username": user_data['username']})
         
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
+        # Serializar
         result_user_data = serialize_doc(user)
         
+        # Asegurar campos
         result_user_data.setdefault('email_verified', False)
         result_user_data.setdefault('mfa_enabled', False)
         result_user_data.setdefault('has_leitner_progress', False)
@@ -141,15 +170,18 @@ async def update_user(
     try:
         from api import db
         
+        # Verificar permisos
         if user_data.get('role') != 'admin' and user_data.get('user_id') != user_id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
         
         print(f"🔍 PATCH /api/users/{user_id} - Updates: {updates}")
         
+        # Campos permitidos
         allowed_fields = ['email', 'name', 'status', 'mfa_enabled']
         if user_data.get('role') == 'admin':
             allowed_fields.append('role')
         
+        # Filtrar updates
         update_dict = {}
         for field in allowed_fields:
             if field in updates and updates[field] is not None:
@@ -165,6 +197,7 @@ async def update_user(
         except InvalidId:
             raise HTTPException(status_code=400, detail="ID de usuario inválido")
         
+        # Actualizar
         result = await db.users.update_one(
             {"_id": oid},
             {"$set": update_dict}
@@ -187,6 +220,7 @@ async def delete_user(user_id: str, admin_data: Dict = Depends(dep_require_admin
     try:
         from api import db
         
+        # No permitir auto-eliminación
         if admin_data.get('user_id') == user_id:
             raise HTTPException(
                 status_code=400,
@@ -200,6 +234,7 @@ async def delete_user(user_id: str, admin_data: Dict = Depends(dep_require_admin
         except InvalidId:
             raise HTTPException(status_code=400, detail="ID de usuario inválido")
         
+        # Marcar como inactivo
         result = await db.users.update_one(
             {"_id": oid},
             {"$set": {"status": "inactive", "deleted_at": datetime.utcnow()}}
@@ -222,6 +257,7 @@ async def get_user_progress(user_id: str, user_data: Dict = Depends(dep_require_
     try:
         from api import db
         
+        # Verificar permisos
         if user_data.get('role') != 'admin' and user_data.get('user_id') != user_id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
         
@@ -236,6 +272,7 @@ async def get_user_progress(user_id: str, user_data: Dict = Depends(dep_require_
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         
+        # Obtener progreso
         leitner = user.get('leitner_system', {})
         boxes = leitner.get('boxes', {})
         
