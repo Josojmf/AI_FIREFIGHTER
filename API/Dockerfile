@@ -16,14 +16,16 @@ COPY . .
 
 EXPOSE 5000
 
+# Healthcheck sobre el endpoint de FastAPI
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:5000/ || exit 1
+    CMD curl -f http://localhost:5000/health || exit 1
 
-# ✅ CORRECTO: api:app (no app:app) + timeout 300s
-CMD ["gunicorn", "-b", "0.0.0.0:5000", \
-     "--workers", "2", \
-     "--timeout", "300", \
-     "--graceful-timeout", "300", \
-     "--keep-alive", "5", \
-     "--log-level", "info", \
-     "api:app"]
+# FastAPI con Gunicorn + UvicornWorker
+CMD gunicorn api:app \
+    -k uvicorn.workers.UvicornWorker \
+    -b 0.0.0.0:5000 \
+    --workers 2 \
+    --timeout 300 \
+    --graceful-timeout 300 \
+    --keep-alive 5 \
+    --log-level info
