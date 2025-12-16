@@ -110,3 +110,4 @@ class Config:
 
 # 🔥 Mostrar siempre configuración al arrancar
 Config.log_config()
+ 
