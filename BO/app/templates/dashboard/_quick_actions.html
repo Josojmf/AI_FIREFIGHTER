@@ -1,0 +1,44 @@
+<div class="widget full-width-widget">
+  <header class="widget-header">
+    <h3 class="widget-title">
+      <span class="widget-icon">⚡</span>
+      Acciones rápidas
+    </h3>
+  </header>
+  <div class="widget-content">
+    <div class="quick-actions">
+      <a href="{{ url_for('users.user_list') }}" class="quick-action">
+        <div class="action-icon">👥</div>
+        <div class="action-content">
+          <div class="action-title">Gestionar usuarios</div>
+          <div class="action-description">
+            Revisa, crea o edita alumnos de la plataforma en segundos.
+          </div>
+        </div>
+        <div class="action-arrow">→</div>
+      </a>
+
+      <a href="{{ url_for('memory_cards.card_list') }}" class="quick-action">
+        <div class="action-icon">🧠</div>
+        <div class="action-content">
+          <div class="action-title">Memory Cards</div>
+          <div class="action-description">
+            Administra tarjetas y contenidos para el sistema de repaso espaciado.
+          </div>
+        </div>
+        <div class="action-arrow">→</div>
+      </a>
+
+      <a href="{{ url_for('auth.setup_mfa') }}" class="quick-action">
+        <div class="action-icon">🔐</div>
+        <div class="action-content">
+          <div class="action-title">Configurar MFA</div>
+          <div class="action-description">
+            Refuerza la seguridad del backoffice activando la autenticación en dos pasos.
+          </div>
+        </div>
+        <div class="action-arrow">→</div>
+      </a>
+    </div>
+  </div>
+</div>

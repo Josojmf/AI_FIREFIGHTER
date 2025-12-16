@@ -1357,3 +1357,162 @@ body {
   outline: 2px solid var(--text-accent);
   outline-offset: 2px;
 }
+
+.logs-container {
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 90px 120px 70px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+/* ============================= */
+/* 🐳 DOCKER LOGS – MEJORA UI */
+/* ============================= */
+
+.docker-logs-widget {
+  min-height: 320px;
+}
+
+.docker-logs-content {
+  padding: 0;
+}
+
+/* Cabecera fija */
+.logs-header {
+  display: grid;
+  grid-template-columns: 90px 140px 80px 1fr;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* Contenedor principal */
+.logs-container {
+  max-height: 420px;
+  overflow-y: auto;
+  resize: vertical;            /* 👈 RESIZABLE */
+  padding: 8px 16px;
+  background: #0f172a;
+}
+
+/* Cada log como grid */
+.log-entry {
+  display: grid;
+  grid-template-columns: 90px 140px 80px 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 0.8rem;
+  align-items: start;
+  border-bottom: 1px dashed rgba(255,255,255,0.05);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-time {
+  color: var(--text-muted);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.log-container {
+  font-weight: 600;
+  color: #93c5fd;
+  word-break: break-word;
+}
+
+.log-level {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+/* Mensaje largo */
+.log-message {
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* Colores por nivel */
+.log-info .log-level {
+  background: rgba(6,182,212,0.2);
+  color: var(--info);
+}
+
+.log-warning .log-level {
+  background: rgba(245,158,11,0.2);
+  color: var(--warning);
+}
+
+.log-error .log-level {
+  background: rgba(239,68,68,0.2);
+  color: var(--error);
+}
+
+.log-success .log-level {
+  background: rgba(16,185,129,0.2);
+  color: var(--success);
+}
+
+/* Hover sutil */
+.log-entry:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* ============================= */
+/* 📱 RESPONSIVE */
+/* ============================= */
+
+@media (max-width: 768px) {
+  .logs-header,
+  .log-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .logs-header {
+    display: none;
+  }
+
+  .log-entry {
+    padding: 10px 0;
+  }
+
+  .log-time,
+  .log-container,
+  .log-level {
+    font-size: 0.7rem;
+  }
+}
+
+
+.log-info { color: #93c5fd; }
+.log-warning { color: #facc15; }
+.log-error { color: #f87171; }
+.log-success { color: #4ade80; }

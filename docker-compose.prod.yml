@@ -1,28 +1,58 @@
-﻿# docker-compose.prod.yml - CONFIGURACIÓN CORREGIDA PARA COMUNICACIÓN INTERNA DOCKER
-version: '3.8'
+﻿version: "3.8"
 
 services:
-  # 🔥 FRONTEND - Con configuración de sesión separada
+  # ============================
+  # 🔥 BACKEND (FastAPI)
+  # ============================
+  backend:
+    image: ghcr.io/josojmf/ai-firefighter-backend:latest
+    container_name: firefighter-backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./env/production.env
+    environment:
+      # 🔑 CLAVE: runtime config para frontend / backoffice
+      - PUBLIC_API_URL=http://backend:5000
+
+      # Entorno
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DOCKER_ENV=true
+    restart: unless-stopped
+    networks:
+      - firefighter_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================
+  # 🌐 FRONTEND
+  # ============================
   frontend:
     image: ghcr.io/josojmf/ai-firefighter-frontend:latest
-    container_name: firefighter_frontend
+    container_name: firefighter-frontend
     ports:
       - "8000:8000"
     env_file:
-      - /root/firefighter.env
+      - ./env/production.env
     environment:
-      # ✅ URLs EXPLÍCITAS para navegador (desde IP externa)
-      - API_BASE_URL=http://167.71.63.108:5000/api
-      - FRONTEND_API_BASE_URL=http://167.71.63.108:5000/api
-      # Variables de configuración adicionales
+      # Comunicación interna con backend
+      - API_BASE_URL=http://backend:5000/api
+
+      # Entorno
       - ENVIRONMENT=production
-      - DOCKER_ENV=true
       - DEBUG=false
+      - DOCKER_ENV=true
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - firefighter_network
-    restart: unless-stopped
-    depends_on:
-      - backend
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 30s
@@ -30,61 +60,31 @@ services:
       retries: 3
       start_period: 60s
 
-  # 🔥 BACKEND API - AÑADIDA PRODUCTION_URL PARA CORS
-  backend:
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
-    container_name: firefighter_backend
-    ports:
-      - "5000:5000"
-    env_file:
-      - /root/firefighter.env
-    environment:
-      # Variables específicas del backend
-      - ENVIRONMENT=production
-      - DOCKER_ENV=true
-      - DEBUG=false
-      # ✅ AÑADIDO: PRODUCTION_URL para configuración CORS
-      - PRODUCTION_URL=http://167.71.63.108
-      # URLs para comunicación interna
-      - FRONTEND_URL=http://167.71.63.108:8000
-      - BACKOFFICE_URL=http://167.71.63.108:3001
-    networks:
-      - firefighter_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  # 🔥 BACKOFFICE - CONFIGURACIÓN HÍBRIDA: HOSTNAME + IP BACKUP
+  # ============================
+  # 🏢 BACKOFFICE
+  # ============================
   backoffice:
     image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
-    container_name: firefighter_backoffice
+    container_name: firefighter-backoffice
     ports:
       - "3001:3001"
     env_file:
-      - /root/firefighter.env
+      - ./env/production.env
     environment:
-      # ✅ URLs INTERNAS DOCKER - comunicación entre contenedores
+      # 🔑 CLAVE: Backoffice Python config
       - API_BASE_URL=http://backend:5000
-      - BACKOFFICE_API_BASE_URL=http://backend:5000
-      # ✅ FALLBACK: IP directa para casos de DNS issues
-      - API_FALLBACK_URL=http://172.20.0.2:5000
-      # Variables específicas del backoffice
+
+      # Entorno
       - ENVIRONMENT=production
-      - DOCKER_ENV=true
       - DEBUG=false
+      - DOCKER_ENV=true
       - MFA_ISSUER=FirefighterAI
-      # URLs externas para referencias
-      - FRONTEND_URL=http://167.71.63.108:8000
-      # Las demás variables se cargan desde env_file
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - firefighter_network
-    restart: unless-stopped
-    depends_on:
-      - backend
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3001/ || exit 1"]
       interval: 30s
@@ -92,34 +92,35 @@ services:
       retries: 3
       start_period: 60s
 
-# 🌐 CONFIGURACIÓN DE RED - OPTIMIZADA PARA DNS
+  # ============================
+  # 🔴 REDIS (opcional, recomendado)
+  # ============================
+  redis:
+    image: redis:7-alpine
+    container_name: firefighter-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data-prod:/data
+    restart: unless-stopped
+    networks:
+      - firefighter_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# ============================
+# 🌐 NETWORKS
+# ============================
 networks:
   firefighter_network:
     driver: bridge
     name: firefighter_network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-      driver: default
-    driver_opts:
-      com.docker.network.bridge.enable_ip_masquerade: "true"
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.driver.mtu: "1500"
 
-# 💾 CONFIGURACIÓN DE VOLÚMENES
+# ============================
+# 📦 VOLUMES
+# ============================
 volumes:
-  firefighter_data:
+  redis-data-prod:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/firefighter-data
-  
-  # Volumen para logs
-  firefighter_logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/firefighter-logs
-

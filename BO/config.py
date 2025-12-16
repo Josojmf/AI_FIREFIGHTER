@@ -1,84 +1,112 @@
-# config.py - BACKOFFICE CON SESIONES SEPARADAS - VERSIÓN CORREGIDA PARA DOCKER
 import os
 from dotenv import load_dotenv
 
-# 🔥 CARGAR VARIABLES DE ENTORNO DESDE EL ARCHIVO .env
-# Especificar la ruta absoluta al archivo .env
+# 🔥 Cargar variables de entorno desde .env si existe
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
 
+
 class Config:
-    # 🔥 SECRET KEY ESPECÍFICA PARA BACKOFFICE
-    SECRET_KEY = os.getenv('BACKOFFICE_SECRET_KEY')  # SIN valor por defecto
-    
-    # 🔥 URLs ABSOLUTAS - SIN VALORES POR DEFECTO
-    API_BASE_URL = os.getenv('API_BASE_URL')  # SIN valor por defecto
-    BACKOFFICE_API_BASE_URL = os.getenv('BACKOFFICE_API_BASE_URL')  # SIN valor por defecto
-    
-    DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
-    
-    # 🔥 CONFIGURACIÓN DE COOKIES ESPECÍFICA PARA BACKOFFICE
-    SESSION_COOKIE_NAME = 'backoffice_session'  # Diferente del FrontEnd
-    SESSION_COOKIE_PATH = '/'  # Disponible en todas las rutas del BO
+    # =========================================================
+    # 🌍 ENTORNO
+    # =========================================================
+    ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+    DOCKER = os.getenv('DOCKER', 'false').lower() in ('true', '1', 't')
+    DEBUG = os.getenv('DEBUG', 'false').lower() in ('true', '1', 't')
+
+    # =========================================================
+    # 🔐 SEGURIDAD
+    # =========================================================
+    SECRET_KEY = os.getenv(
+        'BACKOFFICE_SECRET_KEY',
+        'firefighter-backoffice-secret-key-2024'
+    )
+
+    SESSION_COOKIE_NAME = 'backoffice_session'
+    SESSION_COOKIE_PATH = '/'
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SECURE = False  # True en producción HTTPS
+    SESSION_COOKIE_SECURE = ENVIRONMENT == 'production'
     SESSION_COOKIE_SAMESITE = 'Lax'
-    SESSION_COOKIE_DOMAIN = None  # Para localhost
-    PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas (más corto que FrontEnd)
-    
-    # 🔥 CONFIGURACIÓN ADICIONAL DE SEGURIDAD
-    SESSION_PROTECTION = 'strong'  # Flask-Login protection level
+    SESSION_COOKIE_DOMAIN = None
+    PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas
+
+    SESSION_PROTECTION = 'strong'
     SESSION_REFRESH_EACH_REQUEST = True
-    
-    # Admin credentials (para primer acceso)
+
+    # =========================================================
+    # 👤 ADMIN / MFA
+    # =========================================================
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
-    
-    # MFA Configuration
     MFA_ISSUER = os.getenv('MFA_ISSUER', 'FirefighterAI-BackOffice')
-    
+
+    # =========================================================
+    # 🌐 API CONFIGURATION (CLAVE)
+    # =========================================================
+    # ⚠️ El Backoffice NO decide la URL
+    # ⚠️ Debe venir SIEMPRE por variable de entorno
+    API_BASE_URL = os.getenv('API_BASE_URL')
+
+    BACKOFFICE_API_BASE_URL = API_BASE_URL
+
+    # =========================================================
+    # 🔴 REDIS
+    # =========================================================
+    REDIS_HOST = os.getenv('REDIS_HOST', 'redis' if DOCKER else 'localhost')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_DB = int(os.getenv('REDIS_DB', 0))
+
+    # =========================================================
+    # ✅ VALIDACIÓN
+    # =========================================================
     @classmethod
     def validate_config(cls):
-        """Validar que la configuración es correcta"""
         errors = []
-        
-        # Verificar que las URLs críticas están configuradas
+
         if not cls.API_BASE_URL:
-            errors.append("❌ API_BASE_URL no está configurado")
-        if not cls.BACKOFFICE_API_BASE_URL:
-            errors.append("❌ BACKOFFICE_API_BASE_URL no está configurado")
+            errors.append("❌ API_BASE_URL no está configurado (obligatorio)")
+
         if not cls.SECRET_KEY:
             errors.append("❌ SECRET_KEY no está configurado")
-            
+
         return errors
-    
+
+    # =========================================================
+    # 🪵 LOGGING
+    # =========================================================
     @classmethod
     def log_config(cls):
-        """Método para debuggear la configuración"""
-        print(f"🔒 BackOffice Config:")
-        print(f"   - Session cookie: {cls.SESSION_COOKIE_NAME}")
-        print(f"   - Secret key: {cls.SECRET_KEY[:20]}..." if cls.SECRET_KEY and len(cls.SECRET_KEY) > 20 else "   - Secret key: ❌ NO CONFIGURADO")
-        print(f"   - Lifetime: {cls.PERMANENT_SESSION_LIFETIME}s")
-        print(f"   - API URL: {cls.API_BASE_URL or '❌ NO CONFIGURADO'}")
-        print(f"   - BackOffice API URL: {cls.BACKOFFICE_API_BASE_URL or '❌ NO CONFIGURADO'}")
-        print(f"   - Debug: {cls.DEBUG}")
-        
-        # Validar configuración
+        print("=" * 70)
+        print("🔧 BACKOFFICE CONFIGURATION")
+        print("=" * 70)
+        print(f"🌍 Environment     : {cls.ENVIRONMENT}")
+        print(f"📦 Docker Mode    : {cls.DOCKER}")
+        print(f"🐛 Debug          : {cls.DEBUG}")
+        print(f"🌐 API URL        : {cls.API_BASE_URL}")
+        print(f"📡 Redis          : {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
+        print(f"🔒 Session Cookie : {cls.SESSION_COOKIE_NAME}")
+        print(
+            f"🔑 Secret Key     : {cls.SECRET_KEY[:20]}..."
+            if cls.SECRET_KEY else "❌ NO SET"
+        )
+        print(
+            f"⏱️  Session Time  : {cls.PERMANENT_SESSION_LIFETIME}s "
+            f"({cls.PERMANENT_SESSION_LIFETIME // 3600}h)"
+        )
+        print("=" * 70)
+
         errors = cls.validate_config()
         if errors:
-            print("🚨 ERRORES DE CONFIGURACIÓN:")
+            print("🚨 CONFIGURATION ERRORS:")
             for error in errors:
                 print(f"   {error}")
+            print("=" * 70)
             return False
-        else:
-            print("✅ Configuración validada correctamente")
-            return True
 
-# 🔥 INICIALIZACIÓN: Verificar configuración al cargar
-if __name__ == "__main__":
-    # Solo ejecutar validación completa si se ejecuta directamente
-    Config.log_config()
-else:
-    # En modo importación, solo validar si DEBUG está activado
-    if Config.DEBUG:
-        Config.log_config()
+        print("✅ Configuration validated successfully")
+        print("=" * 70)
+        return True
+
+
+# 🔥 Mostrar siempre configuración al arrancar
+Config.log_config()

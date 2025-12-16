@@ -1,0 +1,25 @@
+<section class="widget">
+  <header class="widget-header">
+    <h3 class="widget-title">
+      <span class="widget-icon">🧾</span>
+      Logs Docker recientes
+    </h3>
+    <div class="widget-actions">
+      <button type="button" class="widget-btn" title="Actualizar" onclick="location.reload()">⟳</button>
+      {# Si más adelante creas una página de logs, aquí pondrás el url_for correcto #}
+      {# <a href="{{ url_for('backoffice.docker_logs') }}" class="widget-btn" title="Ver todo">⇢</a> #}
+    </div>
+  </header>
+
+  <div class="widget-content logs-widget">
+    {% if stats.docker_logs and stats.docker_logs|length > 0 %}
+      <pre class="logs-output">
+{% for line in stats.docker_logs[:50] -%}
+{{ line }}
+{% endfor %}
+      </pre>
+    {% else %}
+      <p class="logs-empty">No hay logs Docker recientes disponibles.</p>
+    {% endif %}
+  </div>
+</section>

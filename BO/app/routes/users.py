@@ -35,15 +35,22 @@ def user_list():
             if data.get('ok'):
                 users = data.get('users', [])
                 print(f"✅ Usuarios obtenidos: {len(users)}")
-                
-                # 📊 Agregar información de progreso básico a cada usuario
+
                 for user in users:
-                    # Agregar estadísticas básicas visuales
+                    # 🔥 NORMALIZAR ID PARA LOS TEMPLATES
+                    if 'id' not in user:
+                        if '_id' in user:
+                            user['id'] = str(user['_id'])
+                        else:
+                            user['id'] = 'unknown'
+
+                    # 📊 Agregar información de progreso básico a cada usuario
                     user['progress_summary'] = {
                         'has_leitner': user.get('has_leitner_progress', False),
                         'has_backoffice': user.get('has_backoffice_cards', False),
                         'activity_level': 'alta' if user.get('has_leitner_progress') else 'baja'
                     }
+
                 
                 return render_template('users/list.html', users=users)
             else:
@@ -91,6 +98,9 @@ def user_detail(user_id):
                 # 📊 Obtener progreso detallado del usuario
                 progress_data = BackofficeUser.get_user_progress(user_id, token)
                 
+                # 🔥 CORRECCIÓN: Procesar fechas para la plantilla
+                user = process_user_data_for_template(user)
+                
                 return render_template('users/detail.html', 
                                      user=user, 
                                      progress=progress_data)
@@ -111,6 +121,39 @@ def user_detail(user_id):
         print(f"❌ Error de conexión: {e}")
         flash('Error de conexión', 'error')
         return redirect(url_for('users.user_list'))
+
+def process_user_data_for_template(user_data):
+    """Procesar datos del usuario para que sean compatibles con la plantilla"""
+    from datetime import datetime
+    
+    user = user_data.copy()
+    
+    # 🔥 CORRECCIÓN: Procesar created_at
+    created_at_str = user.get('created_at')
+    if created_at_str:
+        try:
+            # Intentar parsear la fecha ISO
+            if 'T' in created_at_str:
+                # Formato ISO: '2025-11-19T22:51:16.761000'
+                dt = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+            else:
+                # Otros formatos
+                dt = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+            
+            # Agregar el objeto datetime procesado
+            user['created_at_dt'] = dt
+            # También mantener el string original
+            user['created_at_str'] = created_at_str
+        except (ValueError, TypeError) as e:
+            print(f"⚠️ Error procesando fecha {created_at_str}: {e}")
+            user['created_at_dt'] = None
+            user['created_at_str'] = created_at_str
+    else:
+        user['created_at_dt'] = None
+        user['created_at_str'] = 'No disponible'
+    
+    return user
+
 
 @bp.route('/<user_id>/progress')
 @login_required

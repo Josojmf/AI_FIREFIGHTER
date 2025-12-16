@@ -6,78 +6,165 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/access_tokens.css') }}">
+<!-- Meta tag para responsive -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 {% endblock %}
 
 {% block content %}
 <div class="edit-token-container">
+  <!-- Header mejorado con responsive -->
   <div class="form-header">
-    <h1>➕ Crear Token</h1>
-    <p>Crea un nuevo token de acceso para registro de usuarios</p>
+    <div class="header-content">
+      <div class="header-icon">➕</div>
+      <div class="header-text">
+        <h1>Crear Token</h1>
+        <p class="subtitle">Crea un nuevo token de acceso para registro de usuarios</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="{{ url_for('access_tokens.token_list') }}" class="btn-back">
+        ← Volver a la lista
+      </a>
+    </div>
   </div>
 
+  <!-- Form Container mejorado -->
   <div class="form-container">
-    <form id="createTokenForm" method="POST" action="{{ url_for('access_tokens.create_token') }}">
+    <form id="createTokenForm" method="POST" action="{{ url_for('access_tokens.create_token') }}" 
+          class="create-token-form">
       
-      <!-- Información básica -->
-      <div class="form-group">
-        <label for="name" class="form-label required">Nombre del Token</label>
-        <input type="text" id="name" name="name" class="form-input" 
-               value="{{ form.name if form }}" required maxlength="100" placeholder="Ej: Token para estudiantes 2024">
-        <div class="form-help">Nombre descriptivo para identificar el token</div>
-      </div>
-
-      <div class="form-group">
-        <label for="description" class="form-label">Descripción</label>
-        <textarea id="description" name="description" class="form-input form-textarea" 
-                  placeholder="Descripción opcional del propósito del token...">{{ form.description if form }}</textarea>
-        <div class="form-help">Descripción opcional para documentar el uso del token</div>
-      </div>
-
-      <!-- NUEVO: Campo para email del destinatario (OPCIONAL) -->
-      <div class="form-group">
-        <label for="recipient_email" class="form-label">Enviar por Email (Opcional)</label>
-        <input type="email" id="recipient_email" name="recipient_email" class="form-input" 
-               value="{{ form.recipient_email if form }}" placeholder="destinatario@ejemplo.com">
-        <div class="form-help">Si se especifica, el token se enviará automáticamente por email. Dejar vacío para crear solo el token.</div>
-      </div>
-
-      <!-- Configuración de usos -->
-      <div class="form-grid">
+      <!-- Sección 1: Información Básica -->
+      <div class="form-section">
+        <div class="section-header">
+          <div class="section-icon">📝</div>
+          <h2>Información Básica</h2>
+        </div>
+        
         <div class="form-group">
-          <label for="max_uses" class="form-label required">Máximo de Usos</label>
-          <input type="number" id="max_uses" name="max_uses" class="form-input" 
-                 value="{{ form.max_uses if form else '50' }}" min="1" max="1000" required>
-          <div class="form-help">Número máximo de registros permitidos</div>
+          <div class="label-container">
+            <label for="name" class="form-label required">Nombre del Token</label>
+            <span class="required-indicator">*</span>
+          </div>
+          <div class="input-container">
+            <input type="text" id="name" name="name" class="form-input" 
+                   value="{{ form.name if form }}" required maxlength="100" 
+                   placeholder="Ej: Token para estudiantes 2024"
+                   aria-label="Nombre del token">
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Nombre descriptivo para identificar el token (mínimo 3 caracteres)</div>
         </div>
 
         <div class="form-group">
-          <label for="user_type" class="form-label required">Tipo de Usuario</label>
-          <select id="user_type" name="user_type" class="form-select" required>
-            <option value="student" {% if form and form.user_type == 'student' %}selected{% endif %}>Estudiante</option>
-            <option value="instructor" {% if form and form.user_type == 'instructor' %}selected{% endif %}>Instructor</option>
-            <option value="admin" {% if form and form.user_type == 'admin' %}selected{% endif %}>Administrador</option>
-          </select>
-          <div class="form-help">Tipo de usuario que podrá registrarse con este token</div>
+          <label for="description" class="form-label">Descripción</label>
+          <div class="input-container">
+            <textarea id="description" name="description" class="form-input form-textarea" 
+                      placeholder="Descripción opcional del propósito del token..."
+                      aria-label="Descripción del token"
+                      rows="3">{{ form.description if form }}</textarea>
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Descripción opcional para documentar el uso del token</div>
+        </div>
+
+        <div class="form-group">
+          <label for="recipient_email" class="form-label">Enviar por Email (Opcional)</label>
+          <div class="input-container">
+            <input type="email" id="recipient_email" name="recipient_email" class="form-input" 
+                   value="{{ form.recipient_email if form }}" 
+                   placeholder="destinatario@ejemplo.com"
+                   aria-label="Email del destinatario">
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Si se especifica, el token se enviará automáticamente por email. Dejar vacío para crear solo el token.</div>
         </div>
       </div>
 
-      <!-- Configuración de expiración -->
-      <div class="form-group">
-        <label for="expires_days" class="form-label">Días hasta expiración</label>
-        <input type="number" id="expires_days" name="expires_days" class="form-input" 
-               value="{{ form.expires_days if form else '30' }}" min="1" max="365">
-        <div class="form-help">Número de días hasta que el token expire (1-365). Dejar vacío para que no expire.</div>
+      <!-- Sección 2: Configuración -->
+      <div class="form-section">
+        <div class="section-header">
+          <div class="section-icon">⚙️</div>
+          <h2>Configuración</h2>
+        </div>
+        
+        <div class="form-grid responsive-grid">
+          <div class="form-group">
+            <div class="label-container">
+              <label for="max_uses" class="form-label required">Máximo de Usos</label>
+              <span class="required-indicator">*</span>
+            </div>
+            <div class="input-container">
+              <input type="number" id="max_uses" name="max_uses" class="form-input" 
+                     value="{{ form.max_uses if form else '50' }}" 
+                     min="1" max="1000" required
+                     aria-label="Número máximo de usos">
+              <div class="input-feedback"></div>
+            </div>
+            <div class="form-help">Número máximo de registros permitidos (1-1000)</div>
+          </div>
+
+          <div class="form-group">
+            <div class="label-container">
+              <label for="user_type" class="form-label required">Tipo de Usuario</label>
+              <span class="required-indicator">*</span>
+            </div>
+            <div class="input-container">
+              <div class="select-wrapper">
+                <select id="user_type" name="user_type" class="form-select" required
+                        aria-label="Tipo de usuario">
+                  <option value="student" {% if form and form.user_type == 'student' %}selected{% endif %}>Estudiante</option>
+                  <option value="instructor" {% if form and form.user_type == 'instructor' %}selected{% endif %}>Instructor</option>
+                  <option value="admin" {% if form and form.user_type == 'admin' %}selected{% endif %}>Administrador</option>
+                </select>
+                <div class="select-arrow">▼</div>
+              </div>
+              <div class="input-feedback"></div>
+            </div>
+            <div class="form-help">Tipo de usuario que podrá registrarse con este token</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="expires_days" class="form-label">Días hasta expiración</label>
+          <div class="input-container">
+            <input type="number" id="expires_days" name="expires_days" class="form-input" 
+                   value="{{ form.expires_days if form else '30' }}" 
+                   min="1" max="365"
+                   aria-label="Días hasta expiración">
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Número de días hasta que el token expire (1-365). Dejar vacío para que no expire.</div>
+        </div>
+      </div>
+
+      <!-- Sección 3: Información del Sistema -->
+      <div class="form-section info-section">
+        <div class="section-header">
+          <div class="section-icon">ℹ️</div>
+          <h2>Información del Sistema</h2>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Creado por:</span>
+            <span class="info-value">{{ current_user.username if current_user else 'Sistema' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Fecha de creación:</span>
+            <span class="info-value" id="currentDate">{{ now.strftime('%d/%m/%Y %H:%M') if now else '--/--/---- --:--' }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- Acciones -->
       <div class="form-actions">
-        <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-secondary">
-          <span>❌</span>
-          Cancelar
+        <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-secondary btn-cancel">
+          <span class="btn-icon">❌</span>
+          <span class="btn-text">Cancelar</span>
         </a>
         <button type="submit" class="btn btn-primary" id="submitButton">
-          <span>✅</span>
-          Crear Token
+          <span class="btn-icon">✅</span>
+          <span class="btn-text">Crear Token</span>
+          <span class="loading-spinner" id="loadingSpinner"></span>
         </button>
       </div>
     </form>
@@ -94,8 +181,26 @@ document.addEventListener('DOMContentLoaded', function() {
   const userTypeInput = document.getElementById('user_type');
   const emailInput = document.getElementById('recipient_email');
   const submitButton = document.getElementById('submitButton');
+  const loadingSpinner = document.getElementById('loadingSpinner');
 
-  // Validación en tiempo real
+  // Actualizar fecha actual
+  function updateCurrentDate() {
+    const now = new Date();
+    const dateElement = document.getElementById('currentDate');
+    if (dateElement) {
+      dateElement.textContent = now.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+  }
+  
+  updateCurrentDate();
+
+  // Validación mejorada en tiempo real
   function validateForm() {
     const name = nameInput.value.trim();
     const maxUses = parseInt(maxUsesInput.value);
@@ -106,6 +211,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Limpiar errores anteriores
     document.querySelectorAll('.validation-error').forEach(el => el.remove());
+    document.querySelectorAll('.form-input, .form-select').forEach(input => {
+      input.classList.remove('error');
+    });
     
     // Validar nombre
     if (!name) {
@@ -128,14 +236,14 @@ document.addEventListener('DOMContentLoaded', function() {
       isValid = false;
     }
     
-    // Validar email si se proporciona (OPCIONAL)
+    // Validar email si se proporciona
     if (email && !isValidEmail(email)) {
       showError(emailInput, 'Por favor ingresa un email válido');
       isValid = false;
     }
     
-    // Actualizar botón
-    submitButton.disabled = !isValid;
+    // Actualizar estado del botón
+    updateSubmitButton(isValid);
     
     return isValid;
   }
@@ -149,30 +257,82 @@ document.addEventListener('DOMContentLoaded', function() {
     const errorDiv = document.createElement('div');
     errorDiv.className = 'validation-error';
     errorDiv.textContent = message;
-    input.parentNode.appendChild(errorDiv);
-    input.style.borderColor = '#ef4444';
+    
+    const parent = input.closest('.input-container') || input.parentNode;
+    const feedback = parent.querySelector('.input-feedback');
+    if (feedback) {
+      feedback.appendChild(errorDiv);
+    } else {
+      parent.appendChild(errorDiv);
+    }
+    
+    input.classList.add('error');
+  }
+
+  function updateSubmitButton(isValid) {
+    submitButton.disabled = !isValid;
+    submitButton.classList.toggle('disabled', !isValid);
   }
 
   // Event listeners para validación
   [nameInput, maxUsesInput, userTypeInput, emailInput].forEach(input => {
     input.addEventListener('input', validateForm);
     input.addEventListener('blur', validateForm);
+    input.addEventListener('focus', function() {
+      this.classList.remove('error');
+    });
   });
 
-  // Validar al enviar
+  // Manejar envío del formulario
   form.addEventListener('submit', function(e) {
     if (!validateForm()) {
       e.preventDefault();
       return false;
     }
     
-    // Mostrar loading
+    // Mostrar estado de carga
     submitButton.disabled = true;
-    submitButton.innerHTML = '<span>⏳</span> Creando...';
+    submitButton.classList.add('loading');
+    loadingSpinner.style.display = 'block';
+    
+    // Actualizar texto del botón
+    const btnText = submitButton.querySelector('.btn-text');
+    if (btnText) {
+      btnText.textContent = 'Creando...';
+    }
   });
 
   // Inicializar validación
   validateForm();
+
+  // Efecto hover en inputs
+  document.querySelectorAll('.form-input, .form-select').forEach(input => {
+    input.addEventListener('mouseenter', function() {
+      this.classList.add('hover');
+    });
+    
+    input.addEventListener('mouseleave', function() {
+      this.classList.remove('hover');
+    });
+  });
+
+  // Responsive: Ajustar comportamiento en pantallas pequeñas
+  function handleResponsive() {
+    const isMobile = window.innerWidth < 768;
+    document.body.classList.toggle('mobile-view', isMobile);
+    
+    // Ajustar textarea para móviles
+    const textarea = document.getElementById('description');
+    if (textarea && isMobile) {
+      textarea.rows = 4;
+    } else if (textarea) {
+      textarea.rows = 3;
+    }
+  }
+
+  // Ejecutar al cargar y al redimensionar
+  handleResponsive();
+  window.addEventListener('resize', handleResponsive);
 });
 </script>
 {% endblock %}

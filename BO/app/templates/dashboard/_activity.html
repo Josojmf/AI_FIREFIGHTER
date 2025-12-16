@@ -1,0 +1,36 @@
+<section class="widget">
+  <header class="widget-header">
+    <h3 class="widget-title">
+      <span class="widget-icon">🕒</span>
+      Actividad reciente
+    </h3>
+    <div class="widget-actions">
+      <button type="button" class="widget-btn" title="Actualizar" onclick="location.reload()">⟳</button>
+      {# Enlace a una vista real (por ejemplo, lista de usuarios) #}
+      <a href="{{ url_for('users.user_list') }}" class="widget-btn" title="Ver usuarios">⇢</a>
+    </div>
+  </header>
+  <div class="widget-content">
+    <div class="activity-list">
+      {% for item in stats.recent_activity %}
+      <div class="activity-item">
+        <div class="activity-icon">
+          {{ item.icon or '⚙️' }}
+        </div>
+        <div class="activity-content">
+          <div class="activity-text">{{ item.text }}</div>
+          <div class="activity-time">{{ item.time }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="activity-item">
+        <div class="activity-icon">ℹ️</div>
+        <div class="activity-content">
+          <div class="activity-text">No hay actividad reciente.</div>
+          <div class="activity-time">Últimas 24 horas</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

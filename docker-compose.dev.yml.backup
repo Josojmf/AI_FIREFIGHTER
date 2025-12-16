@@ -1,0 +1,123 @@
+version: '3.9'
+
+services:
+  # 🌐 NGINX Reverse Proxy
+  nginx:
+    image: nginx:stable-alpine
+    container_name: firefighter-nginx-dev
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/sites-enabled:/etc/nginx/conf.d:ro
+      - nginx-logs:/var/log/nginx
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      backoffice:
+        condition: service_healthy
+    networks:
+      - firefighter
+    restart: unless-stopped
+
+  # 🔥 Frontend (TU CONFIGURACIÓN EXACTA)
+  frontend:
+    container_name: frontend-dev
+    image: ghcr.io/josojmf/ai-firefighter-frontend:dev
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=development
+      - REDIS_URL=redis://redis:6379/0
+      - API_BASE_URL=http://backend:5000
+    env_file:
+      - _env  # CAMBIADO: uso tu archivo _env como en el original
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - firefighter
+
+  # ⚡ Backend (TU CONFIGURACIÓN EXACTA)
+  backend:
+    container_name: backend-dev
+    image: ghcr.io/josojmf/ai-firefighter-backend:dev
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=development
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - _env  # CAMBIADO: uso tu archivo _env como en el original
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - firefighter
+
+  # 🏢 BackOffice (TU CONFIGURACIÓN EXACTA)
+  backoffice:
+    container_name: backoffice-dev
+    image: ghcr.io/josojmf/ai-firefighter-backoffice:dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://api.firefighter.local
+      - REACT_APP_API_URL=http://api.firefighter.local
+    env_file:
+      - _env  # MANTENGO tu archivo _env original
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - firefighter
+
+  # 🔴 Redis Cache (SOLO AÑADO ESTO)
+  redis:
+    image: redis:7-alpine
+    container_name: firefighter-redis-dev
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - redis-data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "6379:6379"
+    networks:
+      - firefighter
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  firefighter:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local
+  nginx-logs:
+    driver: local

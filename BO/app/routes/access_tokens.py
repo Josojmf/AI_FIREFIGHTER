@@ -30,6 +30,112 @@ def generate_token(length=64):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
+
+@bp.route('/handle_action', methods=['POST'])
+@login_required
+def handle_action():
+    """
+    Endpoint unificado para acciones sobre tokens desde la tabla:
+    - revoke
+    - reactivate
+    - reset
+    - delete
+    Recibe: action, token_id
+    Devuelve JSON para el fetch del frontend.
+    """
+    action = request.form.get('action')
+    token_id = request.form.get('token_id')
+
+    if not action or not token_id:
+        return jsonify({
+            'success': False,
+            'message': 'Acción o token_id no proporcionados'
+        }), 400
+
+    # Mapear acciones a URLs internas del propio blueprint
+    try:
+        if action == 'revoke':
+            return _proxy_action(
+                f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/revoke",
+                json_payload={
+                    'revoked_by': current_user.username,
+                    'revoked_at': datetime.now(timezone.utc).isoformat()
+                },
+                success_message='Token revocado exitosamente'
+            )
+        elif action == 'reactivate':
+            return _proxy_action(
+                f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/reactivate",
+                json_payload={
+                    'reactivated_by': current_user.username,
+                    'reactivated_at': datetime.now(timezone.utc).isoformat()
+                },
+                success_message='Token reactivado exitosamente'
+            )
+        elif action == 'reset':
+            return _proxy_action(
+                f"{Config.API_BASE_URL}/api/access_tokens/{token_id}/reset_uses",
+                json_payload={
+                    'reset_by': current_user.username,
+                    'reset_at': datetime.now(timezone.utc).isoformat()
+                },
+                success_message='Contador de usos reiniciado exitosamente'
+            )
+        elif action == 'delete':
+            # DELETE no lleva body JSON
+            return _proxy_action(
+                f"{Config.API_BASE_URL}/api/access_tokens/{token_id}",
+                method='DELETE',
+                success_message='Token eliminado permanentemente'
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Acción no soportada'
+            }), 400
+
+    except Exception as e:
+        print(f"❌ Error en handle_action: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Error interno al procesar la acción'
+        }), 500
+
+
+def _proxy_action(api_url, json_payload=None, method='PATCH', success_message='Acción realizada correctamente'):
+    """
+    Helper para llamar a la API y devolver un JSON homogéneo al frontend.
+    """
+    headers = get_auth_headers()
+    try:
+        if method == 'DELETE':
+            resp = requests.delete(api_url, headers=headers, timeout=10)
+        else:
+            resp = requests.patch(api_url, headers=headers, json=json_payload, timeout=10)
+
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('ok'):
+                return jsonify({'success': True, 'message': success_message})
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': data.get('message', 'Error en la API')
+                }), 400
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'Error del servidor: {resp.status_code}'
+            }), 500
+
+    except requests.RequestException as e:
+        print(f"❌ Error de conexión en _proxy_action: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Error de conexión con el servidor'
+        }), 500
+
+
 @bp.route('/')
 @login_required
 def token_list():
@@ -130,7 +236,7 @@ def test_api_connection():
         print(f"🧪 TEST Error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ... (el resto de tus funciones create_token, edit_token, delete_token, etc. se mantienen igual) ...
+
 @bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_token():
@@ -168,7 +274,7 @@ def create_token():
         # Generar token único
         token_value = generate_token()
         
-        # CORRECCIÓN: Usar timezone.utc correctamente
+        # Fecha de expiración
         expiration_date = datetime.now(timezone.utc) + timedelta(days=expires_days)
         
         # Preparar datos para la API
@@ -183,7 +289,7 @@ def create_token():
             'expires_at': expiration_date.isoformat()
         }
         
-        # Añadir email del destinatario si se proporciona (OPCIONAL)
+        # Añadir email del destinatario si se proporciona
         if recipient_email:
             token_data['recipient_email'] = recipient_email
         
@@ -192,27 +298,35 @@ def create_token():
             f"{Config.API_BASE_URL}/api/access_tokens", 
             headers=headers,
             json=token_data,
-            timeout=30  # Aumentado timeout
+            timeout=30
         )
         
-        if response.status_code == 201:
+        # ✅ CORRECCIÓN CLAVE: aceptar 200 y 201
+        if response.status_code in (200, 201):
             data = response.json()
             if data.get('ok'):
-                # Verificar si se envió email
                 email_info = data.get('email_info')
+
                 if email_info and email_info.get('sent'):
-                    flash(f'Token "{name}" creado y enviado por email a {recipient_email}', 'success')
+                    flash(
+                        f'Token "{name}" creado y enviado por email a {recipient_email}',
+                        'success'
+                    )
                 elif email_info and not email_info.get('sent'):
-                    flash(f'Token "{name}" creado pero error al enviar email: {email_info.get("error")}', 'warning')
+                    flash(
+                        f'Token "{name}" creado pero error al enviar email: {email_info.get("error")}',
+                        'warning'
+                    )
                 else:
                     flash(f'Token "{name}" creado exitosamente', 'success')
+
                 return redirect(url_for('access_tokens.token_list'))
             else:
                 flash(data.get('message', 'Error al crear token'), 'error')
         else:
             flash(f'Error del servidor: {response.status_code}', 'error')
     
-    except ValueError as e:
+    except ValueError:
         flash('Por favor, verifica que todos los números sean válidos', 'error')
     except requests.RequestException as e:
         print(f"❌ Error de conexión: {e}")
@@ -222,6 +336,7 @@ def create_token():
         flash('Error interno del sistema', 'error')
     
     return render_template('access_tokens/create.html')
+
 
 @bp.route('/edit/<token_id>', methods=['GET', 'POST'])
 @login_required

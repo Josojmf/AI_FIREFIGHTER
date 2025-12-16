@@ -1,0 +1,30 @@
+<section class="widget">
+  <header class="widget-header">
+    <h3 class="widget-title">
+      <span class="widget-icon">📊</span>
+      Resumen del sistema
+    </h3>
+  </header>
+  <div class="widget-content">
+    <div class="stats-summary">
+      <div class="stat-item">
+        <span class="stat-label">Usuarios</span>
+        <span class="stat-value">{{ stats.total_users or 0 }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Tarjetas</span>
+        <span class="stat-value">{{ stats.total_cards or 0 }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Actividad</span>
+        <span class="stat-value">
+          {% if stats.total_users and stats.total_users > 0 %}
+            {{ (stats.active_users / stats.total_users * 100) | round(1) }}%
+          {% else %}
+            0%
+          {% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+</section>

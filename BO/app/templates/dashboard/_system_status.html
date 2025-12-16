@@ -1,0 +1,33 @@
+<section class="widget">
+  <header class="widget-header">
+    <h3 class="widget-title">
+      <span class="widget-icon">⚙️</span>
+      Estado del sistema
+    </h3>
+    <div class="widget-actions">
+      <button type="button" class="widget-btn" title="Actualizar" onclick="location.reload()">⟳</button>
+      <a href="{{ url_for('dashboard.system_status_page') }}" class="widget-btn" title="Ver detalle">⇢</a>
+    </div>
+  </header>
+
+  <div class="widget-content">
+    <ul class="system-status-list">
+      <li class="status-item">
+        <span class="label">Base de datos</span>
+        <span class="value">{{ stats.system_stats.database_status }}</span>
+      </li>
+      <li class="status-item">
+        <span class="label">Uso de disco</span>
+        <span class="value">{{ stats.system_stats.storage_usage }}</span>
+      </li>
+      <li class="status-item">
+        <span class="label">Memoria</span>
+        <span class="value">{{ stats.system_stats.memory_usage }}</span>
+      </li>
+      <li class="status-item">
+        <span class="label">Uptime</span>
+        <span class="value">{{ stats.system_stats.uptime }}</span>
+      </li>
+    </ul>
+  </div>
+</section>

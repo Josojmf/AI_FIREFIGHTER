@@ -10,26 +10,25 @@
 
 {% block content %}
 <div class="tokens-container">
-  
-  <!-- Header -->
+  <!-- Header mejorado con responsive -->
   <div class="tokens-header">
     <div class="tokens-title">
       <span class="icon">🔑</span>
-      <h1>Tokens de Acceso</h1>
+      <h1 class="responsive-title">Tokens de Acceso</h1>
     </div>
     <div class="tokens-actions">
-      <button class="btn btn-secondary" onclick="refreshTokens()">
+      <button class="btn btn-secondary mobile-hide" onclick="refreshTokens()">
         <span>🔄</span>
-        Actualizar
+        <span class="btn-text">Actualizar</span>
       </button>
       <a href="{{ url_for('access_tokens.create_token') }}" class="btn btn-primary">
         <span>➕</span>
-        Crear Token
+        <span class="btn-text">Crear Token</span>
       </a>
     </div>
   </div>
 
-  <!-- Estadísticas -->
+  <!-- Estadísticas con grid responsive -->
   <div class="stats-grid" id="statsGrid">
     <div class="stat-card">
       <div class="stat-icon">🔑</div>
@@ -43,7 +42,8 @@
     </div>
     <div class="stat-card">
       <div class="stat-icon">🚫</div>
-      <div class="stat-value" id="revokedTokens">{{ tokens|selectattr('status', 'equalto', 'revoked')|list|length }}</div>
+      <div class="stat-value" id="revokedTokens">{{ tokens|selectattr('status', 'equalto', 'revoked')|list|length }}
+      </div>
       <div class="stat-label">Revocados</div>
     </div>
     <div class="stat-card">
@@ -56,127 +56,138 @@
     </div>
   </div>
 
-  <!-- Tabla de tokens -->
+  <!-- Contenedor de tabla con scroll horizontal para móviles -->
   <div class="tokens-table-container">
     {% if tokens %}
-    <table class="tokens-table">
-      <thead>
-        <tr>
-          <th>Nombre</th>
-          <th>Estado</th>
-          <th>Usos</th>
-          <th>Tipo Usuario</th>
-          <th class="hidden-md">Creado</th>
-          <th class="hidden-md">Expira</th>
-          <th>Token</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for token in tokens %}
-        <tr style="animation-delay: {{ loop.index0 * 0.1 }}s;">
-          <td>
-            <div>
-              <div style="font-weight: 600; color: black">{{ token.name }}</div>
-              {% if token.description %}
-              <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
-                {{ token.description }}
-              </div>
-              {% endif %}
-            </div>
-          </td>
-          <td>
-            {% set status_class = 'active' %}
-            {% if token.status == 'revoked' %}{% set status_class = 'revoked' %}
-            {% elif token.current_uses >= token.max_uses %}{% set status_class = 'exhausted' %}
-            {% endif %}
-            <span class="token-status {{ status_class }}">
-              {{ token.status|title if token.status else 'Active' }}
-            </span>
-          </td>
-          <td>
-            <div class="usage-container">
-              <div class="usage-progress">
-                {% set usage_percent = (token.current_uses / token.max_uses * 100) if token.max_uses > 0 else 0 %}
-                {% set bar_class = '' %}
-                {% if usage_percent >= 90 %}{% set bar_class = 'danger' %}
-                {% elif usage_percent >= 70 %}{% set bar_class = 'warning' %}
+    <div class="table-responsive">
+      <table class="tokens-table">
+        <thead>
+          <tr>
+            <th class="col-name">Nombre</th>
+            <th class="col-status">Estado</th>
+            <th class="col-usage">Usos</th>
+            <th class="col-type">Tipo Usuario</th>
+            <th class="col-created hidden-md">Creado</th>
+            <th class="col-expires hidden-md">Expira</th>
+            <th class="col-token">Token</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for token in tokens %}
+          <tr class="token-row" style="animation-delay: {{ loop.index0 * 0.1 }}s;">
+            <td class="col-name">
+              <div class="token-name-container">
+                <div class="token-name">{{ token.name }}</div>
+                {% if token.description %}
+                <div class="token-description">
+                  {{ token.description }}
+                </div>
                 {% endif %}
-                <div class="usage-progress-bar {{ bar_class }}" style="width: {{ usage_percent }}%;"></div>
               </div>
-              <div class="usage-info">
-                {{ token.current_uses or 0 }} / {{ token.max_uses }} usos
+            </td>
+            <td class="col-status">
+              {% set status_class = 'active' %}
+              {% if token.status == 'revoked' %}
+              {% set status_class = 'revoked' %}
+              {% elif token.current_uses >= token.max_uses %}
+              {% set status_class = 'exhausted' %}
+              {% endif %}
+              <span class="token-status {{ status_class }}">
+                {{ token.status|title if token.status else 'Active' }}
+              </span>
+            </td>
+            <td class="col-usage">
+              <div class="usage-container">
+                <div class="usage-progress">
+                  {% set usage_percent = (token.current_uses / token.max_uses * 100) if token.max_uses > 0 else 0 %}
+                  {% set bar_class = '' %}
+                  {% if usage_percent >= 90 %}
+                  {% set bar_class = 'danger' %}
+                  {% elif usage_percent >= 70 %}
+                  {% set bar_class = 'warning' %}
+                  {% endif %}
+                  <div class="usage-progress-bar {{ bar_class }}" style="width: {{ usage_percent }}%;"></div>
+                </div>
+                <div class="usage-info">
+                  {{ token.current_uses or 0 }} / {{ token.max_uses }} usos
+                </div>
               </div>
-            </div>
-          </td>
-          <td>
-            <span class="token-badge">{{ token.user_type or 'student' }}</span>
-          </td>
-          <td class="hidden-md">
-            <div class="token-badge">
-              {% if token.created_at_formatted %}
-                {{ token.created_at_formatted }}
-              {% else %}
-                {{ token.created_at[:10] if token.created_at else 'N/A' }}
-              {% endif %}
-            </div>
-            {% if token.created_by %}
-            <div style="font-size: 0.75rem; color: #6b7280;">
-              por {{ token.created_by }}
-            </div>
-            {% endif %}
-          </td>
-          <td class="hidden-md">
-            <div class="token-badge">
-              {% if token.expires_at_formatted %}
-                {{ token.expires_at_formatted }}
-              {% else %}
-                {{ token.expires_at[:10] if token.expires_at else 'N/A' }}
-              {% endif %}
-            </div>
-          </td>
-          <td>
-            <div class="token-display" onclick="copyToClipboard('{{ token.token }}')" title="Click para copiar">
-              <span class="token-text">{{ token.token[:12] }}...</span>
-              <span class="copy-icon">📋</span>
-            </div>
-          </td>
-          <td>
-            <div class="token-actions">
-              <a href="{{ url_for('access_tokens.edit_token', token_id=token._id) }}" 
-                 class="btn btn-sm btn-secondary" title="Editar">
-                ✏️
-              </a>
-              
-              {% if token.status != 'revoked' %}
-              <button onclick="confirmAction('revoke', '{{ token._id }}', '{{ token.name }}')" 
-                      class="btn btn-sm btn-warning" title="Revocar">
-                🚫
-              </button>
-              {% else %}
-              <button onclick="confirmAction('reactivate', '{{ token._id }}', '{{ token.name }}')" 
-                      class="btn btn-sm btn-success" title="Reactivar">
-                ✅
-              </button>
-              {% endif %}
-              
-              {% if token.current_uses > 0 %}
-              <button onclick="confirmAction('reset', '{{ token._id }}', '{{ token.name }}')" 
-                      class="btn btn-sm btn-secondary" title="Reiniciar usos">
-                🔄
-              </button>
-              {% endif %}
-              
-              <button onclick="confirmAction('delete', '{{ token._id }}', '{{ token.name }}')" 
-                      class="btn btn-sm btn-danger" title="Eliminar">
-                🗑️
-              </button>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+            </td>
+            <td class="col-type">
+              <span class="token-badge user-type-badge">{{ token.user_type or 'student' }}</span>
+            </td>
+            <td class="col-created hidden-md">
+              <div class="date-container">
+                <div class="date-value">
+                  {% if token.created_at_formatted %}
+                  {{ token.created_at_formatted }}
+                  {% else %}
+                  {{ token.created_at[:10] if token.created_at else 'N/A' }}
+                  {% endif %}
+                </div>
+                {% if token.created_by %}
+                <div class="created-by">
+                  por {{ token.created_by }}
+                </div>
+                {% endif %}
+              </div>
+            </td>
+            <td class="col-expires hidden-md">
+              <div class="date-container">
+                <div class="date-value">
+                  {% if token.expires_at_formatted %}
+                  {{ token.expires_at_formatted }}
+                  {% else %}
+                  {{ token.expires_at[:10] if token.expires_at else 'N/A' }}
+                  {% endif %}
+                </div>
+              </div>
+            </td>
+            <td class="col-token">
+              <div class="token-display" onclick="copyToClipboard('{{ token._id if token._id else token.id }}')"
+                title="Click para copiar">
+                <span class="token-text">{{ token._id[:12] if token._id else token.id[:12] }}...</span>
+                <span class="copy-icon">📋</span>
+              </div>
+            </td>
+            <td class="col-actions">
+              <div class="token-actions">
+                <a href="{{ url_for('access_tokens.edit_token', token_id=token.id) }}" class="btn btn-sm btn-secondary"
+                  title="Editar">
+                  ✏️
+                </a>
+
+                {% if token.status != 'revoked' %}
+                <button onclick="confirmAction('revoke', '{{ token.id }}', '{{ token.name }}')"
+                  class="btn btn-sm btn-warning" title="Revocar">
+                  🚫
+                </button>
+                {% else %}
+                <button onclick="confirmAction('reactivate', '{{ token.id }}', '{{ token.name }}')"
+                  class="btn btn-sm btn-success" title="Reactivar">
+                  ✅
+                </button>
+                {% endif %}
+
+                {% if token.current_uses > 0 %}
+                <button onclick="confirmAction('reset', '{{ token.id }}', '{{ token.name }}')"
+                  class="btn btn-sm btn-secondary" title="Reiniciar usos">
+                  🔄
+                </button>
+                {% endif %}
+
+                <button onclick="confirmAction('delete', '{{ token.id }}', '{{ token.name }}')"
+                  class="btn btn-sm btn-danger" title="Eliminar">
+                  🗑️
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
     <div class="empty-state">
       <div class="icon">🔑</div>
@@ -184,14 +195,14 @@
       <p>Crea tu primer token para permitir el registro de nuevos usuarios</p>
       <a href="{{ url_for('access_tokens.create_token') }}" class="btn btn-primary">
         <span>➕</span>
-        Crear Primer Token
+        <span class="btn-text">Crear Primer Token</span>
       </a>
     </div>
     {% endif %}
   </div>
 </div>
 
-<!-- Modal de confirmación -->
+<!-- Modal de confirmación responsive -->
 <div id="confirmModal" class="modal" style="display: none;">
   <div class="modal-backdrop" onclick="closeModal()"></div>
   <div class="modal-dialog">
@@ -213,386 +224,534 @@
 
 {% block scripts %}
 <script>
-// JavaScript unificado para todas las páginas de tokens
-let currentAction = null;
-let currentTokenId = null;
-let currentTokenName = null;
+  let currentAction = null;
+  let currentTokenId = null;
+  let currentTokenName = null;
+  let isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-function refreshTokens() {
-  const refreshBtn = document.querySelector('.btn-secondary');
-  refreshBtn.classList.add('loading');
-  
-  setTimeout(() => {
-    window.location.reload();
-  }, 500);
-}
+  function isMobile() {
+    return window.innerWidth <= 768;
+  }
 
-function copyToClipboard(text) {
-  // Método 1: Usando navigator.clipboard (moderno)
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => {
-      showNotification('✅ Token copiado al portapapeles');
-    }).catch(() => {
-      fallbackCopyToClipboard(text);
+  function isTablet() {
+    return window.innerWidth > 768 && window.innerWidth <= 1024;
+  }
+
+  function adjustForMobile() {
+    const mobile = isMobile();
+    const tablet = isTablet();
+
+    const buttons = document.querySelectorAll('.btn');
+    buttons.forEach(btn => {
+      if (mobile) {
+        btn.style.padding = '12px 16px';
+        btn.style.minHeight = '44px';
+        btn.style.fontSize = '16px';
+      } else {
+        btn.style.padding = '';
+        btn.style.minHeight = '';
+        btn.style.fontSize = '';
+      }
     });
-  } else {
-    fallbackCopyToClipboard(text);
-  }
-}
 
-function fallbackCopyToClipboard(text) {
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.style.position = 'fixed';
-  textArea.style.left = '-999999px';
-  textArea.style.top = '-999999px';
-  textArea.style.opacity = '0';
-  
-  document.body.appendChild(textArea);
-  textArea.focus();
-  textArea.select();
-  
-  try {
-    const successful = document.execCommand('copy');
-    document.body.removeChild(textArea);
-    
-    if (successful) {
-      showNotification('✅ Token copiado al portapapeles');
-    } else {
-      showNotification('❌ Error al copiar, intente manualmente', true);
+    document.querySelectorAll('.mobile-hide').forEach(el => {
+      el.style.display = mobile ? 'none' : '';
+    });
+
+    const tableResponsive = document.querySelector('.table-responsive');
+    if (tableResponsive && mobile) {
+      tableResponsive.style.overflowX = 'auto';
+      tableResponsive.style.webkitOverflowScrolling = 'touch';
     }
-  } catch (err) {
-    document.body.removeChild(textArea);
-    showCopyPrompt(text);
   }
-}
 
-function showCopyPrompt(text) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText = `
+  function copyToClipboard(text) {
+    if (isMobile()) {
+      showMobileCopyDialog(text);
+      return;
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        showNotification('✅ Token copiado al portapapeles');
+      }).catch(err => {
+        console.error('Error al copiar:', err);
+        fallbackCopyToClipboard(text);
+      });
+    } else {
+      fallbackCopyToClipboard(text);
+    }
+  }
+
+  function fallbackCopyToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      document.execCommand('copy');
+      showNotification('✅ Token copiado al portapapeles');
+    } catch (err) {
+      console.error('Error al copiar:', err);
+      showNotification('❌ Error al copiar token', 'error');
+    }
+
+    document.body.removeChild(textArea);
+  }
+
+  function showMobileCopyDialog(text) {
+    const overlay = document.createElement('div');
+    overlay.className = 'mobile-copy-overlay';
+    overlay.style.cssText = `
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10000;
+    padding: 20px;
+    backdrop-filter: blur(10px);
   `;
-  
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    background: white;
-    padding: 2rem;
-    border-radius: 0.5rem;
-    max-width: 500px;
-    width: 90%;
-    text-align: center;
-  `;
-  
-  modal.innerHTML = `
-    <h3 style="margin-bottom: 1rem; color: #1f2937;">Copiar Token</h3>
-    <p style="margin-bottom: 1.5rem; color: #6b7280;">Selecciona el token y cópialo manualmente:</p>
-    <textarea 
-      style="
-        width: 100%;
-        padding: 0.75rem;
-        border: 2px solid #e5e7eb;
-        border-radius: 0.375rem;
-        font-family: monospace;
-        resize: none;
-        background: #f9fafb;
-        margin-bottom: 1.5rem;
-      "
-      rows="4"
-      readonly
-    >${text}</textarea>
-    <button onclick="this.closest('.copy-overlay').remove()" style="
-      background: #3b82f6;
-      color: white;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 0.375rem;
-      cursor: pointer;
-      font-weight: 600;
-    ">
-      Cerrar
-    </button>
-  `;
-  
-  overlay.className = 'copy-overlay';
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-  
-  // Seleccionar automáticamente el texto
-  const textarea = overlay.querySelector('textarea');
-  textarea.select();
-}
 
-function showNotification(message, isError = false) {
-  const notification = document.createElement('div');
-  notification.style.cssText = `
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+    background: ${document.body.classList.contains('dark-mode') ? '#1f2937' : 'white'};
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border: 1px solid ${document.body.classList.contains('dark-mode') ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'};
+  `;
+
+    dialog.innerHTML = `
+    <h3 style="margin-bottom: 16px; color: ${document.body.classList.contains('dark-mode') ? '#f9fafb' : '#1f2937'}; font-size: 1.25rem; font-weight: 700;">Copiar Token</h3>
+    <p style="margin-bottom: 16px; color: ${document.body.classList.contains('dark-mode') ? '#d1d5db' : '#6b7280'}; font-size: 0.95rem;">Toca para seleccionar y copiar:</p>
+    <div id="tokenText" style="
+      background: ${document.body.classList.contains('dark-mode') ? '#374151' : '#f3f4f6'};
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      user-select: all;
+      -webkit-user-select: all;
+      -moz-user-select: all;
+      -ms-user-select: all;
+      font-family: 'Courier New', monospace;
+      word-break: break-all;
+      font-size: ${isMobile() ? '14px' : '16px'};
+      line-height: 1.5;
+      border: 2px solid ${document.body.classList.contains('dark-mode') ? '#4b5563' : '#e5e7eb'};
+      color: ${document.body.classList.contains('dark-mode') ? '#f9fafb' : '#1f2937'};
+      max-height: 200px;
+      overflow-y: auto;
+    ">${text}</div>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <button id="copyBtn" style="
+        flex: 1;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        min-height: 44px;
+        transition: all 0.2s ease;
+      " onclick="copyTextToClipboard('${text}')">
+        Copiar al Portapapeles
+      </button>
+      <button style="
+        flex: 1;
+        background: ${document.body.classList.contains('dark-mode') ? '#4b5563' : '#6b7280'};
+        color: white;
+        border: none;
+        padding: 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        min-height: 44px;
+        transition: all 0.2s ease;
+      " onclick="this.closest('.mobile-copy-overlay').remove()">
+        Cerrar
+      </button>
+    </div>
+  `;
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+      const textDiv = document.getElementById('tokenText');
+      const range = document.createRange();
+      range.selectNodeContents(textDiv);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }, 100);
+
+    const copyBtn = document.getElementById('copyBtn');
+    copyBtn.addEventListener('touchstart', () => {
+      copyBtn.style.transform = 'scale(0.98)';
+    });
+    copyBtn.addEventListener('touchend', () => {
+      copyBtn.style.transform = '';
+    });
+  }
+
+  function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        showNotification('✅ Token copiado al portapapeles');
+        document.querySelector('.mobile-copy-overlay')?.remove();
+      }).catch(err => {
+        console.error('Error al copiar:', err);
+        fallbackCopyToClipboard(text);
+        document.querySelector('.mobile-copy-overlay')?.remove();
+      });
+    } else {
+      fallbackCopyToClipboard(text);
+      document.querySelector('.mobile-copy-overlay')?.remove();
+    }
+  }
+
+  function showNotification(message, type = 'success') {
+    const existingNotification = document.querySelector('.custom-notification');
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+
+    const notification = document.createElement('div');
+    notification.className = `custom-notification notification-${type}`;
+    notification.innerHTML = message;
+    notification.style.cssText = `
     position: fixed;
     top: 20px;
     right: 20px;
-    background: ${isError ? '#ef4444' : '#10b981'};
+    background: ${type === 'success' ? '#10b981' : type === 'info' ? '#3b82f6' : '#ef4444'};
     color: white;
-    padding: 1rem 1.5rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+    padding: 16px 24px;
+    border-radius: 8px;
     font-weight: 600;
-    animation: slideInRight 0.3s ease-out;
+    z-index: 10001;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    animation: slideInRight 0.3s ease;
+    max-width: 300px;
+    word-wrap: break-word;
   `;
-  notification.textContent = message;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.style.animation = 'fadeOut 0.3s ease-out';
+
+    document.body.appendChild(notification);
+
     setTimeout(() => {
-      if (document.body.contains(notification)) {
-        document.body.removeChild(notification);
+      notification.style.animation = 'fadeOut 0.3s ease';
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    }, 3000);
+  }
+
+  function animateCounter(elementId, targetValue) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const currentValue = parseInt(element.textContent) || 0;
+    if (currentValue === targetValue) return;
+
+    const duration = 500;
+    const steps = 20;
+    const increment = (targetValue - currentValue) / steps;
+    let step = 0;
+
+    const timer = setInterval(() => {
+      step++;
+      const newValue = Math.round(currentValue + (increment * step));
+      element.textContent = newValue;
+
+      if (step >= steps) {
+        element.textContent = targetValue;
+        clearInterval(timer);
       }
-    }, 300);
-  }, 2000);
-}
+    }, duration / steps);
+  }
 
-function confirmAction(action, tokenId, tokenName) {
-  currentAction = action;
-  currentTokenId = tokenId;
-  currentTokenName = tokenName;
-  
-  const modal = document.getElementById('confirmModal');
-  const title = document.getElementById('confirmTitle');
-  const message = document.getElementById('confirmMessage');
-  const button = document.getElementById('confirmButton');
-  
-  // Añadir efecto de vibración al botón presionado
-  const clickedButton = event.target.closest('.btn');
-  if (clickedButton) {
-    clickedButton.style.transform = 'scale(0.95)';
+  function updateStats() {
+    if (isMobile()) return;
+
+    fetch('{{ url_for("access_tokens.token_stats") }}')
+      .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+      })
+      .then(data => {
+        if (data.total_tokens !== undefined) {
+          animateCounter('totalTokens', data.total_tokens);
+          animateCounter('activeTokens', data.active_tokens || 0);
+          animateCounter('revokedTokens', data.revoked_tokens || 0);
+          animateCounter('totalUses', data.total_uses || 0);
+        }
+      })
+      .catch(error => {
+        console.error('Error al actualizar estadísticas:', error);
+      });
+  }
+
+  function setupResponsiveIntervals() {
+    if (isMobile()) {
+      setInterval(updateStats, 60000);
+    } else {
+      setInterval(updateStats, 30000);
+    }
+  }
+
+  function refreshTokens() {
+    showNotification('🔄 Actualizando tokens...', 'info');
     setTimeout(() => {
-      clickedButton.style.transform = '';
-    }, 150);
+      window.location.reload();
+    }, 500);
   }
-  
-  switch(action) {
-    case 'revoke':
-      title.textContent = 'Revocar Token';
-      message.textContent = `¿Estás seguro de revocar el token "${tokenName}"? Los usuarios no podrán usarlo para registrarse.`;
-      button.textContent = 'Revocar';
-      button.className = 'btn btn-warning';
-      break;
-    case 'reactivate':
-      title.textContent = 'Reactivar Token';
-      message.textContent = `¿Estás seguro de reactivar el token "${tokenName}"?`;
-      button.textContent = 'Reactivar';
-      button.className = 'btn btn-success';
-      break;
-    case 'reset':
-      title.textContent = 'Reiniciar Usos';
-      message.textContent = `¿Estás seguro de reiniciar el contador de usos del token "${tokenName}" a 0?`;
-      button.textContent = 'Reiniciar';
-      button.className = 'btn btn-secondary';
-      break;
-    case 'delete':
-      title.textContent = 'Eliminar Token';
-      message.textContent = `¿Estás seguro de eliminar permanentemente el token "${tokenName}"? Esta acción no se puede deshacer.`;
-      button.textContent = 'Eliminar';
-      button.className = 'btn btn-danger';
-      break;
-  }
-  
-  modal.style.display = 'block';
-}
 
-function closeModal() {
-  const modal = document.getElementById('confirmModal');
-  modal.style.animation = 'fadeOut 0.3s ease-out';
-  setTimeout(() => {
-    modal.style.display = 'none';
-    modal.style.animation = '';
-  }, 300);
-  currentAction = null;
-  currentTokenId = null;
-  currentTokenName = null;
-}
+  function confirmAction(action, tokenId, tokenName) {
+    currentAction = action;
+    currentTokenId = tokenId;
+    currentTokenName = tokenName;
 
-function executeAction() {
-  if (!currentAction || !currentTokenId) {
-    closeModal();
-    return;
-  }
-  
-  const confirmButton = document.getElementById('confirmButton');
-  const originalText = confirmButton.textContent;
-  confirmButton.textContent = 'Procesando...';
-  confirmButton.disabled = true;
-  confirmButton.classList.add('loading');
-  
-  setTimeout(() => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    
-    switch(currentAction) {
+    const modal = document.getElementById('confirmModal');
+    const title = document.getElementById('confirmTitle');
+    const message = document.getElementById('confirmMessage');
+    const confirmBtn = document.getElementById('confirmButton');
+
+    let actionText = '';
+
+    switch (action) {
       case 'revoke':
-        form.action = `{{ url_for('access_tokens.revoke_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        actionText = 'revocar';
+        confirmBtn.className = 'btn btn-warning';
         break;
       case 'reactivate':
-        form.action = `{{ url_for('access_tokens.reactivate_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        actionText = 'reactivar';
+        confirmBtn.className = 'btn btn-success';
         break;
       case 'reset':
-        form.action = `{{ url_for('access_tokens.reset_uses', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        actionText = 'reiniciar usos de';
+        confirmBtn.className = 'btn btn-secondary';
         break;
       case 'delete':
-        form.action = `{{ url_for('access_tokens.delete_token', token_id='TOKEN_ID') }}`.replace('TOKEN_ID', currentTokenId);
+        actionText = 'eliminar permanentemente';
+        confirmBtn.className = 'btn btn-danger';
         break;
+      default:
+        actionText = 'realizar esta acción en';
+        confirmBtn.className = 'btn btn-danger';
     }
-    
-    // CSRF token si existe
-    const csrfToken = document.querySelector('meta[name=csrf-token]');
-    if (csrfToken) {
-      const csrfInput = document.createElement('input');
-      csrfInput.type = 'hidden';
-      csrfInput.name = 'csrf_token';
-      csrfInput.value = csrfToken.getAttribute('content');
-      form.appendChild(csrfInput);
-    }
-    
-    document.body.appendChild(form);
-    form.submit();
-  }, 1000);
-}
 
-// Cerrar modal con Escape
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    closeModal();
+    title.textContent = `Confirmar ${actionText.charAt(0).toUpperCase() + actionText.slice(1)}`;
+    message.innerHTML = `¿Estás seguro de que deseas <strong>${actionText}</strong> el token <strong>"${tokenName}"</strong>?`;
+
+    modal.style.display = 'block';
+    setTimeout(() => {
+      modal.querySelector('.modal-dialog').style.transform = 'translateY(0)';
+      modal.querySelector('.modal-dialog').style.opacity = '1';
+    }, 10);
   }
-});
 
-// Tooltips personalizados
-document.addEventListener('DOMContentLoaded', function() {
-  // Efecto de aparición escalonada para las filas de la tabla
-  const tableRows = document.querySelectorAll('.tokens-table tbody tr');
-  tableRows.forEach((row, index) => {
-    row.style.animationDelay = `${index * 0.1}s`;
-  });
+  function closeModal() {
+    const modal = document.getElementById('confirmModal');
+    modal.querySelector('.modal-dialog').style.transform = 'translateY(-20px)';
+    modal.querySelector('.modal-dialog').style.opacity = '0';
 
-  // Tooltips mejorados
-  const tooltips = document.querySelectorAll('[title]');
-  tooltips.forEach(tooltip => {
-    tooltip.addEventListener('mouseenter', function(e) {
-      // Crear tooltip personalizado
-      const tooltipText = this.getAttribute('title');
-      const tooltipEl = document.createElement('div');
-      tooltipEl.className = 'custom-tooltip';
-      tooltipEl.textContent = tooltipText;
-      document.body.appendChild(tooltipEl);
-      
-      const rect = this.getBoundingClientRect();
-      tooltipEl.style.left = `${rect.left + rect.width / 2}px`;
-      tooltipEl.style.top = `${rect.top - 10}px`;
-      tooltipEl.style.transform = 'translateX(-50%) translateY(-100%)';
-      
-      this.setAttribute('title', '');
-    });
-    
-    tooltip.addEventListener('mouseleave', function() {
-      const tooltipEl = document.querySelector('.custom-tooltip');
-      if (tooltipEl) {
-        this.setAttribute('title', tooltipEl.textContent);
-        tooltipEl.remove();
-      }
-    });
-  });
+    setTimeout(() => {
+      modal.style.display = 'none';
+      currentAction = null;
+      currentTokenId = null;
+      currentTokenName = null;
+    }, 300);
+  }
 
-  // Efecto de carga para acciones
-  const actionButtons = document.querySelectorAll('.token-actions .btn');
-  actionButtons.forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      if (this.classList.contains('btn-danger') || 
-          this.classList.contains('btn-warning')) {
-        this.classList.add('loading');
-        setTimeout(() => {
-          this.classList.remove('loading');
-        }, 1500);
-      }
-    });
-  });
+  function executeAction() {
+    if (!currentAction || !currentTokenId) {
+      showNotification('❌ Error: Acción no válida', 'error');
+      closeModal();
+      return;
+    }
 
-  // Forzar aplicación de estilos de modo oscuro
-  applyDarkModeStyles();
-});
+    const formData = new FormData();
+    formData.append('action', currentAction);
+    formData.append('token_id', currentTokenId);
 
-// Actualizar estadísticas dinámicamente
-function updateStats() {
-  fetch('{{ url_for("access_tokens.token_stats") }}')
-    .then(response => response.json())
-    .then(data => {
-      if (data.total_tokens !== undefined) {
-        // Animación de conteo
-        animateCounter('totalTokens', data.total_tokens);
-        animateCounter('activeTokens', data.active_tokens || 0);
-        animateCounter('revokedTokens', data.revoked_tokens || 0);
-        animateCounter('totalUses', data.total_uses || 0);
+    const confirmBtn = document.getElementById('confirmButton');
+    const originalText = confirmBtn.innerHTML;
+    confirmBtn.innerHTML = '<span class="loading-spinner"></span> Procesando...';
+    confirmBtn.disabled = true;
+
+    fetch('{{ url_for("access_tokens.handle_action") }}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
       }
     })
-    .catch(error => {
-      console.error('Error al actualizar estadísticas:', error);
-    });
-}
+      .then(response => {
+        if (!response.ok) throw new Error('Network response was not ok');
+        return response.json();
+      })
+      .then(data => {
+        if (data.success) {
+          showNotification(`✅ ${data.message}`, 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        } else {
+          showNotification(`❌ ${data.message}`, 'error');
+          confirmBtn.innerHTML = originalText;
+          confirmBtn.disabled = false;
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showNotification('❌ Error al procesar la solicitud', 'error');
+        confirmBtn.innerHTML = originalText;
+        confirmBtn.disabled = false;
+      });
 
-// Animación de contador
-function animateCounter(elementId, targetValue) {
-  const element = document.getElementById(elementId);
-  const currentValue = parseInt(element.textContent);
-  const duration = 1000;
-  const step = (targetValue - currentValue) / (duration / 16);
-  let current = currentValue;
-
-  const timer = setInterval(() => {
-    current += step;
-    if ((step > 0 && current >= targetValue) || (step < 0 && current <= targetValue)) {
-      clearInterval(timer);
-      current = targetValue;
-    }
-    element.textContent = Math.round(current);
-  }, 16);
-}
-
-// Actualizar estadísticas cada 30 segundos
-setInterval(updateStats, 30000);
-
-// Detectar y aplicar modo oscuro inmediatamente
-function applyDarkModeStyles() {
-  if (document.body.classList.contains('dark-mode')) {
-    console.log('Modo oscuro detectado - aplicando correcciones inmediatas');
-    
-    // Aplicar estilos directamente a las stats cards
-    const statCards = document.querySelectorAll('.stat-card');
-    statCards.forEach(card => {
-      card.style.background = '#1f2937';
-      card.style.borderColor = '#374151';
-      card.style.color = '#f9fafb';
-    });
-    
-    const statValues = document.querySelectorAll('.stat-value');
-    statValues.forEach(value => {
-      value.style.color = '#f9fafb';
-    });
-    
-    const statLabels = document.querySelectorAll('.stat-label');
-    statLabels.forEach(label => {
-      label.style.color = '#d1d5db';
-    });
+    closeModal();
   }
-}
 
-// Ejecutar inmediatamente y en cada cambio
-setTimeout(applyDarkModeStyles, 500);
-setTimeout(applyDarkModeStyles, 1000);
+  document.addEventListener('DOMContentLoaded', function () {
+    adjustForMobile();
+    setupResponsiveIntervals();
+
+    let resizeTimeout;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(adjustForMobile, 250);
+    });
+
+    if (!isMobile()) {
+      const tooltips = document.querySelectorAll('[title]');
+      tooltips.forEach(tooltip => {
+        tooltip.addEventListener('mouseenter', function (e) {
+          const title = this.getAttribute('title');
+          if (!title) return;
+
+          const tooltipEl = document.createElement('div');
+          tooltipEl.className = 'custom-tooltip';
+          tooltipEl.textContent = title;
+          tooltipEl.style.left = e.pageX + 'px';
+          tooltipEl.style.top = (e.pageY - 10) + 'px';
+
+          document.body.appendChild(tooltipEl);
+
+          this.addEventListener('mouseleave', function () {
+            tooltipEl.remove();
+          }, { once: true });
+        });
+      });
+    }
+
+    document.addEventListener('touchstart', function (e) {
+      const modal = document.getElementById('confirmModal');
+      if (modal.style.display === 'block' && e.target.classList.contains('modal-backdrop')) {
+        closeModal();
+      }
+    }, { passive: true });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('confirmModal');
+        if (modal.style.display === 'block') {
+          closeModal();
+        }
+      }
+    });
+
+    document.addEventListener('touchstart', function (e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        document.body.style.zoom = "100%";
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function (e) {
+      if (e.target.classList.contains('table-responsive')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+  });
+
+  const style = document.createElement('style');
+  style.textContent = `
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+  }
+`;
+  document.head.appendChild(style);
 </script>
+
+<style>
+  .mobile-hide {
+    display: block;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+    position: relative;
+  }
+
+  /* aquí puedes mantener todo el resto de tus estilos inline si los necesitas */
+
+  /* Ajuste clave: no forzar min-width enorme en móvil */
+  @media (max-width: 768px) {
+    .tokens-table {
+      min-width: 100%;
+    }
+  }
+</style>
 {% endblock %}

@@ -1,33 +1,45 @@
-# API/requirements.txt - Backend API dependencies
+# API/requirements-fastapi.txt - Backend API dependencies (FastAPI)
 
-# Core Flask API
-flask==2.3.3
-flask-cors==4.0.0
-werkzeug==2.3.7
+# Core FastAPI
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18  # Para form data y file uploads
 
 # Database
 pymongo==4.5.0
 
 # Security
 bcrypt==4.0.1
+python-jose[cryptography]==3.3.0  # Para JWT
+passlib[bcrypt]==1.7.4  # Password hashing
 
 # Configuration
 python-dotenv==1.0.0
 
 # HTTP requests
 requests==2.31.0
-
-# Production server
-gunicorn==21.2.0
-
-# JWT for authentication
-PyJWT==2.8.0          # Cambiado de flask-jwt-extended a PyJWT (que es lo que usas)
+httpx==0.28.1  # Cliente HTTP async para FastAPI
 
 # MFA Dependencies
 pyotp==2.9.0          # Para generar y verificar códigos TOTP
 qrcode[pil]==7.4.2     # Para generar códigos QR
 Pillow==10.1.0         # Para procesamiento de imágenes QR
+
+# Docker
 docker>=6.0.0
 
-#sendgrid
+# Email - SendGrid
 sendgrid==6.9.7
+
+# Cache
+redis==5.0.1
+
+# Producción
+gunicorn==21.2.0  # Para deploy con uvicorn workers
+gevent==23.9.1
+
+# Monitoreo y logging
+prometheus-fastapi-instrumentator==7.0.0  # Opcional: métricas Prometheus
+
+uvloop==0.17.0  # Opcional: event loop rápido para uvicorn
+httptools==0.6.0  # Opcional: parser HTTP rápido para uvicorn

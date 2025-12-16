@@ -6,29 +6,51 @@
 {% block styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/access_tokens.css') }}">
+<!-- Meta tag para responsive -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 {% endblock %}
 
 {% block content %}
 <div class="edit-token-container">
+  {% if token %}
+  
+  <!-- Header responsive -->
   <div class="form-header">
-    <h1>✏️ Editar Token</h1>
-    <p>Modifica la configuración del token de acceso</p>
+    <div class="header-content">
+      <div class="header-icon">✏️</div>
+      <div class="header-text">
+        <h1>Editar Token</h1>
+        <p class="subtitle">Modifica la configuración del token de acceso</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="{{ url_for('access_tokens.token_list') }}" class="btn-back">
+        ← Volver a la lista
+      </a>
+    </div>
   </div>
 
   <div class="form-container">
-    {% if token %}
-    
-    <!-- Información actual del token -->
+    <!-- Token ID para referencia -->
+    <div class="token-id-badge">
+      <span class="badge-label">ID:</span>
+      <span class="badge-value">{{ token._id }}</span>
+    </div>
+
+    <!-- Sección 1: Información actual del token -->
     <div class="token-info-section">
-      <div class="info-title">
-        <span>📊</span>
-        Información del Token
+      <div class="section-header">
+        <div class="section-icon">📊</div>
+        <h2>Información del Token</h2>
       </div>
       
-      <div class="info-grid">
-        <div class="info-item">
-          <div class="info-label">Estado Actual</div>
-          <div class="info-value">
+      <div class="info-grid responsive-grid">
+        <div class="info-card">
+          <div class="info-card-header">
+            <span class="info-icon">🏷️</span>
+            <h3 class="info-card-title">Estado</h3>
+          </div>
+          <div class="info-card-body">
             {% set status_class = 'active' %}
             {% if token.status == 'revoked' %}{% set status_class = 'revoked' %}
             {% elif token.current_uses >= token.max_uses %}{% set status_class = 'exhausted' %}
@@ -39,157 +61,387 @@
           </div>
         </div>
         
-        <div class="info-item">
-          <div class="info-label">Creado</div>
-          <div class="info-value">
-            {{ token.created_at_formatted if token.created_at_formatted else token.created_at[:10] if token.created_at else 'N/A' }}
+        <div class="info-card">
+          <div class="info-card-header">
+            <span class="info-icon">📅</span>
+            <h3 class="info-card-title">Fecha de Creación</h3>
+          </div>
+          <div class="info-card-body">
+            <div class="info-date">
+              {{ token.created_at_formatted if token.created_at_formatted else token.created_at[:10] if token.created_at else 'N/A' }}
+            </div>
             {% if token.created_by %}
-            <br><small>por {{ token.created_by }}</small>
+            <div class="info-creator">
+              <small>Creado por: {{ token.created_by }}</small>
+            </div>
             {% endif %}
           </div>
         </div>
         
-        <div class="info-item">
-          <div class="info-label">Expira</div>
-          <div class="info-value">
-            {{ token.expires_at_formatted if token.expires_at_formatted else token.expires_at[:10] if token.expires_at else 'N/A' }}
+        <div class="info-card">
+          <div class="info-card-header">
+            <span class="info-icon">⏰</span>
+            <h3 class="info-card-title">Fecha de Expiración</h3>
+          </div>
+          <div class="info-card-body">
+            <div class="info-date {% if token.is_expired %}expired-text{% endif %}">
+              {{ token.expires_at_formatted if token.expires_at_formatted else token.expires_at[:10] if token.expires_at else 'N/A' }}
+            </div>
+            {% if token.is_expired %}
+            <div class="info-expired">
+              <small class="expired-text">Token expirado</small>
+            </div>
+            {% endif %}
           </div>
         </div>
         
-        <div class="info-item">
-          <div class="info-label">Uso Actual</div>
-          <div class="info-value">
+        <div class="info-card">
+          <div class="info-card-header">
+            <span class="info-icon">📈</span>
+            <h3 class="info-card-title">Uso Actual</h3>
+          </div>
+          <div class="info-card-body">
             <div class="usage-display">
+              {% set usage_percent = (token.current_uses / token.max_uses * 100) if token.max_uses > 0 else 0 %}
+              {% set bar_class = '' %}
+              {% if usage_percent >= 90 %}{% set bar_class = 'danger' %}
+              {% elif usage_percent >= 70 %}{% set bar_class = 'warning' %}
+              {% endif %}
+              
+              <div class="usage-stats">
+                <div class="usage-numbers">
+                  <span class="current-uses">{{ token.current_uses or 0 }}</span>
+                  <span class="usage-separator">/</span>
+                  <span class="max-uses">{{ token.max_uses }}</span>
+                </div>
+                <div class="usage-percent">{{ usage_percent|round|int }}%</div>
+              </div>
+              
               <div class="usage-progress">
-                {% set usage_percent = (token.current_uses / token.max_uses * 100) if token.max_uses > 0 else 0 %}
-                {% set bar_class = '' %}
-                {% if usage_percent >= 90 %}{% set bar_class = 'danger' %}
-                {% elif usage_percent >= 70 %}{% set bar_class = 'warning' %}
-                {% endif %}
                 <div class="usage-progress-bar {{ bar_class }}" style="width: {{ usage_percent }}%;"></div>
               </div>
-              <div class="usage-text">
-                {{ token.current_uses or 0 }} / {{ token.max_uses }}
+              
+              <div class="usage-status">
+                {% if usage_percent >= 90 %}
+                <span class="status-warning">⚠️ Uso crítico</span>
+                {% elif usage_percent >= 70 %}
+                <span class="status-alert">⚠️ Uso alto</span>
+                {% else %}
+                <span class="status-ok">✅ Uso normal</span>
+                {% endif %}
               </div>
             </div>
           </div>
         </div>
       </div>
       
-      <div class="info-item" style="margin-top: 1rem;">
-        <div class="info-label">Token de Acceso</div>
-        <div class="token-value-display">
-          {{ token.token }}
-          <button type="button" class="copy-button" onclick="copyToken('{{ token.token }}')">
-            📋 Copiar
-          </button>
+      <!-- Token value con copy mejorado -->
+      <div class="token-value-section">
+        <div class="section-subheader">
+          <span class="subheader-icon">🔑</span>
+          <h3>Token de Acceso</h3>
+        </div>
+        <div class="token-value-container">
+          <div class="token-value-display">
+            <code class="token-text">{{ token.token }}</code>
+            <div class="token-actions">
+              <button type="button" class="copy-token-btn" onclick="copyToken('{{ token.token }}')" 
+                      aria-label="Copiar token al portapapeles">
+                <span class="copy-icon">📋</span>
+                <span class="copy-text">Copiar</span>
+              </button>
+              <button type="button" class="show-token-btn" onclick="toggleTokenVisibility()" 
+                      aria-label="Mostrar/ocultar token">
+                <span class="eye-icon">👁️</span>
+                <span class="eye-text">Mostrar</span>
+              </button>
+            </div>
+          </div>
+          <div class="token-help">
+            <small>Este token es utilizado para el registro de usuarios. Mantenlo seguro.</small>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Formulario de edición -->
-    <form id="editTokenForm" method="POST" action="{{ url_for('access_tokens.edit_token', token_id=token._id) }}">
+    <!-- Sección 2: Formulario de edición -->
+    <form id="editTokenForm" method="POST" action="{{ url_for('access_tokens.edit_token', token_id=token._id) }}" 
+          class="edit-token-form">
       
-      <!-- Información básica -->
-      <div class="form-group">
-        <label for="name" class="form-label required">Nombre del Token</label>
-        <input type="text" id="name" name="name" class="form-input" 
-               value="{{ token.name }}" required maxlength="100">
-        <div class="form-help">Nombre descriptivo para identificar el token</div>
-      </div>
+      <div class="form-section">
+        <div class="section-header">
+          <div class="section-icon">📝</div>
+          <h2>Editar Configuración</h2>
+        </div>
 
-      <div class="form-group">
-        <label for="description" class="form-label">Descripción</label>
-        <textarea id="description" name="description" class="form-input form-textarea" 
-                  placeholder="Descripción opcional del propósito del token...">{{ token.description or '' }}</textarea>
-        <div class="form-help">Descripción opcional para documentar el uso del token</div>
-      </div>
-
-      <!-- Configuración de usos -->
-      <div class="form-grid">
+        <!-- Información básica -->
         <div class="form-group">
-          <label for="max_uses" class="form-label required">Máximo de Usos</label>
-          <input type="number" id="max_uses" name="max_uses" class="form-input" 
-                 value="{{ token.max_uses }}" min="1" max="1000" required>
-          <div class="form-help">Número máximo de registros permitidos</div>
+          <div class="label-container">
+            <label for="name" class="form-label required">Nombre del Token</label>
+            <span class="required-indicator">*</span>
+          </div>
+          <div class="input-container">
+            <input type="text" id="name" name="name" class="form-input" 
+                   value="{{ token.name }}" required maxlength="100"
+                   aria-label="Nombre del token">
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Nombre descriptivo para identificar el token (mínimo 3 caracteres)</div>
         </div>
 
         <div class="form-group">
-          <label for="status" class="form-label">Estado</label>
-          <select id="status" name="status" class="form-select">
-            <option value="active" {% if token.status == 'active' %}selected{% endif %}>Activo</option>
-            <option value="revoked" {% if token.status == 'revoked' %}selected{% endif %}>Revocado</option>
-          </select>
-          <div class="form-help">Cambia el estado del token</div>
+          <label for="description" class="form-label">Descripción</label>
+          <div class="input-container">
+            <textarea id="description" name="description" class="form-input form-textarea" 
+                      placeholder="Descripción opcional del propósito del token..."
+                      aria-label="Descripción del token"
+                      rows="3">{{ token.description or '' }}</textarea>
+            <div class="input-feedback"></div>
+          </div>
+          <div class="form-help">Descripción opcional para documentar el uso del token</div>
+        </div>
+
+        <!-- Configuración -->
+        <div class="form-grid responsive-grid">
+          <div class="form-group">
+            <div class="label-container">
+              <label for="max_uses" class="form-label required">Máximo de Usos</label>
+              <span class="required-indicator">*</span>
+            </div>
+            <div class="input-container">
+              <input type="number" id="max_uses" name="max_uses" class="form-input" 
+                     value="{{ token.max_uses }}" min="1" max="1000" required
+                     aria-label="Número máximo de usos">
+              <div class="input-feedback"></div>
+            </div>
+            <div class="form-help">Número máximo de registros permitidos (1-1000)</div>
+          </div>
+
+          <div class="form-group">
+            <div class="label-container">
+              <label for="status" class="form-label">Estado</label>
+              <span class="optional-indicator">Opcional</span>
+            </div>
+            <div class="input-container">
+              <div class="select-wrapper">
+                <select id="status" name="status" class="form-select" 
+                        aria-label="Estado del token">
+                  <option value="active" {% if token.status == 'active' %}selected{% endif %}>Activo</option>
+                  <option value="revoked" {% if token.status == 'revoked' %}selected{% endif %}>Revocado</option>
+                </select>
+                <div class="select-arrow">▼</div>
+              </div>
+              <div class="input-feedback"></div>
+            </div>
+            <div class="form-help">Cambia el estado del token. "Revocado" desactivará el token.</div>
+          </div>
+        </div>
+
+        <!-- Información de solo lectura -->
+        <div class="form-section readonly-section">
+          <div class="section-subheader">
+            <span class="subheader-icon">🔒</span>
+            <h3>Información de Solo Lectura</h3>
+          </div>
+          
+          <div class="form-grid responsive-grid">
+            <div class="form-group">
+              <label class="form-label">Tipo de Usuario</label>
+              <div class="readonly-input">
+                <div class="readonly-content">
+                  <span class="readonly-icon">👥</span>
+                  <span class="readonly-value">{{ token.user_type|title if token.user_type else 'Student' }}</span>
+                </div>
+              </div>
+              <div class="form-help">El tipo de usuario no puede modificarse después de crear el token</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Usos Actuales</label>
+              <div class="readonly-input">
+                <div class="readonly-content">
+                  <span class="readonly-icon">🔢</span>
+                  <span class="readonly-value">{{ token.current_uses or 0 }}</span>
+                </div>
+              </div>
+              <div class="form-help">Para reiniciar el contador, contacta con un administrador</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Campos de solo lectura -->
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Tipo de Usuario</label>
-          <input type="text" class="form-input" 
-                 value="{{ token.user_type|title if token.user_type else 'Student' }}" 
-                 disabled>
-          <div class="form-help">El tipo de usuario no puede modificarse</div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Usos Actuales</label>
-          <input type="text" class="form-input" 
-                 value="{{ token.current_uses or 0 }}" 
-                 disabled>
-          <div class="form-help">Usa las acciones para reiniciar el contador</div>
+      <!-- Acciones adicionales -->
+      <div class="additional-actions">
+        <div class="action-buttons">
+          <button type="button" class="btn btn-warning btn-reset" 
+                  onclick="confirmResetUsage('{{ token._id }}')">
+            <span class="btn-icon">🔄</span>
+            <span class="btn-text">Reiniciar Contador</span>
+          </button>
+          <button type="button" class="btn btn-danger btn-revoke" 
+                  onclick="confirmRevokeToken('{{ token._id }}')">
+            <span class="btn-icon">⛔</span>
+            <span class="btn-text">Revocar Token</span>
+          </button>
+          <a href="{{ url_for('access_tokens.token_stats', token_id=token._id) }}" 
+             class="btn btn-info btn-stats">
+            <span class="btn-icon">📊</span>
+            <span class="btn-text">Ver Estadísticas</span>
+          </a>
         </div>
       </div>
 
-      <!-- Acciones -->
+      <!-- Acciones principales -->
       <div class="form-actions">
-        <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-secondary">
-          <span>❌</span>
-          Cancelar
+        <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-secondary btn-cancel">
+          <span class="btn-icon">❌</span>
+          <span class="btn-text">Cancelar</span>
         </a>
         <button type="submit" class="btn btn-primary" id="submitButton">
-          <span>✅</span>
-          Guardar Cambios
+          <span class="btn-icon">💾</span>
+          <span class="btn-text">Guardar Cambios</span>
+          <span class="loading-spinner" id="loadingSpinner"></span>
         </button>
       </div>
     </form>
+  </div>
 
-    {% else %}
-    <!-- Error: token no encontrado -->
-    <div style="text-align: center; padding: 3rem;">
-      <h2>❌ Token no encontrado</h2>
+  {% else %}
+  <!-- Error: token no encontrado -->
+  <div class="error-state">
+    <div class="error-content">
+      <div class="error-icon">❌</div>
+      <h2>Token no encontrado</h2>
       <p>El token solicitado no existe o ha sido eliminado.</p>
       <a href="{{ url_for('access_tokens.token_list') }}" class="btn btn-primary">
-        <span>←</span>
-        Volver a la Lista
+        <span class="btn-icon">←</span>
+        <span class="btn-text">Volver a la Lista</span>
       </a>
     </div>
-    {% endif %}
   </div>
+  {% endif %}
 </div>
+
+<!-- Toast para feedback -->
+<div class="toast-container" id="toastContainer"></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+let tokenVisible = false;
+
 function copyToken(token) {
   navigator.clipboard.writeText(token).then(() => {
+    // Mostrar toast
+    showToast('✅ Token copiado al portapapeles', 'success');
+    
     // Cambiar el texto del botón temporalmente
-    const button = event.target;
-    const originalText = button.textContent;
-    button.textContent = '✅ Copiado';
-    button.style.background = '#10b981';
-    button.style.color = 'white';
+    const button = event.currentTarget;
+    const originalText = button.querySelector('.copy-text').textContent;
+    button.querySelector('.copy-text').textContent = 'Copiado';
+    button.classList.add('copied');
     
     setTimeout(() => {
-      button.textContent = originalText;
-      button.style.background = '';
-      button.style.color = '';
+      button.querySelector('.copy-text').textContent = originalText;
+      button.classList.remove('copied');
     }, 2000);
-  }).catch(() => {
-    alert('Error al copiar el token');
+  }).catch((err) => {
+    console.error('Error al copiar:', err);
+    showToast('❌ Error al copiar el token', 'error');
   });
+}
+
+function toggleTokenVisibility() {
+  const tokenElement = document.querySelector('.token-text');
+  const eyeIcon = document.querySelector('.eye-icon');
+  const eyeText = document.querySelector('.eye-text');
+  
+  if (tokenElement) {
+    if (tokenVisible) {
+      tokenElement.textContent = '{{ token.token }}';
+      eyeIcon.textContent = '👁️';
+      eyeText.textContent = 'Mostrar';
+      tokenVisible = false;
+    } else {
+      // Mostrar token con formato
+      const token = '{{ token.token }}';
+      const formattedToken = token.substring(0, 8) + '...' + token.substring(token.length - 8);
+      tokenElement.textContent = formattedToken;
+      eyeIcon.textContent = '👁️‍🗨️';
+      eyeText.textContent = 'Ocultar';
+      tokenVisible = true;
+    }
+  }
+}
+
+function confirmResetUsage(tokenId) {
+  if (confirm('¿Estás seguro de que quieres reiniciar el contador de usos a 0?')) {
+    fetch(`/admin/access_tokens/${tokenId}/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast('✅ Contador reiniciado correctamente', 'success');
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        showToast('❌ Error al reiniciar el contador', 'error');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      showToast('❌ Error al reiniciar el contador', 'error');
+    });
+  }
+}
+
+function confirmRevokeToken(tokenId) {
+  if (confirm('⚠️ ¿Estás seguro de que quieres revocar este token?\n\nEsta acción no se puede deshacer y el token dejará de funcionar inmediatamente.')) {
+    fetch(`/admin/access_tokens/${tokenId}/revoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        showToast('✅ Token revocado correctamente', 'success');
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        showToast('❌ Error al revocar el token', 'error');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      showToast('❌ Error al revocar el token', 'error');
+    });
+  }
+}
+
+function showToast(message, type = 'info') {
+  const toastContainer = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  
+  toastContainer.appendChild(toast);
+  
+  // Animar entrada
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Remover después de 3 segundos
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (toast.parentNode === toastContainer) {
+        toastContainer.removeChild(toast);
+      }
+    }, 300);
+  }, 3000);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -197,16 +449,21 @@ document.addEventListener('DOMContentLoaded', function() {
   const nameInput = document.getElementById('name');
   const maxUsesInput = document.getElementById('max_uses');
   const submitButton = document.getElementById('submitButton');
+  const loadingSpinner = document.getElementById('loadingSpinner');
 
-  // Validación en tiempo real
+  // Validación mejorada en tiempo real
   function validateForm() {
     const name = nameInput.value.trim();
     const maxUses = parseInt(maxUsesInput.value);
+    const currentUses = parseInt('{{ token.current_uses or 0 }}');
     
     let isValid = true;
     
     // Limpiar errores anteriores
     document.querySelectorAll('.validation-error').forEach(el => el.remove());
+    document.querySelectorAll('.form-input, .form-select').forEach(input => {
+      input.classList.remove('error');
+    });
     
     // Validar nombre
     if (!name) {
@@ -221,10 +478,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!maxUses || maxUses < 1 || maxUses > 1000) {
       showError(maxUsesInput, 'Los usos máximos deben estar entre 1 y 1000');
       isValid = false;
+    } else if (maxUses < currentUses) {
+      showError(maxUsesInput, `Los usos máximos no pueden ser menores que los usos actuales (${currentUses})`);
+      isValid = false;
     }
     
-    // Actualizar botón
-    submitButton.disabled = !isValid;
+    // Actualizar estado del botón
+    updateSubmitButton(isValid);
     
     return isValid;
   }
@@ -233,30 +493,106 @@ document.addEventListener('DOMContentLoaded', function() {
     const errorDiv = document.createElement('div');
     errorDiv.className = 'validation-error';
     errorDiv.textContent = message;
-    input.parentNode.appendChild(errorDiv);
-    input.style.borderColor = '#ef4444';
+    
+    const parent = input.closest('.input-container') || input.parentNode;
+    const feedback = parent.querySelector('.input-feedback');
+    if (feedback) {
+      feedback.appendChild(errorDiv);
+    } else {
+      parent.appendChild(errorDiv);
+    }
+    
+    input.classList.add('error');
+  }
+
+  function updateSubmitButton(isValid) {
+    submitButton.disabled = !isValid;
+    submitButton.classList.toggle('disabled', !isValid);
   }
 
   // Event listeners para validación
   [nameInput, maxUsesInput].forEach(input => {
     input.addEventListener('input', validateForm);
     input.addEventListener('blur', validateForm);
+    input.addEventListener('focus', function() {
+      this.classList.remove('error');
+    });
   });
 
-  // Validar al enviar
+  // Manejar envío del formulario
   form.addEventListener('submit', function(e) {
     if (!validateForm()) {
       e.preventDefault();
       return false;
     }
     
-    // Mostrar loading
+    // Mostrar estado de carga
     submitButton.disabled = true;
-    submitButton.innerHTML = '<span>⏳</span> Guardando...';
+    submitButton.classList.add('loading');
+    loadingSpinner.style.display = 'block';
+    
+    // Actualizar texto del botón
+    const btnText = submitButton.querySelector('.btn-text');
+    if (btnText) {
+      btnText.textContent = 'Guardando...';
+    }
   });
 
   // Inicializar validación
   validateForm();
+
+  // Responsive: Ajustar comportamiento en pantallas pequeñas
+  function handleResponsive() {
+    const isMobile = window.innerWidth < 768;
+    document.body.classList.toggle('mobile-view', isMobile);
+    
+    // Ajustar elementos para móviles
+    const tokenValue = document.querySelector('.token-text');
+    if (tokenValue && isMobile && !tokenVisible) {
+      // Mostrar token truncado en móviles
+      const token = '{{ token.token }}';
+      if (token.length > 20) {
+        tokenValue.textContent = token.substring(0, 12) + '...' + token.substring(token.length - 8);
+      }
+    }
+  }
+
+  // Ejecutar al cargar y al redimensionar
+  handleResponsive();
+  window.addEventListener('resize', handleResponsive);
+  
+  // Inicializar tooltips
+  initializeTooltips();
 });
+
+function initializeTooltips() {
+  // Tooltips para iconos de información
+  const tooltipElements = document.querySelectorAll('[data-tooltip]');
+  tooltipElements.forEach(element => {
+    element.addEventListener('mouseenter', showTooltip);
+    element.addEventListener('mouseleave', hideTooltip);
+  });
+}
+
+function showTooltip(e) {
+  const tooltip = document.createElement('div');
+  tooltip.className = 'custom-tooltip';
+  tooltip.textContent = this.getAttribute('data-tooltip');
+  
+  document.body.appendChild(tooltip);
+  
+  const rect = this.getBoundingClientRect();
+  tooltip.style.left = rect.left + 'px';
+  tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + 'px';
+  
+  this.tooltipElement = tooltip;
+}
+
+function hideTooltip() {
+  if (this.tooltipElement) {
+    document.body.removeChild(this.tooltipElement);
+    this.tooltipElement = null;
+  }
+}
 </script>
 {% endblock %}

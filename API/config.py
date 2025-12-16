@@ -1,4 +1,4 @@
-# config.py - Sistema de configuración unificado para desarrollo y producción
+# C:\INFORMATICA\AI_Firefighter\API\config.py:
 import os
 from dotenv import load_dotenv
 

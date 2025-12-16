@@ -1,5 +1,5 @@
 # FirefighterAI BackOffice - Requirements
-# Versión actualizada con MFA
+# Versión estable y reproducible
 
 # Flask y extensiones base
 Flask==3.0.0
@@ -7,31 +7,33 @@ Flask-Login==0.6.3
 Flask-WTF==1.1.1
 Flask-Cors==4.0.0
 
-# Dependencias CRÍTICAS de Flask
-Werkzeug==3.0.1  # ✅ AGREGAR ESTA LÍNEA
+# Dependencias críticas Flask
+Werkzeug==3.0.1
 Jinja2==3.1.6
 click==8.1.7
 itsdangerous==2.1.2
 MarkupSafe==2.1.3
 
-# Autenticación y seguridad - MFA
+# Autenticación y seguridad
 pyotp==2.9.0
 qrcode[pil]==7.4.2
 Pillow==10.1.0
-
-# HTTP requests
-requests==2.31.0
-urllib3==2.0.7
-
-# Variables de entorno
-python-dotenv==1.0.0
-
-# Servidor WSGI
-waitress==2.1.2
-
-# Utilidades
 bcrypt==4.1.2
 PyJWT==2.8.0
 
-# Fechas y tiempo
+# HTTP
+requests==2.31.0
+urllib3==2.0.7
+
+# Env
+python-dotenv==1.0.0
+
+# WSGI
+waitress==2.1.2
+gunicorn==21.2.0
+
+# Fechas
 python-dateutil==2.8.2
+
+#REDIS (OBLIGATORIO PARA DASHBOARD)
+redis==5.0.1

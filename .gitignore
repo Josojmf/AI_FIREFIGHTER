@@ -109,3 +109,7 @@ documents/
 *.temp
 .tmp/
 .temp/
+
+#kubernetes
+secrets.yaml
+./*secrets.yaml

@@ -1,92 +1,172 @@
-<!-- app/templates/users/list.html -->
+<!-- app/templates/users/list.html - RESPONSIVE & MOBILE FRIENDLY -->
 {% extends "backoffice_layout.html" %}
 
-{% block title %}Usuarios - Onfire AI BackOffice{% endblock %}
+{% block title %}Usuarios - FirefighterAI BackOffice{% endblock %}
 {% block page_title %}Gestión de Usuarios{% endblock %}
 
 {% block content %}
 <div class="users-management">
+  <!-- Header con estadísticas -->
   <div class="page-header">
-    <div class="header-stats">
-      <div class="stat-card">
-        <div class="stat-value">{{ users|length }}</div>
-        <div class="stat-label">Total Usuarios</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{ users|selectattr('status', 'equalto', 'active')|list|length }}</div>
-        <div class="stat-label">Usuarios Activos</div>
+    <div class="header-content">
+      <h1 class="page-title-mobile">Gestión de Usuarios</h1>
+      <div class="header-stats">
+        <div class="stat-card">
+          <div class="stat-value">{{ users|length }}</div>
+          <div class="stat-label">Total Usuarios</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ users|selectattr('status', 'equalto', 'active')|list|length }}</div>
+          <div class="stat-label">Usuarios Activos</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="users-table-container">
+  <!-- Contenido principal -->
+  <div class="users-content">
     {% if users %}
-      <table class="users-table">
-        <thead>
-          <tr>
-            <th>Usuario</th>
-            <th>Email</th>
-            <th>Rol</th>
-            <th>Estado</th>
-            <th>MFA</th>
-            <th>Último Acceso</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
+      <!-- Vista Desktop - Tabla -->
+      <div class="desktop-view">
+        <div class="users-table-container">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th class="hide-mobile">MFA</th>
+                <th class="hide-mobile">Último Acceso</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for user in users %}
+              <tr>
+                <td>
+                  <div class="user-info">
+                    <div class="user-avatar">{{ user.username[0]|upper }}</div>
+                    <div class="user-details">
+                      <div class="user-name">{{ user.username }}</div>
+                      <div class="user-id">ID: {{ user.id[:8] }}...</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="email-cell">
+                  <span class="email-desktop">{{ user.email }}</span>
+                  <span class="email-mobile">{{ user.email|truncate(20, True) }}</span>
+                </td>
+                <td>
+                  <span class="role-badge role-{{ user.role }}">
+                    {{ user.role|title }}
+                  </span>
+                </td>
+                <td>
+                  <span class="status-badge status-{{ user.status or 'active' }}">
+                    {{ (user.status or 'active')|title }}
+                  </span>
+                </td>
+                <td class="hide-mobile">
+                  {% if user.mfa_enabled %}
+                    <span class="mfa-badge enabled">🛡️ Activado</span>
+                  {% else %}
+                    <span class="mfa-badge disabled">❌ No activado</span>
+                  {% endif %}
+                </td>
+                <td class="hide-mobile">{{ user.last_login or 'Nunca' }}</td>
+                <td>
+                  <div class="action-buttons">
+                    <a href="{{ url_for('users.user_detail', user_id=user.id) }}" class="btn-icon" title="Ver detalles">
+                      👁️
+                    </a>
+                    <form action="{{ url_for('users.toggle_user_status', user_id=user.id) }}" method="POST" style="display: inline;">
+                      {% if user.status == 'active' %}
+                        <button type="submit" class="btn-icon warning" title="Desactivar usuario" onclick="return confirm('¿Estás seguro de que quieres desactivar este usuario?')">
+                          ⏸️
+                        </button>
+                      {% else %}
+                        <button type="submit" class="btn-icon success" title="Activar usuario" onclick="return confirm('¿Estás seguro de que quieres activar este usuario?')">
+                          ▶️
+                        </button>
+                      {% endif %}
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Vista Mobile - Cards -->
+      <div class="mobile-view">
+        <div class="users-cards">
           {% for user in users %}
-          <tr>
-            <td>
+          <div class="user-card" data-user-id="{{ user.id }}">
+            <div class="card-header">
               <div class="user-info">
                 <div class="user-avatar">{{ user.username[0]|upper }}</div>
                 <div class="user-details">
                   <div class="user-name">{{ user.username }}</div>
-                  <div class="user-id">ID: {{ user.id[:8] }}...</div>
+                  <div class="user-email">{{ user.email }}</div>
                 </div>
               </div>
-            </td>
-            <td>{{ user.email }}</td>
-            <td>
-              <span class="role-badge role-{{ user.role }}">
-                {{ user.role|title }}
-              </span>
-            </td>
-            <td>
-              <span class="status-badge status-{{ user.status or 'active' }}">
-                {{ (user.status or 'active')|title }}
-              </span>
-            </td>
-            <td>
-              {% if user.mfa_enabled %}
-                <span class="mfa-badge enabled">🛡️ Activado</span>
-              {% else %}
-                <span class="mfa-badge disabled">❌ No activado</span>
-              {% endif %}
-            </td>
-            <td>{{ user.last_login or 'Nunca' }}</td>
-            <td>
-              <div class="action-buttons">
-                <a href="{{ url_for('users.user_detail', user_id=user.id) }}" class="btn-icon" title="Ver detalles">
-                  👁️
-                </a>
-                <form action="{{ url_for('users.toggle_user_status', user_id=user.id) }}" method="POST" style="display: inline;">
-                  {% if user.status == 'active' %}
-                    <button type="submit" class="btn-icon warning" title="Desactivar usuario" onclick="return confirm('¿Estás seguro de que quieres desactivar este usuario?')">
-                      ⏸️
-                    </button>
-                  {% else %}
-                    <button type="submit" class="btn-icon success" title="Activar usuario" onclick="return confirm('¿Estás seguro de que quieres activar este usuario?')">
-                      ▶️
-                    </button>
-                  {% endif %}
-                </form>
+              <div class="card-badges">
+                <span class="role-badge role-{{ user.role }}">{{ user.role|title }}</span>
+                <span class="status-badge status-{{ user.status or 'active' }}">
+                  {{ (user.status or 'active')|title }}
+                </span>
               </div>
-            </td>
-          </tr>
+            </div>
+            
+            <div class="card-body">
+              <div class="card-info">
+                <div class="info-item">
+                  <span class="info-label">MFA:</span>
+                  <span class="info-value">
+                    {% if user.mfa_enabled %}
+                      <span class="mfa-badge enabled">🛡️ Activado</span>
+                    {% else %}
+                      <span class="mfa-badge disabled">❌ No activado</span>
+                    {% endif %}
+                  </span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Último acceso:</span>
+                  <span class="info-value">{{ user.last_login or 'Nunca' }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">ID:</span>
+                  <span class="info-value">{{ user.id[:8] }}...</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="card-actions">
+              <a href="{{ url_for('users.user_detail', user_id=user.id) }}" class="btn-action primary">
+                👁️ Ver Detalles
+              </a>
+              <form action="{{ url_for('users.toggle_user_status', user_id=user.id) }}" method="POST" style="display: inline; flex: 1;">
+                {% if user.status == 'active' %}
+                  <button type="submit" class="btn-action warning" onclick="return confirm('¿Estás seguro de que quieres desactivar este usuario?')">
+                    ⏸️ Desactivar
+                  </button>
+                {% else %}
+                  <button type="submit" class="btn-action success" onclick="return confirm('¿Estás seguro de que quieres activar este usuario?')">
+                    ▶️ Activar
+                  </button>
+                {% endif %}
+              </form>
+            </div>
+          </div>
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
     {% else %}
+      <!-- Estado vacío -->
       <div class="empty-state">
         <div class="empty-icon">👥</div>
         <h3>No hay usuarios</h3>
@@ -97,48 +177,89 @@
 </div>
 
 <style>
+/* === VARIABLES RESPONSIVE === */
+:root {
+  --mobile-breakpoint: 768px;
+  --tablet-breakpoint: 1024px;
+}
+
+/* === LAYOUT PRINCIPAL === */
 .users-management {
-  padding: 20px;
+  padding: 1rem;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 2rem;
 }
 
-.header-stats {
+.header-content {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.page-title-mobile {
+  display: none;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* === ESTADÍSTICAS === */
+.header-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  max-width: 400px;
 }
 
 .stat-card {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  background: var(--bg-card);
+  padding: 1.5rem 1rem;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
   text-align: center;
-  min-width: 150px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: var(--transition);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--box-shadow-lg);
 }
 
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #3b82f6;
-  margin-bottom: 5px;
+  color: var(--text-accent);
+  margin-bottom: 0.5rem;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
 }
 
 .stat-label {
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* === VISTA DESKTOP === */
+.desktop-view {
+  display: block;
+}
+
+.mobile-view {
+  display: none;
 }
 
 .users-table-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .users-table {
@@ -147,173 +268,465 @@
 }
 
 .users-table th {
-  background-color: #f8fafc;
-  padding: 15px 20px;
+  background: var(--bg-secondary);
+  padding: 1rem 1.5rem;
   text-align: left;
   font-weight: 600;
-  color: #374151;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .users-table td {
-  padding: 15px 20px;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
 }
 
 .users-table tr:hover {
-  background-color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
 }
 
+.users-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* === INFORMACIÓN DE USUARIO === */
 .user-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .user-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--gradient-brand);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.user-details {
+  min-width: 0;
 }
 
 .user-name {
-  font-weight: 500;
-  color: #1e293b;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
 }
 
 .user-id {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
 }
 
-.role-badge {
-  padding: 4px 12px;
+/* === EMAIL RESPONSIVE === */
+.email-cell {
+  max-width: 200px;
+}
+
+.email-desktop {
+  display: inline;
+}
+
+.email-mobile {
+  display: none;
+}
+
+/* === BADGES === */
+.role-badge, .status-badge, .mfa-badge {
+  padding: 0.25rem 0.75rem;
   border-radius: 20px;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .role-admin {
-  background-color: #fef3c7;
-  color: #92400e;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .role-user {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .role-viewer {
-  background-color: #f3e8ff;
-  color: #7c3aed;
-}
-
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .status-active {
-  background-color: #dcfce7;
-  color: #166534;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .status-inactive {
-  background-color: #fef2f2;
-  color: #dc2626;
-}
-
-.mfa-badge {
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .mfa-badge.enabled {
-  background-color: #dcfce7;
-  color: #166534;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .mfa-badge.disabled {
-  background-color: #fef2f2;
-  color: #dc2626;
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+/* === ACCIONES === */
 .action-buttons {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .btn-icon {
   background: none;
   border: none;
-  padding: 6px;
-  border-radius: 6px;
+  padding: 0.5rem;
+  border-radius: var(--border-radius-sm);
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
+  font-size: 1rem;
+  transition: var(--transition);
   text-decoration: none;
-  color: inherit;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
 }
 
 .btn-icon:hover {
-  background-color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .btn-icon.warning:hover {
-  background-color: #fef3c7;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 
 .btn-icon.success:hover {
-  background-color: #dcfce7;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 
+/* === VISTA MOBILE === */
+.users-cards {
+  display: grid;
+  gap: 1rem;
+}
+
+.user-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.user-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--box-shadow-lg);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.card-header {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.card-body {
+  padding: 1rem;
+}
+
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.info-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.card-actions {
+  padding: 1rem;
+  background: var(--bg-secondary);
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-action {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.btn-action.primary {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.btn-action.primary:hover {
+  background: rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-action.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-action.warning:hover {
+  background: rgba(245, 158, 11, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-action.success {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.btn-action.success:hover {
+  background: rgba(34, 197, 94, 0.3);
+  transform: translateY(-1px);
+}
+
+/* === ESTADO VACÍO === */
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 4rem 2rem;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .empty-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
   opacity: 0.5;
 }
 
 .empty-state h3 {
-  margin: 0 0 10px 0;
-  color: #1e293b;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  font-weight: 600;
 }
 
 .empty-state p {
-  color: #64748b;
-  margin-bottom: 30px;
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: 1rem;
 }
 
-/* Responsive */
+/* === RESPONSIVE QUERIES === */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .hide-mobile {
+    display: none;
+  }
+  
+  .users-table th,
+  .users-table td {
+    padding: 0.75rem 1rem;
+  }
+  
+  .email-desktop {
+    display: none;
+  }
+  
+  .email-mobile {
+    display: inline;
+  }
+}
+
+/* Mobile */
 @media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    gap: 20px;
-    align-items: stretch;
+  .users-management {
+    padding: 0.5rem;
+  }
+  
+  .page-title-mobile {
+    display: block;
   }
   
   .header-stats {
-    justify-content: center;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
   }
   
-  .users-table {
+  .stat-card {
+    padding: 1rem 0.75rem;
+  }
+  
+  .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  /* Ocultar vista desktop, mostrar mobile */
+  .desktop-view {
+    display: none;
+  }
+  
+  .mobile-view {
     display: block;
-    overflow-x: auto;
+  }
+  
+  /* Ajustar cards para mobile */
+  .card-header {
+    padding: 0.75rem;
+  }
+  
+  .card-body {
+    padding: 0.75rem;
+  }
+  
+  .card-actions {
+    padding: 0.75rem;
+    flex-direction: column;
+  }
+  
+  .btn-action {
+    padding: 0.875rem;
+  }
+  
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  .header-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .card-badges {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .btn-action {
+    font-size: 0.8rem;
+    padding: 0.75rem;
+  }
+}
+
+/* === ANIMACIONES === */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.user-card {
+  animation: fadeInUp 0.3s ease;
+}
+
+.users-table tr {
+  animation: fadeInUp 0.3s ease;
+}
+
+/* === ACCESIBILIDAD === */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* === DARK MODE OPTIMIZATIONS === */
+@media (prefers-color-scheme: dark) {
+  .users-table th {
+    background: var(--bg-tertiary);
+  }
+  
+  .card-actions {
+    background: rgba(255, 255, 255, 0.02);
   }
 }
 </style>

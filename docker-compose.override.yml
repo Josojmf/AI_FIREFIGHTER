@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  # Nginx Reverse Proxy + Cache
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+      - backoffice
+    networks:
+      - firefighter
+
+  # Redis Cache (opcional para futuro)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - firefighter
+
+  # Backend optimizado
+  backend:
+    command: ["gunicorn", "-b", "0.0.0.0:5000", "--workers", "3", "--worker-class", "gevent", "--worker-connections", "1000", "--timeout", "120", "--max-requests", "1000", "--preload", "main:app"]
+    environment:
+      - PRODUCTION_URL=http://localhost
+      - GUNICORN_WORKERS=3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      
+  # Frontend ultra-ligero  
+  frontend:
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "--workers", "2", "--worker-class", "gevent", "--worker-connections", "500", "--timeout", "60", "--max-requests", "500", "main:app"]
+    environment:
+      - DISABLE_AI_MODEL=true
+      - API_BASE_URL=http://backend:5000/api
+      - FRONTEND_API_BASE_URL=http://backend:5000/api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+      
+  # BackOffice optimizado
+  backoffice:
+    environment:
+      - API_BASE_URL=http://backend:5000
+      - BACKOFFICE_API_BASE_URL=http://backend:5000
+      - WAITRESS_THREADS=6
+      - WAITRESS_CONNECTION_LIMIT=1000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  redis_data:
+
+networks:
+  firefighter:
+    driver: bridge

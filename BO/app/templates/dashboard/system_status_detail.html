@@ -1,0 +1,43 @@
+{% extends "backoffice_layout.html" %}
+
+{% block title %}Estado del sistema{% endblock %}
+{% block page_title %}Estado del sistema{% endblock %}
+
+{% block content %}
+<div class="system-status-page">
+  <h1>Estado del sistema</h1>
+
+  <section class="widget">
+    <header class="widget-header">
+      <h3 class="widget-title">
+        <span class="widget-icon">⚙️</span>
+        Resumen
+      </h3>
+    </header>
+    <div class="widget-content">
+      <ul class="system-status-list">
+        <li class="status-item">
+          <span class="label">Estado API</span>
+          <span class="value">{{ stats.api_status }}</span>
+        </li>
+        <li class="status-item">
+          <span class="label">Base de datos</span>
+          <span class="value">{{ system_stats.database_status }}</span>
+        </li>
+        <li class="status-item">
+          <span class="label">Uso de disco</span>
+          <span class="value">{{ system_stats.storage_usage }}</span>
+        </li>
+        <li class="status-item">
+          <span class="label">Memoria</span>
+          <span class="value">{{ system_stats.memory_usage }}</span>
+        </li>
+        <li class="status-item">
+          <span class="label">Uptime</span>
+          <span class="value">{{ system_stats.uptime }}</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -213,106 +213,48 @@ def verify_mfa_disable():
 @bp.route('/setup-mfa', methods=['GET', 'POST'])
 @login_required
 def setup_mfa():
-    """Configuración de MFA integrada con API - VERSIÓN CORREGIDA SIN FALLBACKS"""
-    print(f"🔐 Setup MFA - User: {current_user.username}, ID: {current_user.id}")
-    
-    # 🔥 VALIDACIÓN CRÍTICA: Verificar que el ID es REAL
-    if not current_user.id or current_user.id in ['None', 'admin-fallback', 'admin-local']:
-        print(f"❌ ID ficticio detectado: {current_user.id}")
-        flash('❌ Error: ID de usuario no válido para MFA', 'error')
-        return redirect('/dashboard')
-    
-    real_user_id = current_user.id
-    print(f"🎯 Usando ID REAL para MFA: {real_user_id}")
-    
-    # ✅ PROCESAR FORMULARIO
-    if request.method == 'POST':
-        action = request.form.get('action')
-        print(f"🔄 Acción MFA: {action}")
-        
-        if action == 'generate':
-            # Generar nuevo secreto MFA
+    real_user_id = session.get("user_data", {}).get("id")
+
+    print(
+        f"🔐 Setup MFA - User: {current_user.username}, "
+        f"JWT_ID: {current_user.id}, "
+        f"DB_ID: {real_user_id}"
+    )
+
+    if not real_user_id:
+        flash("❌ Error crítico: ID real de usuario no disponible", "error")
+        return redirect("/dashboard")
+
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "generate":
             mfa_data = generate_mfa_secret_api(real_user_id)
             if mfa_data:
-                # Guardar temporalmente en sesión
-                session['mfa_qr_code'] = mfa_data['qr_code']
-                session['manual_entry_key'] = mfa_data['manual_entry_key']
-                flash('📱 Código QR generado. Escanéalo con tu Microsoft Authenticator.', 'success')
+                session["mfa_qr_code"] = mfa_data["qr_code"]
+                session["manual_entry_key"] = mfa_data["manual_entry_key"]
+                flash("📱 Código QR generado", "success")
             else:
-                flash('❌ Error al generar código QR', 'error')
-        
-        elif action == 'enable':
-            # Verificar código y habilitar MFA
-            mfa_code = request.form.get('mfa_code', '').strip().replace(' ', '')
-            
-            if not mfa_code or len(mfa_code) != 6:
-                flash('❌ El código debe tener exactamente 6 dígitos', 'error')
-            else:
-                print(f"🔐 Verificando código MFA para usuario REAL: {real_user_id}")
-                try:
-                    # El endpoint verify-setup ya habilita MFA si es correcto
-                    if verify_mfa_setup_with_api(real_user_id, mfa_code):
-                        # ✅ MFA ya fue habilitado por verify-setup, solo actualizar estado local
-                        current_user.mfa_enabled = True
-                        
-                        # 🔥 ACTUALIZAR session['user_data'] TAMBIÉN
-                        user_data = session.get('user_data', {})
-                        user_data['mfa_enabled'] = True
-                        session['user_data'] = user_data
-                        
-                        # Limpiar datos temporales de sesión
-                        session.pop('mfa_qr_code', None)
-                        session.pop('manual_entry_key', None)
-                        
-                        print(f"🔥 MFA HABILITADO - Estado actualizado para usuario REAL:")
-                        print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
-                        print(f"   - session user_data mfa_enabled: {user_data.get('mfa_enabled')}")
-                        
-                        flash('✅ ¡MFA habilitado exitosamente! Tu cuenta ahora está más segura.', 'success')
-                        return redirect('/dashboard')
-                    else:
-                        flash('❌ Código incorrecto. Verifica el código e intenta nuevamente.', 'error')
-                except Exception as e:
-                    current_app.logger.error(f"Error habilitando MFA: {e}")
-                    flash('❌ Error al habilitar MFA', 'error')
-        
-        elif action == 'disable':
-            # PASO 1: Verificar solo contraseña para desactivar MFA
-            password = request.form.get('password', '')
-            
-            if not password:
-                flash('❌ Por favor ingresa tu contraseña para deshabilitar MFA', 'error')
-            else:
-                # PASO 1: Verificar solo usuario/contraseña (sin MFA)
-                user = BackofficeUser.authenticate(current_user.username, password, mfa_code=None)
-                if user and user.id == real_user_id:
-                    # Credenciales correctas, ir a pantalla MFA
-                    session['disable_mfa_user_id'] = user.id
-                    session['disable_mfa_username'] = user.username
-                    session['disable_mfa_start_time'] = time.time()
-                    print("🔓 Contraseña correcta - redirigiendo a verificar MFA para desactivar")
-                    return redirect('/auth/verify-mfa-disable')
-                else:
-                    flash('❌ Contraseña incorrecta', 'error')
-    
-    # Obtener estado MFA actual SIEMPRE DESDE LA API usando ID REAL
+                flash("❌ Error al generar MFA", "error")
+
+        elif action == "enable":
+            mfa_code = request.form.get("mfa_code", "").strip()
+            if verify_mfa_setup_with_api(real_user_id, mfa_code):
+                current_user.mfa_enabled = True
+                session["user_data"]["mfa_enabled"] = True
+                flash("✅ MFA habilitado correctamente", "success")
+                return redirect("/dashboard")
+
     mfa_status = check_user_mfa_status(real_user_id)
-    mfa_enabled = mfa_status.get('mfa_enabled', False)
-    qr_code = session.get('mfa_qr_code') if not mfa_enabled else None
-    manual_entry_key = session.get('manual_entry_key') if not mfa_enabled else None
-    
-    print(f"🔍 Estado MFA actual (usuario REAL {real_user_id}):")
-    print(f"   - API mfa_enabled: {mfa_enabled}")
-    print(f"   - current_user.mfa_enabled: {current_user.mfa_enabled}")
-    print(f"   - session user_data: {session.get('user_data', {}).get('mfa_enabled', 'NO')}")
-    print(f"   - ID en sesión: {session.get('user_id')}")
-    
-    return render_template('auth/setup_mfa.html',
-                         mfa_enabled=mfa_enabled,
-                         qr_code=qr_code,
-                         manual_entry_key=manual_entry_key,
-                         user_email=current_user.email or current_user.username,
-                         real_user_id=real_user_id)
+
+    return render_template(
+        "auth/setup_mfa.html",
+        mfa_enabled=mfa_status.get("mfa_enabled", False),
+        qr_code=session.get("mfa_qr_code"),
+        manual_entry_key=session.get("manual_entry_key"),
+        user_email=current_user.email or current_user.username,
+        real_user_id=real_user_id,
+    )
 
 # FUNCIONES AUXILIARES PARA COMUNICACIÓN CON LA API - VERSIÓN CORREGIDA
 
@@ -345,7 +287,7 @@ def generate_mfa_secret_api(user_id, issuer="FirefighterAI"):
             f"{api_url}/api/users/{user_id}/mfa/generate",
             headers=headers,
             json=payload,
-            timeout=10
+            timeout=120
         )
         
         print(f"📡 Respuesta API: {response.status_code}")
@@ -402,7 +344,7 @@ def verify_mfa_setup_with_api(user_id, mfa_code):
             f"{api_url}/api/users/{user_id}/mfa/verify-setup",
             headers=headers,
             json=payload,
-            timeout=5
+            timeout=120
         )
         
         print(f"📡 Verify setup response: {response.status_code}")
@@ -446,7 +388,7 @@ def verify_mfa_with_api(user_id, mfa_code):
             f"{api_url}/api/users/{user_id}/mfa/verify",
             headers=headers,
             json=payload,
-            timeout=5
+            timeout=120
         )
         
         print(f"📡 Verify MFA response: {response.status_code}")
@@ -514,7 +456,7 @@ def enable_mfa_for_user(user_id):
         response = requests.post(
             f"{Config.API_BASE_URL}/api/users/{user_id}/mfa/enable",
             headers=headers,
-            timeout=5
+            timeout=120
         )
         if response.status_code == 200:
             data = response.json()
@@ -535,7 +477,7 @@ def disable_mfa_for_user(user_id):
         response = requests.post(
             f"{Config.API_BASE_URL}/api/users/{user_id}/mfa/disable",
             headers=headers,
-            timeout=5
+            timeout=120
         )
         if response.status_code == 200:
             data = response.json()

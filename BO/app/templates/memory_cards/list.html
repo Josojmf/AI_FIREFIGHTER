@@ -4,238 +4,1054 @@
 {% block title %}Memory Cards - Onfire AI BackOffice{% endblock %}
 {% block page_title %}Memory Cards{% endblock %}
 
-{% block content %}
-<div class="memory-cards">
-  <div class="page-header">
-    <div class="header-actions">
-      <a href="{{ url_for('memory_cards.create_card') }}" class="btn btn-primary">
-        <span class="btn-icon">➕</span>
-        Nueva Memory Card
-      </a>
-    </div>
-  </div>
-
-  <div class="cards-grid">
-    {% if cards %}
-      {% for card in cards %}
-      <div class="card-item">
-        <div class="card-header">
-          <h3 class="card-title">{{ card.title or 'Sin título' }}</h3>
-          <div class="card-actions">
-            <button class="btn-icon" title="Editar">
-              <a href="{{ url_for('memory_cards.edit_card', card_id=card.id) }}">✏️</a>
-            </button>
-            <form action="{{ url_for('memory_cards.delete_card', card_id=card.id) }}" method="POST" style="display: inline;">
-              <button type="submit" class="btn-icon delete-btn" title="Eliminar" onclick="return confirm('¿Estás seguro de que quieres eliminar esta memory card?')">
-                🗑️
-              </button>
-            </form>
-          </div>
-        </div>
-        <div class="card-content">
-          <p class="card-description">{{ card.description or 'Sin descripción' }}</p>
-          <div class="card-meta">
-            <span class="meta-item">
-              <span class="meta-icon">📅</span>
-              Creado: {{ card.created_at or 'N/A' }}
-            </span>
-            <span class="meta-item">
-              <span class="meta-icon">👤</span>
-              Por: {{ card.author or 'Sistema' }}
-            </span>
-          </div>
-        </div>
-        <div class="card-footer">
-          <span class="status-badge status-{{ card.status or 'active' }}">
-            {{ card.status|title or 'Activo' }}
-          </span>
-        </div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="empty-state">
-        <div class="empty-icon">🗃️</div>
-        <h3>No hay Memory Cards</h3>
-        <p>Aún no se han creado memory cards en el sistema.</p>
-        <a href="{{ url_for('memory_cards.create_card') }}" class="btn btn-primary">
-          <span class="btn-icon">➕</span>
-          Crear primera Memory Card
-        </a>
-      </div>
-    {% endif %}
-  </div>
-</div>
-
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/access_tokens.css') }}">
 <style>
-.memory-cards {
-  padding: 20px;
+/* ===== MEMORY CARDS - DISEÑO MODERNO DARK ===== */
+
+.memory-cards-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+  min-height: 100vh;
+  background: var(--bg-gradient);
+  position: relative;
+  color: var(--text-dark);
 }
 
-.page-header {
+.memory-cards-container::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(102, 126, 234, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(237, 100, 166, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(56, 178, 172, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Header renovado */
+.memory-cards-header {
+  background: var(--primary-gradient);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-2xl);
+  margin-bottom: var(--space-2xl);
+  color: white;
+  box-shadow: var(--shadow-xl);
+  position: relative;
+  overflow: hidden;
+  animation: slideInDown 0.6s ease-out;
+}
+
+.memory-cards-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+  animation: float 8s ease-in-out infinite;
+  opacity: 0.3;
+}
+
+.header-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.header-title .icon {
+  font-size: 3rem;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  animation: pulse 3s infinite;
+}
+
+.header-title h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 800;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: linear-gradient(45deg, #fff, #f0f8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+/* Barra de búsqueda moderna */
+.search-section {
+  margin-bottom: var(--space-xl);
+  animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+.search-container {
+  position: relative;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-input-wrapper {
+  position: relative;
+  background: var(--card-gradient);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass);
+  overflow: hidden;
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--space-lg) var(--space-lg) var(--space-lg) 4rem;
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+  outline: none;
+  transition: var(--transition-base);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.search-input:focus {
+  background: rgba(45, 55, 72, 0.2);
+}
+
+.search-icon {
+  position: absolute;
+  left: var(--space-lg);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.25rem;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transition: var(--transition-base);
+}
+
+.search-input:focus + .search-icon {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.1);
+}
+
+.clear-search {
+  position: absolute;
+  right: var(--space-lg);
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: var(--transition-base);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+}
+
+.clear-search:hover {
+  background: rgba(245, 101, 101, 0.2);
+  color: #f56565;
+}
+
+.search-input:not(:placeholder-shown) ~ .clear-search {
+  opacity: 1;
+}
+
+/* Estadísticas rápidas */
+.stats-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+}
+
+.stat-card {
+  background: var(--card-gradient);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-glass);
+  transition: var(--transition-base);
+  animation: scaleIn 0.6s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary-gradient);
+  border-radius: var(--radius-full);
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-xl);
+  border-color: var(--border-light);
+}
+
+.stat-card:nth-child(1) { animation-delay: 0.1s; --accent: #38b2ac; }
+.stat-card:nth-child(2) { animation-delay: 0.2s; --accent: #4299e1; }
+.stat-card:nth-child(3) { animation-delay: 0.3s; --accent: #ed8936; }
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--text-dark);
+  margin-bottom: var(--space-xs);
+  background: linear-gradient(45deg, var(--accent, #667eea), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-label {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-icon {
+  position: absolute;
+  top: var(--space-lg);
+  right: var(--space-lg);
+  font-size: 1.5rem;
+  opacity: 0.6;
+}
+
+/* Grid de cards renovado */
+.cards-section {
+  animation: fadeInUp 0.8s ease-out 0.4s both;
 }
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: var(--space-xl);
+  margin-bottom: var(--space-2xl);
 }
 
-.card-item {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  border: 1px solid #e2e8f0;
-  transition: transform 0.2s, box-shadow 0.2s;
+.memory-card-item {
+  background: var(--card-gradient);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-glass);
+  transition: var(--transition-base);
+  animation: fadeInUp 0.6s ease-out;
+  position: relative;
+  overflow: hidden;
 }
 
-.card-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+.memory-card-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: var(--primary-gradient);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
 }
 
-.card-header {
-  padding: 20px 20px 0;
+.memory-card-item:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: var(--shadow-2xl);
+  border-color: var(--border-light);
+}
+
+.memory-card-item:hover::before {
+  transform: scaleX(1);
+}
+
+.memory-card-item:nth-child(odd) { animation-delay: 0.1s; }
+.memory-card-item:nth-child(even) { animation-delay: 0.2s; }
+
+/* Header de cada card */
+.memory-card-header {
+  padding: var(--space-xl) var(--space-xl) var(--space-lg);
+  border-bottom: 1px solid var(--border-dark);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+}
+
+.card-title-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: var(--space-md);
 }
 
-.card-title {
+.memory-card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-dark);
   margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #1e293b;
+  line-height: 1.3;
+  flex: 1;
+  background: linear-gradient(45deg, var(--text-dark), var(--primary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.card-actions {
+.card-actions-menu {
   display: flex;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
-.btn-icon {
-  background: none;
-  border: none;
-  padding: 6px;
-  border-radius: 6px;
+.card-action-btn {
+  background: rgba(45, 55, 72, 0.6);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  font-size: 1rem;
   cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
+  transition: var(--transition-base);
+  color: var(--text-light);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  backdrop-filter: blur(10px);
 }
 
-.btn-icon:hover {
-  background-color: #f1f5f9;
+.card-action-btn:hover {
+  background: rgba(45, 55, 72, 0.8);
+  transform: scale(1.1);
+  box-shadow: var(--shadow-sm);
 }
 
-.delete-btn:hover {
-  background-color: #fef2f2;
-  color: #dc2626;
+.card-action-btn.edit:hover {
+  background: rgba(56, 178, 172, 0.2);
+  border-color: #38b2ac;
+  color: #4fd1c7;
 }
 
-.card-content {
-  padding: 15px 20px;
+.card-action-btn.delete:hover {
+  background: rgba(245, 101, 101, 0.2);
+  border-color: #f56565;
+  color: #fc8181;
 }
 
-.card-description {
-  color: #64748b;
-  margin-bottom: 15px;
-  line-height: 1.5;
+/* Contenido de cada card */
+.memory-card-content {
+  padding: var(--space-lg) var(--space-xl);
 }
 
-.card-meta {
+.memory-card-description {
+  color: var(--text-light);
+  line-height: 1.6;
+  margin-bottom: var(--space-lg);
+  font-size: 0.95rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-meta-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .meta-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  color: #94a3b8;
+  gap: var(--space-sm);
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .meta-icon {
-  font-size: 12px;
+  font-size: 1rem;
+  opacity: 0.7;
 }
 
-.card-footer {
-  padding: 15px 20px;
-  border-top: 1px solid #f1f5f9;
+/* Footer de cada card */
+.memory-card-footer {
+  padding: var(--space-lg) var(--space-xl);
+  border-top: 1px solid var(--border-dark);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.1), rgba(26, 32, 44, 0.1));
 }
 
 .status-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  backdrop-filter: blur(10px);
 }
 
 .status-active {
-  background-color: #dcfce7;
-  color: #166534;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  color: #065f46;
+  border: 1px solid #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
+}
+
+.status-active::before {
+  content: '●';
+  color: #10b981;
+  animation: pulse 2s infinite;
 }
 
 .status-inactive {
-  background-color: #fef2f2;
-  color: #dc2626;
+  background: linear-gradient(135deg, #fef2f2, #fecaca);
+  color: #991b1b;
+  border: 1px solid #f87171;
+}
+
+.status-inactive::before {
+  content: '●';
+  color: #ef4444;
 }
 
 .status-draft {
-  background-color: #fef3c7;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
   color: #92400e;
+  border: 1px solid #f59e0b;
 }
 
+.status-draft::before {
+  content: '●';
+  color: #f59e0b;
+}
+
+/* Estado vacío mejorado */
 .empty-state {
-  text-align: center;
-  padding: 60px 20px;
   grid-column: 1 / -1;
+  text-align: center;
+  padding: var(--space-3xl);
+  background: var(--card-gradient);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-glass);
+  animation: fadeInUp 0.8s ease-out;
 }
 
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-  opacity: 0.5;
+.empty-state .empty-icon {
+  font-size: 4rem;
+  margin-bottom: var(--space-xl);
+  opacity: 0.7;
+  animation: float 3s ease-in-out infinite;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .empty-state h3 {
-  margin: 0 0 10px 0;
-  color: #1e293b;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: var(--space-md);
+  color: var(--text-dark);
 }
 
 .empty-state p {
-  color: #64748b;
-  margin-bottom: 30px;
+  color: var(--text-light);
+  margin-bottom: var(--space-xl);
+  font-size: 1.1rem;
+  line-height: 1.6;
 }
 
-.btn {
-  display: inline-flex;
+/* Filtros y ordenamiento */
+.filters-section {
+  margin-bottom: var(--space-xl);
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  text-decoration: none;
+  justify-content: space-between;
+}
+
+.filter-group {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.filter-label {
+  color: var(--text-light);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.filter-select {
+  background: var(--card-gradient);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  backdrop-filter: blur(10px);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: var(--transition-base);
 }
 
-.btn-primary {
-  background-color: #3b82f6;
-  color: white;
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
 }
 
-.btn-primary:hover {
-  background-color: #2563eb;
-  transform: translateY(-1px);
+/* Paginación */
+.pagination-section {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-2xl);
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.pagination-info {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+
+@media (max-width: 1024px) {
+  .memory-cards-container {
+    padding: var(--space-md);
+  }
+  
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-lg);
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .memory-cards-header {
+    padding: var(--space-xl);
+    text-align: center;
+  }
+
+  .header-top {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-lg);
+  }
+
+  .header-title .icon {
+    font-size: 2.5rem;
+  }
+
+  .header-title h1 {
+    font-size: 1.75rem;
+  }
+
+  .header-actions {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+    max-width: 200px;
+  }
+
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-lg);
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-section {
+    margin-bottom: var(--space-lg);
+  }
+
+  .memory-card-header,
+  .memory-card-content,
+  .memory-card-footer {
+    padding: var(--space-lg);
+  }
+
+  .card-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .card-actions-menu {
+    align-self: flex-end;
+  }
+
+  .filters-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-md);
+  }
+
+  .filter-group {
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .memory-cards-container {
+    padding: var(--space-sm);
+  }
+
+  .memory-cards-header {
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+  }
+
+  .header-title h1 {
+    font-size: 1.5rem;
+  }
+
+  .search-input {
+    padding: var(--space-md) var(--space-md) var(--space-md) 3rem;
+    font-size: 1rem;
+  }
+
+  .search-icon {
+    left: var(--space-md);
+    font-size: 1.1rem;
+  }
+
+  .clear-search {
+    right: var(--space-md);
+  }
+
+  .memory-card-header,
+  .memory-card-content,
+  .memory-card-footer {
+    padding: var(--space-md);
+  }
+
+  .memory-card-title {
+    font-size: 1.1rem;
+  }
+
+  .card-actions-menu {
+    gap: var(--space-xs);
+  }
+
+  .card-action-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
+  }
+
+  .stat-card {
+    padding: var(--space-md);
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
 }
 </style>
+{% endblock %}
+
+{% block content %}
+<div class="memory-cards-container">
+  <!-- Header renovado -->
+  <div class="memory-cards-header">
+    <div class="header-top">
+      <div class="header-title">
+        <span class="icon">🗃️</span>
+        <h1>Memory Cards</h1>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="refreshCards()">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">Actualizar</span>
+        </button>
+        <a href="{{ url_for('memory_cards.create_card') }}" class="btn btn-primary">
+          <span class="btn-icon">➕</span>
+          <span class="btn-text">Nueva Memory Card</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Barra de búsqueda -->
+  <div class="search-section">
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="search-input" 
+          placeholder="Buscar memory cards por título, descripción o autor..."
+          autocomplete="off">
+        <span class="search-icon">🔍</span>
+        <button type="button" class="clear-search" onclick="clearSearch()">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estadísticas rápidas -->
+  <div class="stats-section">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value" id="totalCards">{{ cards|length if cards else 0 }}</div>
+        <div class="stat-label">Total Cards</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value" id="activeCards">{{ cards|selectattr('status', 'equalto', 'active')|list|length if cards else 0 }}</div>
+        <div class="stat-label">Activas</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📝</div>
+        <div class="stat-value" id="draftCards">{{ cards|selectattr('status', 'equalto', 'draft')|list|length if cards else 0 }}</div>
+        <div class="stat-label">Borradores</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="filters-section">
+    <div class="filter-group">
+      <label class="filter-label">Estado:</label>
+      <select id="statusFilter" class="filter-select" onchange="filterCards()">
+        <option value="">Todos</option>
+        <option value="active">Activo</option>
+        <option value="inactive">Inactivo</option>
+        <option value="draft">Borrador</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Ordenar por:</label>
+      <select id="sortBy" class="filter-select" onchange="sortCards()">
+        <option value="newest">Más recientes</option>
+        <option value="oldest">Más antiguos</option>
+        <option value="title">Título A-Z</option>
+        <option value="title-desc">Título Z-A</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Grid de cards -->
+  <div class="cards-section">
+    <div class="cards-grid" id="cardsGrid">
+      {% if cards %}
+        {% for card in cards %}
+        <div class="memory-card-item" 
+             data-title="{{ card.title or 'Sin título' }}" 
+             data-description="{{ card.description or 'Sin descripción' }}"
+             data-author="{{ card.author or 'Sistema' }}"
+             data-status="{{ card.status or 'active' }}"
+             data-created="{{ card.created_at or '' }}">
+          
+          <div class="memory-card-header">
+            <div class="card-title-row">
+              <h3 class="memory-card-title">{{ card.title or 'Sin título' }}</h3>
+              <div class="card-actions-menu">
+                <a href="{{ url_for('memory_cards.edit_card', card_id=card.id if card.id else card._id) }}" 
+                   class="card-action-btn edit" 
+                   title="Editar">
+                  ✏️
+                </a>
+                <form action="{{ url_for('memory_cards.delete_card', card_id=card.id if card.id else card._id) }}" 
+                      method="POST" style="display: inline;">
+                  <button type="submit" 
+                          class="card-action-btn delete" 
+                          title="Eliminar"
+                          onclick="return confirmDelete('{{ card.title or 'esta memory card' }}')">
+                    🗑️
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div class="memory-card-content">
+            <p class="memory-card-description">{{ card.description or 'Sin descripción disponible para esta memory card.' }}</p>
+            <div class="card-meta-info">
+              <div class="meta-item">
+                <span class="meta-icon">📅</span>
+                <span>{{ card.created_at or 'Fecha no disponible' }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-icon">👤</span>
+                <span>{{ card.author or 'Sistema' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="memory-card-footer">
+            <span class="status-badge status-{{ card.status or 'active' }}">
+              {{ card.status|title or 'Activo' }}
+            </span>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">🗃️</div>
+          <h3>No hay Memory Cards</h3>
+          <p>Aún no se han creado memory cards en el sistema. Crea tu primera memory card para empezar.</p>
+          <a href="{{ url_for('memory_cards.create_card') }}" class="btn btn-primary">
+            <span class="btn-icon">➕</span>
+            <span class="btn-text">Crear primera Memory Card</span>
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Info de resultados -->
+  <div class="pagination-info" id="resultsInfo">
+    {% if cards %}
+    Mostrando {{ cards|length }} memory card{{ 's' if cards|length != 1 else '' }}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allCards = [];
+let filteredCards = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Inicializar datos
+  allCards = Array.from(document.querySelectorAll('.memory-card-item')).map(card => ({
+    element: card,
+    title: card.dataset.title.toLowerCase(),
+    description: card.dataset.description.toLowerCase(),
+    author: card.dataset.author.toLowerCase(),
+    status: card.dataset.status,
+    created: card.dataset.created
+  }));
+  
+  filteredCards = [...allCards];
+  
+  // Event listeners
+  document.getElementById('searchInput').addEventListener('input', handleSearch);
+  
+  // Mostrar info inicial
+  updateResultsInfo();
+});
+
+function handleSearch() {
+  const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+  const statusFilter = document.getElementById('statusFilter').value;
+  
+  if (searchTerm === '' && statusFilter === '') {
+    filteredCards = [...allCards];
+  } else {
+    filteredCards = allCards.filter(card => {
+      const matchesSearch = searchTerm === '' || 
+        card.title.includes(searchTerm) || 
+        card.description.includes(searchTerm) || 
+        card.author.includes(searchTerm);
+      
+      const matchesStatus = statusFilter === '' || card.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }
+  
+  displayFilteredCards();
+  updateResultsInfo();
+}
+
+function filterCards() {
+  handleSearch();
+}
+
+function sortCards() {
+  const sortBy = document.getElementById('sortBy').value;
+  
+  filteredCards.sort((a, b) => {
+    switch(sortBy) {
+      case 'newest':
+        return new Date(b.created) - new Date(a.created);
+      case 'oldest':
+        return new Date(a.created) - new Date(b.created);
+      case 'title':
+        return a.title.localeCompare(b.title);
+      case 'title-desc':
+        return b.title.localeCompare(a.title);
+      default:
+        return 0;
+    }
+  });
+  
+  displayFilteredCards();
+}
+
+function displayFilteredCards() {
+  const grid = document.getElementById('cardsGrid');
+  const emptyState = grid.querySelector('.empty-state');
+  
+  // Ocultar todas las cards
+  allCards.forEach(card => {
+    card.element.style.display = 'none';
+  });
+  
+  if (filteredCards.length === 0) {
+    // Mostrar estado vacío personalizado
+    if (!emptyState) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'empty-state';
+      emptyDiv.innerHTML = `
+        <div class="empty-icon">🔍</div>
+        <h3>No se encontraron resultados</h3>
+        <p>No hay memory cards que coincidan con tu búsqueda. Intenta con otros términos.</p>
+        <button class="btn btn-secondary" onclick="clearSearch()">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">Limpiar búsqueda</span>
+        </button>
+      `;
+      grid.appendChild(emptyDiv);
+    } else {
+      emptyState.style.display = 'block';
+    }
+  } else {
+    // Ocultar estado vacío
+    if (emptyState) {
+      emptyState.style.display = 'none';
+    }
+    
+    // Mostrar cards filtradas
+    filteredCards.forEach((card, index) => {
+      card.element.style.display = 'block';
+      // Animar entrada escalonada
+      card.element.style.animationDelay = `${index * 0.1}s`;
+    });
+  }
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('statusFilter').value = '';
+  handleSearch();
+}
+
+function confirmDelete(cardTitle) {
+  return confirm(`¿Estás seguro de que quieres eliminar la memory card "${cardTitle}"?\n\nEsta acción no se puede deshacer.`);
+}
+
+function refreshCards() {
+  showNotification('🔄 Actualizando memory cards...', 'info');
+  setTimeout(() => {
+    window.location.reload();
+  }, 500);
+}
+
+function updateResultsInfo() {
+  const info = document.getElementById('resultsInfo');
+  const total = allCards.length;
+  const showing = filteredCards.length;
+  
+  if (total === 0) {
+    info.textContent = '';
+  } else if (showing === total) {
+    info.textContent = `Mostrando ${total} memory card${total !== 1 ? 's' : ''}`;
+  } else {
+    info.textContent = `Mostrando ${showing} de ${total} memory card${total !== 1 ? 's' : ''}`;
+  }
+}
+
+function showNotification(message, type = 'info') {
+  // Crear notificación
+  const notification = document.createElement('div');
+  notification.className = `toast toast-${type}`;
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: ${type === 'info' ? '#3b82f6' : type === 'success' ? '#10b981' : '#ef4444'};
+    color: white;
+    padding: 16px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    z-index: 10001;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    animation: slideInRight 0.3s ease;
+    backdrop-filter: blur(10px);
+  `;
+  
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.animation = 'fadeOut 0.3s ease';
+    setTimeout(() => {
+      notification.remove();
+    }, 300);
+  }, 3000);
+}
+
+// Animaciones CSS adicionales
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  
+  @keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-10px); }
+  }
+`;
+document.head.appendChild(style);
+</script>
 {% endblock %}

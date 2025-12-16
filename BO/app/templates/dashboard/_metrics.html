@@ -1,0 +1,46 @@
+<section class="metrics-grid">
+  <article class="metric-card">
+    <div class="metric-icon">🔥</div>
+    <div class="metric-content">
+      <div class="metric-value">{{ summary.total_users or 0 }}</div>
+      <div class="metric-label">Alumnos registrados</div>
+      <div class="metric-trend neutral">
+        <span class="trend-icon">■</span>
+        <span>Sin datos históricos</span>
+      </div>
+    </div>
+    <div class="metric-actions">
+      <a href="{{ url_for('users.user_list') }}" class="metric-action-btn" title="Ver alumnos">👥</a>
+    </div>
+  </article>
+
+  <article class="metric-card">
+    <div class="metric-icon">🟢</div>
+    <div class="metric-content">
+      <div class="metric-value">{{ summary.active_users or 0 }}</div>
+      <div class="metric-label">Alumnos activos</div>
+      <div class="metric-trend neutral">
+        <span class="trend-icon">■</span>
+        <span>Sin datos históricos</span>
+      </div>
+    </div>
+    <div class="metric-actions">
+      <a href="{{ url_for('users.user_list') }}" class="metric-action-btn" title="Ver alumnos activos">👥</a>
+    </div>
+  </article>
+
+  <article class="metric-card">
+    <div class="metric-icon">📚</div>
+    <div class="metric-content">
+      <div class="metric-value">{{ summary.total_cards or 0 }}</div>
+      <div class="metric-label">Memory cards</div>
+      <div class="metric-trend neutral">
+        <span class="trend-icon">■</span>
+        <span>Sin datos históricos</span>
+      </div>
+    </div>
+    <div class="metric-actions">
+      <a href="{{ url_for('memory_cards.card_list') }}" class="metric-action-btn" title="Ver cards">🧠</a>
+    </div>
+  </article>
+</section>
