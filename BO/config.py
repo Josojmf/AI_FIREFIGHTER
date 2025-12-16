@@ -17,6 +17,7 @@ class Config:
     # =========================================================
     # 🔐 SEGURIDAD
     # =========================================================
+    # Clave de sesión del BACKOFFICE (estable y consistente)
     SECRET_KEY = os.getenv(
         'BACKOFFICE_SECRET_KEY',
         'firefighter-backoffice-secret-key-2024'
@@ -29,8 +30,9 @@ class Config:
     SESSION_COOKIE_SECURE = ENVIRONMENT == 'production'
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_DOMAIN = None
-    PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas
 
+    # Sesiones permanentes (en segundos)
+    PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas
     SESSION_PROTECTION = 'strong'
     SESSION_REFRESH_EACH_REQUEST = True
 
@@ -62,13 +64,10 @@ class Config:
     @classmethod
     def validate_config(cls):
         errors = []
-
         if not cls.API_BASE_URL:
             errors.append("❌ API_BASE_URL no está configurado (obligatorio)")
-
         if not cls.SECRET_KEY:
             errors.append("❌ SECRET_KEY no está configurado")
-
         return errors
 
     # =========================================================
@@ -79,18 +78,18 @@ class Config:
         print("=" * 70)
         print("🔧 BACKOFFICE CONFIGURATION")
         print("=" * 70)
-        print(f"🌍 Environment     : {cls.ENVIRONMENT}")
-        print(f"📦 Docker Mode     : {cls.DOCKER}")
-        print(f"🐛 Debug           : {cls.DEBUG}")
-        print(f"🌐 API URL         : {cls.API_BASE_URL}")
-        print(f"📡 Redis           : {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
-        print(f"🔒 Session Cookie  : {cls.SESSION_COOKIE_NAME}")
+        print(f"🌍 Environment : {cls.ENVIRONMENT}")
+        print(f"📦 Docker Mode : {cls.DOCKER}")
+        print(f"🐛 Debug       : {cls.DEBUG}")
+        print(f"🌐 API URL     : {cls.API_BASE_URL}")
+        print(f"📡 Redis       : {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
+        print(f"🔒 Session Cookie : {cls.SESSION_COOKIE_NAME}")
         if cls.SECRET_KEY:
-            print(f"🔑 Secret Key      : {cls.SECRET_KEY[:20]}...")
+            print(f"🔑 Secret Key  : {cls.SECRET_KEY[:20]}...")
         else:
-            print("🔑 Secret Key      : ❌ NO SET")
+            print("🔑 Secret Key  : ❌ NO SET")
         print(
-            f"⏱️  Session Time   : {cls.PERMANENT_SESSION_LIFETIME}s "
+            f"⏱️ Session Time : {cls.PERMANENT_SESSION_LIFETIME}s "
             f"({cls.PERMANENT_SESSION_LIFETIME // 3600}h)"
         )
         print("=" * 70)
@@ -99,7 +98,7 @@ class Config:
         if errors:
             print("🚨 CONFIGURATION ERRORS:")
             for error in errors:
-                print(f"   {error}")
+                print(f"  {error}")
             print("=" * 70)
             return False
 
@@ -110,4 +109,3 @@ class Config:
 
 # 🔥 Mostrar siempre configuración al arrancar
 Config.log_config()
- 
