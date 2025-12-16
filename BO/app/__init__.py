@@ -5,12 +5,13 @@ import logging
 from config import Config
 from datetime import datetime
 
+
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    
+
     # 🔥 CONFIGURACIÓN PRIMERO - CON SECRET_KEY CONSISTENTE
     app.config.from_object(Config)
-    
+
     # 🔥 CONFIGURACIÓN COMPLETA DE SESIÓN USANDO Config
     app.config.update({
         'SESSION_COOKIE_NAME': Config.SESSION_COOKIE_NAME,
@@ -20,7 +21,7 @@ def create_app():
         'SESSION_COOKIE_SAMESITE': Config.SESSION_COOKIE_SAMESITE,
         'SESSION_COOKIE_DOMAIN': Config.SESSION_COOKIE_DOMAIN,
         'PERMANENT_SESSION_LIFETIME': Config.PERMANENT_SESSION_LIFETIME,
-        'SESSION_REFRESH_EACH_REQUEST': Config.SESSION_REFRESH_EACH_REQUEST
+        'SESSION_REFRESH_EACH_REQUEST': Config.SESSION_REFRESH_EACH_REQUEST,
     })
 
     # Logging de configuración para debug
@@ -36,42 +37,48 @@ def create_app():
     from app.models.user import BackofficeUser
 
     @login_manager.user_loader
-    def load_user(user_id):
+    def load_user(user_id: str):
         print(f"🔍 User loader llamado para user_id: {user_id}")
-        
+
         # 🔥 VALIDACIÓN: Rechazar IDs ficticios inmediatamente
         if not user_id or user_id in ['None', 'admin-fallback', 'admin-local']:
             print(f"❌ ID ficticio en user_loader: {user_id}")
             return None
-        
+
         try:
             token = session.get('api_token')
             user_data = session.get('user_data')
-            
+
             print(f"🔑 Token en sesión: {'✅' if token else '❌'}")
             print(f"📦 User data en sesión: {'✅' if user_data else '❌'}")
-            
-            # PRIMERO: Intentar cargar desde user_data de sesión (si el ID coincide)
-            if user_data and user_data.get('id') == user_id:
-                print("🔄 Cargando usuario desde session['user_data']")
-                user = BackofficeUser.from_dict(user_data)
-                if user:
-                    print(f"✅ Usuario cargado desde sesión: {user.username}")
-                    return user
-            
-            # SEGUNDO: Intentar cargar desde API con token
-            if token:
-                print("🔄 Cargando usuario desde API con token")
-                user = BackofficeUser.get(user_id, token=token)
-                if user:
-                    # Actualizar sesión con datos frescos
-                    session['user_data'] = user.to_dict()
-                    print(f"✅ Usuario cargado desde API: {user.username}")
-                    return user
-            
-            print(f"❌ No se pudo cargar usuario REAL {user_id}")
-            return None
-                
+
+            # Si no hay datos suficientes en sesión, no se puede cargar usuario
+            if not token or not user_data:
+                print(f"❌ No hay datos suficientes en sesión para {user_id}")
+                return None
+
+            # Validar que el ID guardado coincide con el user_id
+            if user_data.get('id') != user_id:
+                print(f"❌ Mismatch de IDs: session={user_data.get('id')} loader={user_id}")
+                return None
+
+            # Reconstruir usuario solo desde los datos de sesión
+            user = BackofficeUser.from_dict({
+                "id": user_id,
+                "username": user_data.get("username"),
+                "email": user_data.get("email"),
+                "role": user_data.get("role"),
+                "mfa_enabled": user_data.get("mfa_enabled", False),
+                "token": token,
+            })
+
+            if user:
+                print(f"✅ Usuario cargado desde sesión en user_loader: {user.username}")
+            else:
+                print("❌ BackofficeUser.from_dict devolvió None")
+
+            return user
+
         except Exception as e:
             print(f"⚠️ Error crítico en user_loader: {e}")
             import traceback
@@ -95,25 +102,28 @@ def create_app():
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "backoffice"}, 200
-    
+
     # 🔥 NUEVA RUTA: Redirigir raíz al dashboard
     @app.route('/')
     def root_redirect():
         """Redirigir raíz al dashboard"""
         print("🔄 Redirigiendo / → /dashboard")
         return redirect('/dashboard')
-    
+
     # Middleware de debug MEJORADO
     @app.before_request
     def log_request_info():
         if request.endpoint and not request.endpoint.startswith('static'):
             timestamp = datetime.now().strftime("%H:%M:%S")
             session_info = f"Cookie: {request.cookies.get(Config.SESSION_COOKIE_NAME, 'None')[:10]}..."
-            print(f"🕒 [{timestamp}] 🌐 [{request.method}] {request.path} - User: {current_user.is_authenticated} | {session_info}")
+            print(
+                f"🕒 [{timestamp}] 🌐 [{request.method}] {request.path} - "
+                f"User: {current_user.is_authenticated} | {session_info}"
+            )
 
     # Configurar logging
     logging.basicConfig(level=logging.INFO)
-    
+
     print(f"🚀 BackOffice iniciado con sesión '{Config.SESSION_COOKIE_NAME}'")
-    
+
     return app

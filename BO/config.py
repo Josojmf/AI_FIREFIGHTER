@@ -22,6 +22,7 @@ class Config:
         'firefighter-backoffice-secret-key-2024'
     )
 
+    # Nombre de la cookie de sesión del BACKOFFICE
     SESSION_COOKIE_NAME = 'backoffice_session'
     SESSION_COOKIE_PATH = '/'
     SESSION_COOKIE_HTTPONLY = True
@@ -46,7 +47,6 @@ class Config:
     # ⚠️ El Backoffice NO decide la URL
     # ⚠️ Debe venir SIEMPRE por variable de entorno
     API_BASE_URL = os.getenv('API_BASE_URL')
-
     BACKOFFICE_API_BASE_URL = API_BASE_URL
 
     # =========================================================
@@ -80,17 +80,17 @@ class Config:
         print("🔧 BACKOFFICE CONFIGURATION")
         print("=" * 70)
         print(f"🌍 Environment     : {cls.ENVIRONMENT}")
-        print(f"📦 Docker Mode    : {cls.DOCKER}")
-        print(f"🐛 Debug          : {cls.DEBUG}")
-        print(f"🌐 API URL        : {cls.API_BASE_URL}")
-        print(f"📡 Redis          : {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
-        print(f"🔒 Session Cookie : {cls.SESSION_COOKIE_NAME}")
+        print(f"📦 Docker Mode     : {cls.DOCKER}")
+        print(f"🐛 Debug           : {cls.DEBUG}")
+        print(f"🌐 API URL         : {cls.API_BASE_URL}")
+        print(f"📡 Redis           : {cls.REDIS_HOST}:{cls.REDIS_PORT}/{cls.REDIS_DB}")
+        print(f"🔒 Session Cookie  : {cls.SESSION_COOKIE_NAME}")
+        if cls.SECRET_KEY:
+            print(f"🔑 Secret Key      : {cls.SECRET_KEY[:20]}...")
+        else:
+            print("🔑 Secret Key      : ❌ NO SET")
         print(
-            f"🔑 Secret Key     : {cls.SECRET_KEY[:20]}..."
-            if cls.SECRET_KEY else "❌ NO SET"
-        )
-        print(
-            f"⏱️  Session Time  : {cls.PERMANENT_SESSION_LIFETIME}s "
+            f"⏱️  Session Time   : {cls.PERMANENT_SESSION_LIFETIME}s "
             f"({cls.PERMANENT_SESSION_LIFETIME // 3600}h)"
         )
         print("=" * 70)
