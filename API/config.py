@@ -17,6 +17,10 @@ class Config:
     MONGO_CLUSTER = os.getenv("MONGO_CLUSTER", "cluster0.yzzh9ig.mongodb.net")
     DB_NAME = os.getenv("DB_NAME", "FIREFIGHTER")
     
+    # JWT Configuration
+    JWT_SECRET = os.getenv("JWT_SECRET", "firefighter-super-secret-jwt-key-2024")
+    JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
     # Construir URI de MongoDB
     @classmethod
     def get_mongo_uri(cls):
