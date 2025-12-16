@@ -42,4 +42,4 @@ gevent==23.9.1
 prometheus-fastapi-instrumentator==7.0.0  # Opcional: métricas Prometheus
 
 uvloop==0.17.0  # Opcional: event loop rápido para uvicorn
-httptools==0.6.3  # Opcional: parser HTTP rápido para uvicorn (compatible con uvicorn 0.32.1)
+httptools==0.6.3  # Opcional: parser HTTP rápido para uvicorn (compatible con uvicorn 0.32.1
