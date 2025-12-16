@@ -192,7 +192,7 @@ jobs:
           script: |
             set -e
             echo "Checking backend health..."
-            curl -fsS http://localhost:5000/health || (echo "Backend health failed" && exit 1)
+            curl -fsS http://localhost:5000/api/health || (echo "Backend health failed" && exit 1)
             echo "Checking backoffice health..."
             curl -fsS http://localhost:3001/health || (echo "Backoffice health failed" && exit 1)
             echo "✅ All health checks passed"
