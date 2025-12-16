@@ -125,7 +125,7 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           source: "scripts/prod.sh,scripts/backup.sh,docker-compose.swarm.yml,docker-compose.monitoring.yml,env/production.env"
-          target: "/opt/emergency/"
+          target: "/opt/emergency/" 
 
       - name: Setup deployment scripts
         uses: appleboy/ssh-action@v0.1.10
