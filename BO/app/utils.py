@@ -20,4 +20,4 @@ def api_request(method, endpoint, **kwargs):
         return response
     except requests.RequestException as e:
         current_app.logger.error(f"API request failed: {e}")
-        return None
+        return None 
