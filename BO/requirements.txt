@@ -37,3 +37,5 @@ python-dateutil==2.8.2
 
 #REDIS (OBLIGATORIO PARA DASHBOARD)
 redis==5.0.1
+
+Flask-Session==0.8.0

@@ -26,7 +26,7 @@ class Config:
         return "mongodb://localhost:27017"
     
     # Seguridad JWT
-    SECRET_KEY = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
+    SECRET_KEY = os.getenv("SECRET_KEY", "firefighter-super-secret-jwt-key-2024")
     JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
     
     # Email SendGrid - SIN VALORES HARDCODEADOS

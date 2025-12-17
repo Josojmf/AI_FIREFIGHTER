@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 # Configuración
-JWT_SECRET = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
+JWT_SECRET = os.getenv("JWT_SECRET", "firefighter-super-secret-jwt-key-2024")
 JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
 JWT_ALGORITHM = "HS256"
 

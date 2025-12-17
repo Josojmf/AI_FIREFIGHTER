@@ -19,7 +19,7 @@ class Config:
     # =========================================================
     SECRET_KEY = os.getenv(
         "BACKOFFICE_SECRET_KEY",
-        "firefighter-backoffice-secret-key-2024-production"
+        "firefighter-super-secret-jwt-key-2024"
     )
 
     # 🔐 JWT PARA COMUNICACIÓN CON BACKEND API
