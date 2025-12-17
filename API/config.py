@@ -17,20 +17,22 @@ class Config:
     MONGO_CLUSTER = os.getenv("MONGO_CLUSTER", "cluster0.yzzh9ig.mongodb.net")
     DB_NAME = os.getenv("DB_NAME", "FIREFIGHTER")
     
-    # JWT Configuration
-    JWT_SECRET = os.getenv("JWT_SECRET", "firefighter-super-secret-jwt-key-2024")
+    # JWT Configuration - AÑADE ESTOS
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "firefighter-super-secret-jwt-key-2024")
     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
+    JWT_ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_HOURS", "24"))  # 24 horas
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    
+    # Para compatibilidad con código existente
+    JWT_SECRET = JWT_SECRET_KEY  # Alias
+    SECRET_KEY = JWT_SECRET_KEY  # Alias
+    
     # Construir URI de MongoDB
     @classmethod
     def get_mongo_uri(cls):
         if cls.MONGO_USER and cls.MONGO_PASS:
             return f"mongodb+srv://{cls.MONGO_USER}:{cls.MONGO_PASS}@{cls.MONGO_CLUSTER}/?retryWrites=true&w=majority&appName=FirefighterAPI"
         return "mongodb://localhost:27017"
-    
-    # Seguridad JWT
-    SECRET_KEY = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
-    JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
     
     # Email SendGrid - SIN VALORES HARDCODEADOS
     SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")

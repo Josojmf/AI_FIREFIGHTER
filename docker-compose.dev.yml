@@ -78,13 +78,14 @@ services:
       dockerfile: Dockerfile
     container_name: backoffice-dev
     ports:
-      - "3001:3001"
+      - "3001:3001"  # Cambiado: externo:8080, interno:3001
     env_file:
       - _env
     environment:
       FLASK_ENV: development
       API_BASE_URL: http://backend:5000
       REDIS_URL: redis://redis:6379/0
+      PORT: 3001  # Asegurar puerto interno
     depends_on:
       backend:
         condition: service_healthy
@@ -97,9 +98,6 @@ services:
     networks:
       - firefighter
     restart: unless-stopped
-
-
-
   # =========================
   # 🔴 REDIS
   # =========================

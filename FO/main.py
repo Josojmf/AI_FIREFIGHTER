@@ -450,7 +450,6 @@ def login():
         try:
             _safe_print(f"📤 POST {API_BASE_URL}/login")
             res = requests.post(f"{API_BASE_URL}/auth/login", json={"username": username, "password": password}, timeout=10)
-
             
             print(f"🔍 Respuesta login - Status: {res.status_code}")
             
