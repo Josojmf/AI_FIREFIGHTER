@@ -1,6 +1,8 @@
 version: '3.8'
 
+
 services:
+
 
   # =========================
   # 🔥 BACKEND (API) - CONSTRUIDO LOCALMENTE
@@ -32,11 +34,14 @@ services:
     restart: unless-stopped
 
 
+
   # =========================
-  # 🌐 FRONTEND
+  # 🌐 FRONTEND - CONSTRUIDO LOCALMENTE
   # =========================
   frontend:
-    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
+    build:
+      context: ./FO
+      dockerfile: Dockerfile
     container_name: frontend-dev
     ports:
       - "8080:8000"
@@ -61,6 +66,7 @@ services:
     networks:
       - firefighter
     restart: unless-stopped
+
 
 
   # =========================
@@ -93,6 +99,7 @@ services:
     restart: unless-stopped
 
 
+
   # =========================
   # 🔴 REDIS
   # =========================
@@ -116,9 +123,11 @@ services:
     restart: unless-stopped
 
 
+
 networks:
   firefighter:
     driver: bridge
+
 
 
 volumes:

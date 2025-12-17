@@ -133,6 +133,8 @@ async def generate_mfa_secret(user_id: str, user_data: Dict = Depends(require_us
     Generar secreto MFA + QR + clave manual.
     Endpoint esperado por el backoffice: POST /api/users/{user_id}/mfa/generate
     """
+    print(f"🔍 DEBUG Generate MFA para user_id={user_id}")
+    
     # Solo el propio usuario o admin
     if user_data.get("role") != "admin" and user_data.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Acceso denegado")
@@ -143,16 +145,20 @@ async def generate_mfa_secret(user_id: str, user_data: Dict = Depends(require_us
 
     # Generar secreto TOTP
     secret = pyotp.random_base32()
+    print(f"🔍 Secreto generado: {secret}")
+    
     username_label = user.get("email") or user.get("username", "usuario")
     otpauth_uri = build_otpauth_uri(secret, username_label)
     qrcode_b64 = make_qr_base64(otpauth_uri)
 
     # Guardar secreto en BD
-    await _update_user_any_collection(user, {
+    update_result = await _update_user_any_collection(user, {
         "mfa_secret": secret,
         "mfa_enabled": False,
         "mfa_created_at": datetime.utcnow(),
     })
+    
+    print(f"🔍 Secreto guardado en BD: modificados={update_result.modified_count}")
 
     return {
         "ok": True,
@@ -160,7 +166,7 @@ async def generate_mfa_secret(user_id: str, user_data: Dict = Depends(require_us
         "qrcode": qrcode_b64,    
         "manual_entry_key": secret
     }
-
+    
 @router.post("/users/{user_id}/mfa/verify-setup", response_model=Dict[str, Any])
 async def verify_mfa_setup(user_id: str, body: Dict[str, Any], user_data: Dict = Depends(require_user_local)):
     """
@@ -168,7 +174,11 @@ async def verify_mfa_setup(user_id: str, body: Dict[str, Any], user_data: Dict =
     Endpoint esperado: POST /api/users/{user_id}/mfa/verify-setup
     """
     code = str(body.get("code", "")).strip()
+    print(f"🔍 DEBUG MFA Verify Setup para user_id={user_id}")
+    print(f"🔍 Código recibido: {code}")
+    
     if not (code.isdigit() and len(code) == 6):
+        print(f"❌ Código inválido: {code}")
         raise HTTPException(status_code=400, detail="Código MFA inválido")
 
     # Solo el propio usuario o admin
@@ -176,20 +186,44 @@ async def verify_mfa_setup(user_id: str, body: Dict[str, Any], user_data: Dict =
         raise HTTPException(status_code=403, detail="Acceso denegado")
 
     user = await _find_user_by_id_any_collection(user_id)
-    if not user or "mfa_secret" not in user:
-        return {"ok": False}
+    print(f"🔍 Usuario encontrado: {user is not None}")
+    
+    if not user:
+        print(f"❌ Usuario no encontrado: {user_id}")
+        return {"ok": False, "detail": "Usuario no encontrado"}
+    
+    if "mfa_secret" not in user:
+        print(f"❌ No hay secreto MFA para usuario: {user_id}")
+        print(f"🔍 Campos del usuario: {list(user.keys())}")
+        return {"ok": False, "detail": "MFA no inicializado"}
 
+    # Debug: Mostrar el secreto (en logs solo, no en producción real)
+    print(f"🔍 Secreto MFA presente: {'SÍ' if user.get('mfa_secret') else 'NO'}")
+    print(f"🔍 Tiempo actual UTC: {datetime.utcnow().isoformat()}")
+    
     totp = pyotp.TOTP(user["mfa_secret"])
-    if not totp.verify(code):
-        return {"ok": False}
+    
+    # Verificar con margen de tiempo más amplio
+    is_valid = totp.verify(code, valid_window=2)  # ±2 intervalos (60 segundos)
+    
+    print(f"🔍 Verificación TOTP: código={code}, válido={is_valid}")
+    
+    if not is_valid:
+        # Generar código actual para comparar
+        current_code = totp.now()
+        print(f"🔍 Código actual esperado: {current_code}")
+        print(f"🔍 Diferencia: {abs(int(code) - int(current_code)) if current_code.isdigit() else 'N/A'}")
+        return {"ok": False, "detail": "Código MFA incorrecto"}
 
     # Marcar MFA como habilitado
-    await _update_user_any_collection(user, {
+    result = await _update_user_any_collection(user, {
         "mfa_enabled": True,
         "mfa_verified_at": datetime.utcnow(),
     })
-
-    return {"ok": True}
+    
+    print(f"🔍 MFA habilitado: modificados={result.modified_count}")
+    
+    return {"ok": True, "detail": "MFA configurado exitosamente"}
 
 @router.post("/users/{user_id}/mfa/verify", response_model=Dict[str, Any])
 async def verify_mfa(user_id: str, body: Dict[str, Any]):
@@ -487,4 +521,140 @@ async def users_health():
         "service": "users",
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
+    }
+# Al final del archivo users.py, antes del último bracket
+
+@router.get("/debug/mfa/{user_id}")
+async def debug_mfa_status(user_id: str):
+    """Debug endpoint para verificar estado MFA en todas las colecciones"""
+    print(f"🔍 DEBUG MFA STATUS para user_id={user_id}")
+    
+    # Importar ObjectId aquí para evitar circular dependencies
+    from bson import ObjectId
+    
+    results = {
+        "user_id": user_id,
+        "found_in": [],
+        "details": {}
+    }
+    
+    # Buscar en users
+    user_in_users = await Database.users.find_one({"_id": user_id})
+    print(f"🔍 En colección 'users': {user_in_users is not None}")
+    if user_in_users:
+        results["found_in"].append("users")
+        results["details"]["users"] = {
+            "mfa_enabled": user_in_users.get('mfa_enabled'),
+            "has_mfa_secret": 'mfa_secret' in user_in_users,
+            "mfa_verified_at": user_in_users.get('mfa_verified_at'),
+            "mfa_created_at": user_in_users.get('mfa_created_at')
+        }
+        print(f"   - mfa_enabled: {user_in_users.get('mfa_enabled')}")
+        print(f"   - mfa_secret: {'SÍ' if user_in_users.get('mfa_secret') else 'NO'}")
+        print(f"   - mfa_verified_at: {user_in_users.get('mfa_verified_at')}")
+        print(f"   - mfa_created_at: {user_in_users.get('mfa_created_at')}")
+    
+    # Buscar en admin_users
+    user_in_admin = await Database.admin_users.find_one({"_id": user_id})
+    print(f"🔍 En colección 'admin_users': {user_in_admin is not None}")
+    if user_in_admin:
+        results["found_in"].append("admin_users")
+        results["details"]["admin_users"] = {
+            "mfa_enabled": user_in_admin.get('mfa_enabled'),
+            "has_mfa_secret": 'mfa_secret' in user_in_admin,
+            "mfa_verified_at": user_in_admin.get('mfa_verified_at'),
+            "mfa_created_at": user_in_admin.get('mfa_created_at')
+        }
+        print(f"   - mfa_enabled: {user_in_admin.get('mfa_enabled')}")
+        print(f"   - mfa_secret: {'SÍ' if user_in_admin.get('mfa_secret') else 'NO'}")
+    
+    # Buscar en Adm_Users (nombre real según logs)
+    # Primero necesitamos verificar si existe esta colección
+    try:
+        user_in_adm_users = await Database.adm_users.find_one({"_id": user_id})
+        print(f"🔍 En colección 'Adm_Users': {user_in_adm_users is not None}")
+        if user_in_adm_users:
+            results["found_in"].append("Adm_Users")
+            results["details"]["Adm_Users"] = {
+                "mfa_enabled": user_in_adm_users.get('mfa_enabled'),
+                "has_mfa_secret": 'mfa_secret' in user_in_adm_users,
+                "mfa_verified_at": user_in_adm_users.get('mfa_verified_at'),
+                "mfa_created_at": user_in_adm_users.get('mfa_created_at')
+            }
+            print(f"   - mfa_enabled: {user_in_adm_users.get('mfa_enabled')}")
+            print(f"   - mfa_secret: {'SÍ' if user_in_adm_users.get('mfa_secret') else 'NO'}")
+    except Exception as e:
+        print(f"⚠️  Error buscando en Adm_Users: {e}")
+    
+    # También buscar por ObjectId si es posible
+    try:
+        oid = ObjectId(user_id)
+        user_in_users_oid = await Database.users.find_one({"_id": oid})
+        if user_in_users_oid:
+            print(f"🔍 En colección 'users' (con ObjectId): True")
+            if "users" not in results["found_in"]:
+                results["found_in"].append("users_oid")
+                results["details"]["users_oid"] = {
+                    "mfa_enabled": user_in_users_oid.get('mfa_enabled'),
+                    "has_mfa_secret": 'mfa_secret' in user_in_users_oid
+                }
+    except:
+        print("🔍 No se pudo convertir a ObjectId")
+    
+    return {
+        "ok": True,
+        **results
+    }
+
+# También agrega este endpoint para desactivar MFA manualmente
+@router.post("/debug/mfa/{user_id}/disable")
+async def debug_disable_mfa(user_id: str):
+    """Desactivar MFA en todas las colecciones (debug)"""
+    print(f"🔧 DESACTIVANDO MFA para user_id={user_id}")
+    
+    results = []
+    
+    # Intentar en users
+    result_users = await Database.users.update_one(
+        {"_id": user_id},
+        {"$set": {"mfa_enabled": False}}
+    )
+    results.append({
+        "collection": "users",
+        "modified": result_users.modified_count,
+        "matched": result_users.matched_count
+    })
+    print(f"📝 Users modificados: {result_users.modified_count}")
+    
+    # Intentar en Adm_Users (si existe)
+    try:
+        result_adm = await Database.adm_users.update_one(
+            {"_id": user_id},
+            {"$set": {"mfa_enabled": False}}
+        )
+        results.append({
+            "collection": "Adm_Users",
+            "modified": result_adm.modified_count,
+            "matched": result_adm.matched_count
+        })
+        print(f"📝 Adm_Users modificados: {result_adm.modified_count}")
+    except Exception as e:
+        print(f"⚠️  No se pudo actualizar Adm_Users: {e}")
+    
+    # Intentar en admin_users
+    result_admin = await Database.admin_users.update_one(
+        {"_id": user_id},
+        {"$set": {"mfa_enabled": False}}
+    )
+    results.append({
+        "collection": "admin_users",
+        "modified": result_admin.modified_count,
+        "matched": result_admin.matched_count
+    })
+    print(f"📝 Admin users modificados: {result_admin.modified_count}")
+    
+    return {
+        "ok": True,
+        "message": "MFA desactivado en todas las colecciones",
+        "results": results
     }

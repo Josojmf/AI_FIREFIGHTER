@@ -11,6 +11,7 @@ from uuid import uuid4
 from typing import Optional, Dict, Any
 import bcrypt
 import os
+import jwt
 from utils.jwt_utils import make_jwt, decode_jwt
 
 router = APIRouter()
@@ -136,11 +137,82 @@ async def login(request: LoginRequest):
         if user_doc.get("status") != "active":
             raise HTTPException(status_code=401, detail="Cuenta desactivada")
 
-        # Verificar MFA si está habilitado
-        if user_doc.get("mfa_enabled", False):
+        # 🔥🔥🔥 DEBUG CRÍTICO AQUÍ 🔥🔥🔥
+        print(f"=== DEBUG CRÍTICO ===")
+        print(f"Usuario ID: {user_doc.get('_id')}")
+        print(f"Usuario username: {user_doc.get('username')}")
+        print(f"mfa_enabled value: {user_doc.get('mfa_enabled')}")
+        print(f"Tipo de mfa_enabled: {type(user_doc.get('mfa_enabled'))}")
+        print(f"Todos los campos: {list(user_doc.keys())}")
+        print(f"=== FIN DEBUG ===")
+        
+        # ✅✅✅ CORRECCIÓN CRÍTICA: Manejo de MFA
+        print(f"🔍 Estado MFA del usuario: {user_doc.get('mfa_enabled')}")
+        
+        # 🔥 PRUEBA: Forzar True para ver si funciona
+        print(f"🔍 mfa_enabled == True: {user_doc.get('mfa_enabled') == True}")
+        print(f"🔍 mfa_enabled is True: {user_doc.get('mfa_enabled') is True}")
+        print(f"🔍 bool(mfa_enabled): {bool(user_doc.get('mfa_enabled'))}")
+        
+        # 🔥 TEMPORAL: Probar con valor forzado
+        mfa_enabled_forced = bool(user_doc.get('mfa_enabled'))
+        print(f"🔍 Forzando mfa_enabled a: {mfa_enabled_forced}")
+        
+        if mfa_enabled_forced:  # Usar el valor forzado
+            print(f"🔐 Usuario requiere MFA: {username}")
+            
+            # Si no se proporcionó token MFA, devolver que se requiere
             if not request.mfa_token:
-                raise HTTPException(status_code=401, detail="Token MFA requerido")
-            # Aquí implementar verificación MFA
+                print(f"📱 MFA requerido para: {username}")
+                return {
+                    "ok": True,  # Importante: ok:True para indicar que las credenciales son correctas
+                    "requires_mfa": True,
+                    "user_id": str(user_doc["_id"]),
+                    "username": user_doc["username"],
+                    "message": "Se requiere código MFA"
+                }
+            
+            # Si se proporcionó token, verificar MFA
+            print(f"🔐 Verificando código MFA para: {username}")
+            if "mfa_secret" not in user_doc:
+                print(f"❌ Usuario tiene MFA habilitado pero no tiene secreto")
+                raise HTTPException(status_code=401, detail="Error de configuración MFA")
+            
+            # Verificar código MFA
+            import pyotp
+            totp = pyotp.TOTP(user_doc["mfa_secret"])
+            if not totp.verify(request.mfa_token, valid_window=2):
+                print(f"❌ Código MFA incorrecto para: {username}")
+                raise HTTPException(status_code=401, detail="Código MFA incorrecto")
+            
+            print(f"✅ Código MFA verificado para: {username}")
+        else:
+            print(f"🔓 Usuario NO requiere MFA según BD: {username}")
+            # 🔥 TEMPORAL: Si no requiere MFA, crear token directamente
+            token_payload = {
+                "user_id": str(user_doc["_id"]),
+                "username": user_doc["username"],
+                "role": user_doc.get("role", "user"),
+                "type": "access_token"
+            }
+            
+            token = make_jwt(token_payload)
+            print(f"✅ Login exitoso SIN MFA para: {username}")
+            
+            return {
+                "ok": True,
+                "access_token": token,
+                "token": token,
+                "user": {
+                    "id": str(user_doc["_id"]),
+                    "username": user_doc["username"],
+                    "email": user_doc.get("email", ""),
+                    "name": user_doc.get("name", ""),
+                    "role": user_doc.get("role", "user"),
+                    "mfa_enabled": user_doc.get("mfa_enabled", False),
+                    "status": user_doc.get("status", "active")
+                }
+            }
 
         # Actualizar último login
         update_op = {"$set": {"last_login": datetime.utcnow()}}
@@ -183,8 +255,7 @@ async def login(request: LoginRequest):
         print(f"❌ Error en login: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Error interno del servidor")
-
+        raise HTTPException(status_code=500, detail="Error interno del servidor")  
 
 @router.post("/register")
 async def register(request: RegisterRequest):

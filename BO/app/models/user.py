@@ -23,7 +23,7 @@ class BackofficeUser(UserMixin):
     def authenticate(username, password, mfa_code=None):
         """Autenticar usuario, con MFA opcional para casos especiales"""
         try:
-            print(f"🔐 Intentando login en: {Config.API_BASE_URL}/api/login")
+            print(f"🔐 Intentando login en: {Config.API_BASE_URL}/api/auth/login")
             print(f"🔍 MFA code proporcionado: {'Sí' if mfa_code else 'No'}")
 
             # Construir payload base
@@ -37,10 +37,10 @@ class BackofficeUser(UserMixin):
                 print("🔓 Login solo con usuario/contraseña (sin MFA)")
 
             response = requests.post(
-                f"{Config.API_BASE_URL}/api/login",
-                json=payload,
-                timeout=10
-            )
+            f"{Config.API_BASE_URL}/api/auth/login",
+            json=payload,
+            timeout=10
+          )
 
             print(f"📡 Respuesta API: {response.status_code}")
 

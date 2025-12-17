@@ -17,7 +17,7 @@
 [🚀 Demo en Vivo](https://firefighterai.com) • [📚 Documentación](https://github.com/Josojmf/AI_Firefighter/wiki) • [🐛 Reportar Bug](https://github.com/Josojmf/AI_Firefighter/issues/new?template=bug-report.yml) • [💡 Proponer Feature](https://github.com/Josojmf/AI_Firefighter/issues/new?template=user-story.yml)
 
 </div>
-   
+    a
 --- 
 
 ## 📋 Tabla de Contenidos
