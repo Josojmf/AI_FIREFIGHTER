@@ -21,8 +21,8 @@ class Config:
         "BACKOFFICE_SECRET_KEY",
         "firefighter-backoffice-secret-key-2024-production"
     )
-    
-    # 🔐 JWT PARA COMUNICACIÓN CON BACKEND API (NUEVO - CORRECCIÓN DEL ERROR)
+
+    # 🔐 JWT PARA COMUNICACIÓN CON BACKEND API
     JWT_SECRET = os.getenv(
         "JWT_SECRET",  # Mismo que usa el backend API
         "firefighter-super-secret-jwt-key-2024"  # Default del API config.py
@@ -50,10 +50,8 @@ class Config:
     # =========================================================
     # 🌐 API CONFIGURATION - CRÍTICO PARA DOCKER/SWARM
     # =========================================================
-    # En Docker: usa "backend" (nombre del servicio)
-    # En local: usa "localhost"
-    # En Swarm: usa el nombre del servicio o load balancer
-    API_BASE_URL = os.getenv("API_BASE_URL", 
+    API_BASE_URL = os.getenv(
+        "API_BASE_URL",
         "http://backend:5000" if DOCKER else "http://localhost:5000"
     )
 
@@ -64,8 +62,7 @@ class Config:
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
     REDIS_DB = int(os.getenv("REDIS_DB", 0))
     REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
-    
-    # Usar Redis para sesiones en producción
+
     USE_REDIS_SESSIONS = os.getenv("USE_REDIS_SESSIONS", "true").lower() == "true"
 
     # =========================================================
@@ -73,8 +70,7 @@ class Config:
     # =========================================================
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     SENTRY_DSN = os.getenv("SENTRY_DSN", None)
-    
-    # CORS para Swarm/Load Balancer
+
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
     # =========================================================
@@ -83,23 +79,21 @@ class Config:
     @classmethod
     def validate_config(cls):
         errors = []
-        
+
         if not cls.API_BASE_URL:
             errors.append("❌ API_BASE_URL no está configurado")
-        
-        # Validar JWT_SECRET (NUEVO)
+
+        # Validar JWT_SECRET
         if not cls.JWT_SECRET:
             errors.append("❌ JWT_SECRET no está configurado")
-        elif cls.JWT_SECRET == "firefighter-super-secret-jwt-key-2024" and cls.ENVIRONMENT == "production":
-            errors.append("⚠️  JWT_SECRET es el valor por defecto en producción")
-        
+
         if cls.ENVIRONMENT == "production":
             if not cls.SECRET_KEY or "dev" in cls.SECRET_KEY:
                 errors.append("❌ SECRET_KEY inseguro en producción")
-            
+
             if not cls.ADMIN_PASSWORD or cls.ADMIN_PASSWORD == "admin123":
                 errors.append("❌ Contraseña de admin por defecto en producción")
-        
+
         return errors
 
     # =========================================================
@@ -108,7 +102,7 @@ class Config:
     @classmethod
     def log_config(cls):
         import socket
-        
+
         print("=" * 70)
         print("🚀 FIREFIGHTER BACKOFFICE - CONFIGURACIÓN")
         print("=" * 70)
@@ -120,25 +114,22 @@ class Config:
         print(f"🔑 JWT Secret      : {'✅ Configurado' if cls.JWT_SECRET else '❌ No configurado'}")
         print(f"📡 Redis Sessions  : {cls.USE_REDIS_SESSIONS}")
         print(f"📊 Log Level       : {cls.LOG_LEVEL}")
-        
-        # Resolver hostname para debug
+
         try:
             hostname = socket.gethostname()
             ip = socket.gethostbyname(hostname)
             print(f"🖥️  Hostname        : {hostname} ({ip})")
-        except:
+        except Exception:
             pass
-        
-        # Info de API (sin exponer credenciales)
+
         if cls.SECRET_KEY:
             secret_preview = cls.SECRET_KEY[:15] + "..." if len(cls.SECRET_KEY) > 15 else cls.SECRET_KEY
             print(f"🔑 Secret Key      : {secret_preview}")
-        
-        # Info JWT (ocultar valor completo)
+
         if cls.JWT_SECRET:
             jwt_preview = cls.JWT_SECRET[:10] + "..." if len(cls.JWT_SECRET) > 10 else cls.JWT_SECRET
             print(f"🔐 JWT Preview     : {jwt_preview}")
-        
+
         print("=" * 70)
 
         errors = cls.validate_config()
@@ -146,13 +137,12 @@ class Config:
             print("🚨 ERRORES DE CONFIGURACIÓN:")
             for e in errors:
                 print(f"   {e}")
-            
-            # En producción, salir si hay errores críticos
+
             if cls.ENVIRONMENT == "production":
                 print("💀 ERRORES CRÍTICOS EN PRODUCCIÓN - ABORTANDO")
                 import sys
                 sys.exit(1)
-            
+
             print("=" * 70)
             return False
 

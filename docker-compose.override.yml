@@ -28,7 +28,7 @@ services:
 
   # Backend optimizado
   backend:
-    command: ["gunicorn", "-b", "0.0.0.0:5000", "--workers", "3", "--worker-class", "gevent", "--worker-connections", "1000", "--timeout", "120", "--max-requests", "1000", "--preload", "main:app"]
+    command: ["gunicorn", "-b", "0.0.0.0:5000", "--workers", "3", "--worker-class", "gevent", "--worker-connections", "1000", "--timeout", "200", "--max-requests", "1000", "--preload", "main:app"]
     environment:
       - PRODUCTION_URL=http://localhost
       - GUNICORN_WORKERS=3
@@ -41,7 +41,7 @@ services:
       
   # Frontend ultra-ligero  
   frontend:
-    command: ["gunicorn", "-b", "0.0.0.0:8000", "--workers", "2", "--worker-class", "gevent", "--worker-connections", "500", "--timeout", "60", "--max-requests", "500", "main:app"]
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "--workers", "2", "--worker-class", "gevent", "--worker-connections", "500", "--timeout", "200", "--max-requests", "500", "main:app"]
     environment:
       - DISABLE_AI_MODEL=true
       - API_BASE_URL=http://backend:5000/api
