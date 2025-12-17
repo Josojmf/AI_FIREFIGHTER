@@ -21,6 +21,13 @@ class Config:
         "BACKOFFICE_SECRET_KEY",
         "firefighter-backoffice-secret-key-2024-production"
     )
+    
+    # 🔐 JWT PARA COMUNICACIÓN CON BACKEND API (NUEVO - CORRECCIÓN DEL ERROR)
+    JWT_SECRET = os.getenv(
+        "JWT_SECRET",  # Mismo que usa el backend API
+        "firefighter-super-secret-jwt-key-2024"  # Default del API config.py
+    )
+    JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
     SESSION_COOKIE_NAME = "backoffice_session"
     SESSION_COOKIE_PATH = "/"
@@ -80,6 +87,12 @@ class Config:
         if not cls.API_BASE_URL:
             errors.append("❌ API_BASE_URL no está configurado")
         
+        # Validar JWT_SECRET (NUEVO)
+        if not cls.JWT_SECRET:
+            errors.append("❌ JWT_SECRET no está configurado")
+        elif cls.JWT_SECRET == "firefighter-super-secret-jwt-key-2024" and cls.ENVIRONMENT == "production":
+            errors.append("⚠️  JWT_SECRET es el valor por defecto en producción")
+        
         if cls.ENVIRONMENT == "production":
             if not cls.SECRET_KEY or "dev" in cls.SECRET_KEY:
                 errors.append("❌ SECRET_KEY inseguro en producción")
@@ -104,6 +117,7 @@ class Config:
         print(f"🐛 Debug           : {cls.DEBUG}")
         print(f"🌐 API URL         : {cls.API_BASE_URL}")
         print(f"🔒 Secure Cookies  : {cls.SESSION_COOKIE_SECURE}")
+        print(f"🔑 JWT Secret      : {'✅ Configurado' if cls.JWT_SECRET else '❌ No configurado'}")
         print(f"📡 Redis Sessions  : {cls.USE_REDIS_SESSIONS}")
         print(f"📊 Log Level       : {cls.LOG_LEVEL}")
         
@@ -119,6 +133,11 @@ class Config:
         if cls.SECRET_KEY:
             secret_preview = cls.SECRET_KEY[:15] + "..." if len(cls.SECRET_KEY) > 15 else cls.SECRET_KEY
             print(f"🔑 Secret Key      : {secret_preview}")
+        
+        # Info JWT (ocultar valor completo)
+        if cls.JWT_SECRET:
+            jwt_preview = cls.JWT_SECRET[:10] + "..." if len(cls.JWT_SECRET) > 10 else cls.JWT_SECRET
+            print(f"🔐 JWT Preview     : {jwt_preview}")
         
         print("=" * 70)
 

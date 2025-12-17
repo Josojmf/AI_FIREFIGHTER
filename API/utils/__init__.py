@@ -3,7 +3,7 @@ Utils Package - Utility functions for FirefighterAI API
 ======================================================
 """
 
-from .jwt import make_jwt, decode_jwt, verify_jwt, get_user_from_token
+from .jwt_utils import make_jwt, decode_jwt, verify_jwt, get_user_from_token
 from .validators import (
     hash_password,
     verify_password,

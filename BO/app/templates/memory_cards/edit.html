@@ -9,41 +9,42 @@
   <div class="form-container">
     <form method="POST" class="card-form">
       <div class="form-group">
-        <label for="title" class="form-label">Título</label>
-        <input type="text" id="title" name="title" class="form-input" required 
-               placeholder="Ingresa el título de la memory card" value="Memory Card Ejemplo">
+        <label for="question" class="form-label">Pregunta *</label>
+        <input type="text" id="question" name="question" class="form-input" required 
+               value="{{ card.question }}" placeholder="¿Cuál es la pregunta?">
       </div>
 
       <div class="form-group">
-        <label for="description" class="form-label">Descripción</label>
-        <textarea id="description" name="description" class="form-textarea" 
-                  placeholder="Describe el contenido de la memory card" rows="4">Esta es una memory card de ejemplo</textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="content" class="form-label">Contenido</label>
-        <textarea id="content" name="content" class="form-textarea" 
-                  placeholder="Contenido principal de la memory card" rows="6" required>Contenido detallado de la memory card...</textarea>
+        <label for="answer" class="form-label">Respuesta *</label>
+        <textarea id="answer" name="answer" class="form-textarea" 
+                  placeholder="Escribe la respuesta completa..." rows="6" required>{{ card.answer }}</textarea>
       </div>
 
       <div class="form-group">
         <label for="category" class="form-label">Categoría</label>
         <select id="category" name="category" class="form-select">
-          <option value="">Seleccionar categoría</option>
-          <option value="training" selected>Entrenamiento</option>
-          <option value="safety">Seguridad</option>
-          <option value="procedures">Procedimientos</option>
-          <option value="equipment">Equipamiento</option>
+          <option value="General" {% if card.category == "General" %}selected{% endif %}>General</option>
+          <option value="training" {% if card.category == "training" %}selected{% endif %}>Entrenamiento</option>
+          <option value="safety" {% if card.category == "safety" %}selected{% endif %}>Seguridad</option>
+          <option value="procedures" {% if card.category == "procedures" %}selected{% endif %}>Procedimientos</option>
+          <option value="equipment" {% if card.category == "equipment" %}selected{% endif %}>Equipamiento</option>
         </select>
       </div>
 
       <div class="form-group">
-        <label for="status" class="form-label">Estado</label>
-        <select id="status" name="status" class="form-select">
-          <option value="active" selected>Activo</option>
-          <option value="inactive">Inactivo</option>
-          <option value="draft">Borrador</option>
+        <label for="difficulty" class="form-label">Dificultad</label>
+        <select id="difficulty" name="difficulty" class="form-select">
+          <option value="easy" {% if card.difficulty == "easy" %}selected{% endif %}>Fácil</option>
+          <option value="medium" {% if card.difficulty == "medium" %}selected{% endif %}>Media</option>
+          <option value="hard" {% if card.difficulty == "hard" %}selected{% endif %}>Difícil</option>
         </select>
+      </div>
+
+      <div class="form-group">
+        <label for="tags" class="form-label">Etiquetas (separadas por comas)</label>
+        <input type="text" id="tags" name="tags" class="form-input" 
+               value="{{ card.tags|join(', ') if card.tags else '' }}"
+               placeholder="ej: incendios, primeros auxilios, rescate">
       </div>
 
       <div class="form-actions">
@@ -61,9 +62,11 @@
 </div>
 
 <style>
+/* Mismo CSS que create.html */
 .edit-card {
   padding: 20px;
   max-width: 800px;
+  margin: 0 auto;
 }
 
 .form-container {
@@ -88,6 +91,7 @@
   font-weight: 500;
   margin-bottom: 8px;
   color: #374151;
+  font-size: 14px;
 }
 
 .form-input, .form-textarea, .form-select {
@@ -106,8 +110,9 @@
 
 .form-textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: 120px;
   font-family: inherit;
+  line-height: 1.5;
 }
 
 .form-actions {
@@ -119,14 +124,41 @@
   border-top: 1px solid #e5e7eb;
 }
 
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+}
+
 .btn-secondary {
   background-color: #6b7280;
   color: white;
-  text-decoration: none;
 }
 
 .btn-secondary:hover {
   background-color: #4b5563;
+}
+
+.btn-icon {
+  font-size: 16px;
 }
 </style>
 {% endblock %}

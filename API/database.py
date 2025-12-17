@@ -67,12 +67,22 @@ class Database:
             cls.access_tokens = cls.db["access_tokens"]
             cls.memory_cards = cls.db["memory_cards"]
             
+            # Verificar y crear colección memory_cards si no existe
+            collections = await cls.db.list_collection_names()
+            if "memory_cards" not in collections:
+                print("📝 Creando colección 'memory_cards'...")
+                # La colección se crea automáticamente al insertar el primer documento
+                await cls.memory_cards.insert_one({"test": "init"})
+                await cls.memory_cards.delete_one({"test": "init"})
+                print("✅ Colección 'memory_cards' creada")
+            
             # Crear índices
             await cls._create_indexes()
             
             print("✅ Conectado a MongoDB Atlas correctamente")
             print(f"📊 Base de datos: {DB_NAME}")
             print(f"🔗 Cluster: {MONGO_CLUSTER}")
+            print(f"📂 Colecciones disponibles: {collections}")
             
         except ConnectionFailure as e:
             print(f"❌ Error conectando a MongoDB: {e}")
@@ -83,7 +93,7 @@ class Database:
     @classmethod
     async def _create_indexes(cls):
         """Crear índices de MongoDB"""
-        if not cls.db:
+        if cls.db is None:
             return
         
         try:
@@ -99,10 +109,13 @@ class Database:
             await cls.access_tokens.create_index("status")
             
             # Índices de memory cards
-            await cls.memory_cards.create_index("category")
-            await cls.memory_cards.create_index("difficulty")
-            await cls.memory_cards.create_index("created_by")
-            
+            if cls.memory_cards:
+                await cls.memory_cards.create_index("category")
+                await cls.memory_cards.create_index("difficulty")
+                await cls.memory_cards.create_index("created_by")
+                await cls.memory_cards.create_index([("created_by", ASCENDING), ("box", ASCENDING)])
+                await cls.memory_cards.create_index([("created_by", ASCENDING), ("last_reviewed", ASCENDING)])
+                
             print("✅ Índices de MongoDB creados")
         except Exception as e:
             print(f"⚠️  Advertencia creando índices: {e}")
@@ -117,9 +130,20 @@ class Database:
     @classmethod
     def get_db(cls) -> AsyncIOMotorDatabase:
         """Obtener instancia de base de datos"""
-        if not cls.db:
+        if cls.db is None:
             raise RuntimeError("Database not initialized. Call connect_db first.")
         return cls.db
+    
+    @classmethod
+    def is_connected(cls) -> bool:
+        """Verificar si la conexión a la base de datos está activa"""
+        return cls.client is not None and cls.db is not None
+    
+    @classmethod
+    async def ensure_connection(cls):
+        """Asegurar que hay una conexión activa"""
+        if not cls.is_connected():
+            await cls.connect_db()
 
 
 # Dependency para FastAPI

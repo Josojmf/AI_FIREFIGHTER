@@ -9,32 +9,42 @@
   <div class="form-container">
     <form method="POST" class="card-form">
       <div class="form-group">
-        <label for="title" class="form-label">Título</label>
-        <input type="text" id="title" name="title" class="form-input" required 
-               placeholder="Ingresa el título de la memory card">
+        <label for="question" class="form-label">Pregunta *</label>
+        <input type="text" id="question" name="question" class="form-input" required 
+               placeholder="¿Cuál es la pregunta de esta tarjeta de memoria?">
       </div>
 
       <div class="form-group">
-        <label for="description" class="form-label">Descripción</label>
-        <textarea id="description" name="description" class="form-textarea" 
-                  placeholder="Describe el contenido de la memory card" rows="4"></textarea>
-      </div>
-
-      <div class="form-group">
-        <label for="content" class="form-label">Contenido</label>
-        <textarea id="content" name="content" class="form-textarea" 
-                  placeholder="Contenido principal de la memory card" rows="6" required></textarea>
+        <label for="answer" class="form-label">Respuesta *</label>
+        <textarea id="answer" name="answer" class="form-textarea" 
+                  placeholder="Escribe la respuesta completa..." rows="6" required></textarea>
       </div>
 
       <div class="form-group">
         <label for="category" class="form-label">Categoría</label>
         <select id="category" name="category" class="form-select">
-          <option value="">Seleccionar categoría</option>
+          <option value="General">General</option>
           <option value="training">Entrenamiento</option>
           <option value="safety">Seguridad</option>
           <option value="procedures">Procedimientos</option>
           <option value="equipment">Equipamiento</option>
         </select>
+      </div>
+
+      <div class="form-group">
+        <label for="difficulty" class="form-label">Dificultad</label>
+        <select id="difficulty" name="difficulty" class="form-select">
+          <option value="easy">Fácil</option>
+          <option value="medium" selected>Media</option>
+          <option value="hard">Difícil</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="tags" class="form-label">Etiquetas (separadas por comas)</label>
+        <input type="text" id="tags" name="tags" class="form-input" 
+               placeholder="ej: incendios, primeros auxilios, rescate">
+        <small style="color: #6b7280; margin-top: 4px;">Opcional. Separa múltiples etiquetas con comas.</small>
       </div>
 
       <div class="form-actions">
@@ -55,6 +65,7 @@
 .create-card {
   padding: 20px;
   max-width: 800px;
+  margin: 0 auto;
 }
 
 .form-container {
@@ -79,6 +90,7 @@
   font-weight: 500;
   margin-bottom: 8px;
   color: #374151;
+  font-size: 14px;
 }
 
 .form-input, .form-textarea, .form-select {
@@ -97,8 +109,9 @@
 
 .form-textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: 120px;
   font-family: inherit;
+  line-height: 1.5;
 }
 
 .form-actions {
@@ -110,14 +123,41 @@
   border-top: 1px solid #e5e7eb;
 }
 
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+}
+
 .btn-secondary {
   background-color: #6b7280;
   color: white;
-  text-decoration: none;
 }
 
 .btn-secondary:hover {
   background-color: #4b5563;
+}
+
+.btn-icon {
+  font-size: 16px;
 }
 </style>
 {% endblock %}

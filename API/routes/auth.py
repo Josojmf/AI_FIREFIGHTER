@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from typing import Optional, Dict, Any
 import bcrypt
-import jwt
 import os
+from utils.jwt_utils import make_jwt, decode_jwt
 
 router = APIRouter()
 

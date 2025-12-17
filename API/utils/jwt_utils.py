@@ -1,6 +1,7 @@
 """
-JWT Utilities - Funciones para manejo de tokens JWT
-===================================================
+JWT Utilities - Funciones unificadas para manejo de tokens JWT
+==============================================================
+Combinación de jwt.py y jwt_utils.py originales
 """
 
 import os
@@ -12,27 +13,44 @@ from typing import Optional, Dict, Any
 # Configuración
 JWT_SECRET = os.getenv("SECRET_KEY", "firefighter-secret-key-2024")
 JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
+JWT_ALGORITHM = "HS256"
 
 
-def make_jwt(payload: Dict[str, Any]) -> str:
+def make_jwt(payload: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
     Crea un token JWT a partir de un payload.
     
     Args:
         payload: Datos a incluir en el token
+        expires_delta: Delta de tiempo para expiración (opcional)
         
     Returns:
         str: Token JWT firmado
     """
+    to_encode = payload.copy()
     now = datetime.utcnow()
-    exp = now + timedelta(hours=JWT_EXPIRES_HOURS)
-    to_encode = {**payload, "iat": int(now.timestamp()), "exp": int(exp.timestamp())}
-    return jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
+    
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(hours=JWT_EXPIRES_HOURS)
+    
+    to_encode.update({"iat": now, "exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def decode_jwt(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Decodifica un token JWT.
+    
+    Args:
+        token: Token JWT a decodificar
+        
+    Returns:
+        Optional[Dict]: Payload decodificado o None si es inválido
+    """
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except ExpiredSignatureError:
         print("Token expirado")
         return None
@@ -44,19 +62,21 @@ def decode_jwt(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-
-def verify_jwt(token: str) -> Optional[Dict[str, Any]]:
+def verify_jwt(token: str) -> bool:
     """
-    Alias para decode_jwt - verifica un token JWT.
-    (Mantiene compatibilidad con código existente)
+    Verifica si un token JWT es válido.
     
     Args:
         token: Token JWT a verificar
         
     Returns:
-        Optional[Dict]: Payload decodificado o None si es inválido
+        bool: True si el token es válido, False en caso contrario
     """
-    return decode_jwt(token)
+    try:
+        decode_jwt(token)
+        return True
+    except Exception:
+        return False
 
 
 def get_user_from_token(token: str) -> Optional[Dict[str, Any]]:
@@ -79,7 +99,6 @@ def get_user_from_token(token: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# Funciones adicionales útiles
 def create_access_token(username: str, role: str = "user", user_id: Optional[str] = None) -> str:
     """
     Crea un token de acceso para un usuario.

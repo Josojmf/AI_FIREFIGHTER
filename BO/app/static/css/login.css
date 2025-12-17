@@ -1,22 +1,27 @@
 /* === LOGIN.CSS - Estilos específicos para la página de login === */
 
-/* === LAYOUT LOGIN === */
-.login-page .sidebar {
-  display: none;
-}
-
-.login-page .main-content {
-  margin-left: 0;
+/* Reset de layout para página de login */
+.login-layout {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  padding: 1rem;
   background: radial-gradient(ellipse at top, rgba(59, 130, 246, 0.15), transparent 50%),
               radial-gradient(ellipse at bottom, rgba(220, 38, 38, 0.1), transparent 50%);
+  background-attachment: fixed;
 }
 
-.login-page .top-header {
-  display: none;
+.login-layout .sidebar,
+.login-layout .top-header {
+  display: none !important;
+}
+
+.login-layout .main-content {
+  margin-left: 0 !important;
+  width: 100%;
+  max-width: 500px;
+  padding: 0;
 }
 
 /* === LOGIN CONTAINER === */
@@ -24,13 +29,13 @@
   background: var(--gradient-card);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--border-radius-lg);
-  padding: 3rem;
+  padding: 3rem 2.5rem;
   width: 100%;
-  max-width: 420px;
   box-shadow: var(--box-shadow-lg);
   backdrop-filter: blur(20px);
   position: relative;
   overflow: hidden;
+  animation: fadeInUp 0.6s ease;
 }
 
 .login-container::before {
@@ -46,7 +51,7 @@
 /* === LOGIN HEADER === */
 .login-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
 }
 
 .login-brand {
@@ -54,17 +59,17 @@
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .login-brand .brand-icon {
-  font-size: 3rem;
+  font-size: 3.5rem;
   filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.5));
   animation: pulse 2s ease-in-out infinite alternate;
 }
 
 .login-brand .brand-text {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
   background: var(--gradient-brand);
   -webkit-background-clip: text;
@@ -78,6 +83,7 @@
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 1px;
+  font-weight: 600;
 }
 
 .login-title {
@@ -137,6 +143,13 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.form-help {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 /* === BOTÓN === */
 .btn {
   width: 100%;
@@ -189,7 +202,7 @@
 /* === LOGIN FOOTER === */
 .login-footer {
   text-align: center;
-  padding-top: 1rem;
+  padding-top: 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -232,20 +245,32 @@
   }
 }
 
-.login-container {
-  animation: fadeInUp 0.6s ease;
-}
-
 /* === RESPONSIVE === */
 @media (max-width: 768px) {
   .login-container {
-    padding: 2rem;
-    max-width: 350px;
-    margin: 1rem;
+    padding: 2.5rem 2rem;
   }
   
   .login-title {
     font-size: 1.5rem;
+  }
+  
+  .login-brand .brand-icon {
+    font-size: 2.75rem;
+  }
+  
+  .login-brand .brand-text {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 2rem 1.5rem;
+  }
+  
+  .login-brand {
+    margin-bottom: 1.5rem;
   }
   
   .login-brand .brand-icon {
@@ -254,17 +279,6 @@
   
   .login-brand .brand-text {
     font-size: 1.25rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .login-page .main-content {
-    padding: 1rem;
-  }
-  
-  .login-container {
-    padding: 1.5rem;
-    max-width: 320px;
   }
   
   .form-input {
