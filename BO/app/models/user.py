@@ -37,10 +37,10 @@ class BackofficeUser(UserMixin):
                 print("🔓 Login solo con usuario/contraseña (sin MFA)")
 
             response = requests.post(
-            f"{Config.API_BASE_URL}/api/auth/login",
-            json=payload,
-            timeout=10
-          )
+                f"{Config.API_BASE_URL}/api/auth/login",
+                json=payload,
+                timeout=10
+            )
 
             print(f"📡 Respuesta API: {response.status_code}")
 
@@ -48,30 +48,38 @@ class BackofficeUser(UserMixin):
                 data = response.json()
                 print(f"📋 Datos recibidos: {list(data.keys())}")
                 
-                # 🔥 VERIFICAR SI LA API REQUIERE MFA
-                if data.get("requires_mfa") and not mfa_code:
+                # 🔥 NUEVO: Debug detallado de la respuesta
+                print(f"📊 Contenido de respuesta completa: {data}")
+                
+                # 🔥 VERIFICAR SI LA API REQUIERE MFA (ESTRUCTURA NUEVA)
+                requires_mfa = data.get("requires_mfa", False)
+                user_data = data.get("user", {})
+                
+                if requires_mfa and not mfa_code:
                     print(f"📱 MFA requerido para: {username}")
                     # Retornar objeto especial indicando que se requiere MFA
-                    # pero SIN token porque aún no está completamente autenticado
-                    user_data = data.get("user", {})
-                    if not user_data and "username" in data:
-                        user_data = data
-                    
                     return BackofficeUser(
-                        id=data.get("user_id") or username,  # ID temporal
+                        id=data.get("user_id") or user_data.get("id") or username,
                         username=user_data.get("username") or username,
-                        email=user_data.get("email") or "",
+                        email=user_data.get("email", ""),
                         role=user_data.get("role", "user"),
-                        mfa_enabled=True,  # 🔥 Marca que requiere MFA
-                        token=None  # 🔥 SIN TOKEN hasta completar MFA
+                        mfa_enabled=True,  # 🔥 IMPORTANTE: Esto activa el flujo MFA
+                        token=None  # Sin token hasta completar MFA
                     )
                 
                 # ✅ LOGIN COMPLETO (con token)
                 if (data.get("ok") and not data.get("requires_mfa")) or "access_token" in data or "token" in data:
-                    # Intentar diferentes estructuras de respuesta
+                    # 🔥 CORRECCIÓN: Obtener user_data correctamente
                     user_data = data.get("user", {})
                     if not user_data and "username" in data:
-                        user_data = data
+                        # Respuesta antigua (sin objeto user anidado)
+                        user_data = {
+                            "id": data.get("id"),
+                            "username": data.get("username"),
+                            "email": data.get("email", ""),
+                            "role": data.get("role", "user"),
+                            "mfa_enabled": data.get("mfa_enabled", False)
+                        }
                     
                     access_token = data.get("access_token") or data.get("token")
                     
@@ -80,8 +88,9 @@ class BackofficeUser(UserMixin):
                         return None
                     
                     print(f"✅ Login exitoso para {username}")
-
-                    # 🔥 Extraer user_id REAL del JWT
+                    print(f"📊 User data recibido: {user_data}")
+                    
+                    # 🔥 Extraer user_id REAL
                     user_id = user_data.get("id")
                     if not user_id and access_token:
                         try:
@@ -99,9 +108,9 @@ class BackofficeUser(UserMixin):
                     return BackofficeUser(
                         id=str(user_id),
                         username=user_data.get("username") or username,
-                        email=user_data.get("email") or "",
+                        email=user_data.get("email", ""),
                         role=user_data.get("role", "user"),
-                        mfa_enabled=user_data.get("mfa_enabled", False),
+                        mfa_enabled=user_data.get("mfa_enabled", False),  # 🔥 Ahora viene dentro de user
                         token=access_token
                     )
                 else:
@@ -166,8 +175,6 @@ class BackofficeUser(UserMixin):
             print(f"❌ Error en get user: {e}")
             return None
 
-    # [El resto del archivo se mantiene igual...]
-    
     @staticmethod
     def get_user_progress(user_id, token=None):
         """Obtener el progreso de aprendizaje del usuario desde la API"""
