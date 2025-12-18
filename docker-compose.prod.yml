@@ -10,8 +10,8 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # Comunicación interna con backend (incluye /api)
-      - API_BASE_URL=http://backend:5000/api
+      # Comunicación interna con backend 
+      - API_BASE_URL=http://backend:5000
     networks:
       - firefighter_network
     restart: unless-stopped
