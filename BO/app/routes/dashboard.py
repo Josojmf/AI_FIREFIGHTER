@@ -383,24 +383,7 @@ def system_status_page():
         system_stats=stats["system_stats"]
     )
 
-@bp.route('/api/dashboard/health')
-@login_required
-def api_dashboard_health():
-    """Endpoint API para verificar salud del sistema"""
-    try:
-        health_response = requests.get(f"{Config.API_BASE_URL}/api/health", timeout=5)
-        if health_response.status_code == 200:
-            health_data = health_response.json()
-            return jsonify({
-                'ok': True,
-                'api_status': 'online' if health_data.get('ok') else 'error',
-                'database': health_data.get('database', 'unknown'),
-                'timestamp': datetime.utcnow().isoformat()
-            })
-        else:
-            return jsonify({'ok': False, 'api_status': 'offline'})
-    except Exception:
-        return jsonify({'ok': False, 'api_status': 'offline'})
+
 
 
 @bp.route('/api/dashboard/docker-logs')

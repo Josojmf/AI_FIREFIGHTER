@@ -472,6 +472,36 @@ async def delete_user(user_id: str, admin_data: Dict = Depends(require_admin_loc
     except Exception as e:
         print(f"❌ Error eliminando usuario: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+    
+@router.get("/users/{user_id}", response_model=Dict[str, Any])
+async def get_user(user_id: str, user_data: Dict = Depends(require_user_local)):
+    """
+    Obtener un usuario por ID (endpoint que llama el backoffice después de generar MFA).
+    """
+    try:
+        # Solo admin o el propio usuario
+        if user_data.get("role") != "admin" and user_data.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Acceso denegado")
+
+        # Reutilizar el helper que ya usan los endpoints de MFA
+        user = await _find_user_by_id_any_collection(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        result_user_data = serialize_doc(user)
+        result_user_data.setdefault("email_verified", False)
+        result_user_data.setdefault("mfa_enabled", False)
+        result_user_data.setdefault("has_leitner_progress", False)
+        result_user_data.setdefault("has_backoffice_cards", False)
+        result_user_data.setdefault("metadata", {})
+
+        return {"ok": True, "user": result_user_data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error obteniendo usuario: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
 
 @router.get("/users/{user_id}/progress", response_model=Dict[str, Any])
 async def get_user_progress(

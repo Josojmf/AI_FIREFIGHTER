@@ -1,238 +1,312 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
-  <meta charset="utf-8">
-  <title>{% block title %}Backoffice · FirefighterAI{% endblock %}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
+  <title>{% block title %}Onfire AI BackOffice{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   {# CSS base del layout + backoffice global #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/backoffice.css') }}">
 
-  {# CSS específico de cada página (dashboard, etc.) #}
+  {# CSS específico de login/MFA #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+
+  {# CSS específico de cada página (dashboard, MFA, etc.) #}
   {% block styles %}{% endblock %}
 </head>
 
-<body class="{% if request.endpoint == 'auth.login' %}login-layout{% endif %}">
-  <div class="layout{% if request.endpoint == 'auth.login' %} login-layout{% endif %}">
+<body class="{% block body_class %}{% endblock %}" data-api-base-url="http://localhost:3001">
+  <div class="layout {% block layout_class %}{% endblock %}">
+
+    {# SIDEBAR - Solo visible cuando está logueado #}
     {% if current_user.is_authenticated %}
-    <aside class="sidebar" id="sidebar">
+    <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-brand">
-          <div class="brand-icon">🚒</div>
-          <div class="brand-text">FirefighterAI</div>
-          <div class="brand-subtitle">Backoffice</div>
+          <div class="brand-icon">🔥</div>
+          <div class="brand-text">Onfire AI</div>
+          <div class="brand-subtitle">BackOffice</div>
         </div>
-        <button class="sidebar-toggle" type="button" id="sidebarToggle">
-          <span class="toggle-icon">⟷</span>
-        </button>
       </div>
 
       <nav class="sidebar-nav">
         <ul class="nav-menu">
+          {# ========== SECCIÓN PRINCIPAL ========== #}
+          <li class="nav-section">Panel Principal</li>
+
           <li class="nav-item">
-            <a href="{{ url_for('dashboard.index') }}"
-              class="nav-link{% if request.endpoint and request.endpoint.startswith('dashboard') %} active{% endif %}">
-              <span class="nav-icon">🏠</span>
+            <a href="/dashboard"
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard') %}active{% endif %}">
+              <span class="nav-icon">📊</span>
               <span class="nav-text">Dashboard</span>
             </a>
           </li>
 
+          {# ========== GESTIÓN DE USUARIOS ========== #}
+          <li class="nav-section">Gestión de Usuarios</li>
+
           <li class="nav-item">
-            <a href="{{ url_for('users.user_list') }}"
-              class="nav-link{% if request.endpoint and request.endpoint.startswith('users') %} active{% endif %}">
+            <a href="/users"
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('users') %}active{% endif %}">
               <span class="nav-icon">👥</span>
               <span class="nav-text">Usuarios</span>
             </a>
           </li>
 
           <li class="nav-item">
-            <a href="{{ url_for('memory_cards.card_list') }}"
-              class="nav-link{% if request.endpoint and request.endpoint.startswith('memory_cards') %} active{% endif %}">
+            <a href="/access_tokens"
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('access_tokens') %}active{% endif %}">
+              <span class="nav-icon">🎫</span>
+              <span class="nav-text">Tokens de Acceso</span>
+            </a>
+          </li>
+
+          {# ========== CONTENIDO EDUCATIVO ========== #}
+          <li class="nav-section">Contenido</li>
+
+          <li class="nav-item">
+            <a href="/memory-cards"
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('memory_cards') %}active{% endif %}">
               <span class="nav-icon">🧠</span>
               <span class="nav-text">Memory Cards</span>
             </a>
           </li>
 
+          {# ========== SISTEMA Y SEGURIDAD ========== #}
+          <li class="nav-section">Sistema</li>
+
           <li class="nav-item">
-            <a href="{{ url_for('auth.setup_mfa') }}" class="nav-link">
-              <i class="fas fa-shield-alt"></i>
-              <span>Configuración MFA</span>
+            <a href="/health" class="nav-link {% if request.endpoint == 'health' %}active{% endif %}">
+              <span class="nav-icon">💓</span>
+              <span class="nav-text">API Health</span>
             </a>
           </li>
 
-
-          {# Añadir aquí nuevos enlaces SOLO cuando tengas esos endpoints creados #}
-          {#
           <li class="nav-item">
-            <a href="{{ url_for('dashboard.metrics') }}"
-              class="nav-link{% if request.endpoint == 'dashboard.metrics' %} active{% endif %}">
-              <span class="nav-icon">📊</span>
-              <span class="nav-text">Métricas</span>
+            <a href="/auth/setup-mfa" class="nav-link {% if request.endpoint == 'auth.setup_mfa' %}active{% endif %}">
+              <span class="nav-icon">🛡️</span>
+              <span class="nav-text">Configurar MFA</span>
             </a>
           </li>
-          #}
+
+          {# ========== HERRAMIENTAS ADMIN ========== #}
+          <li class="nav-section">Administración</li>
+
+          <li class="nav-item">
+            <a href="/access_tokens/test-api-connection"
+              class="nav-link {% if request.endpoint == 'access_tokens.test_api_connection' %}active{% endif %}">
+              <span class="nav-icon">🔧</span>
+              <span class="nav-text">Test API</span>
+            </a>
+          </li>
         </ul>
       </nav>
 
+      {# USER INFO EN SIDEBAR #}
       <div class="sidebar-user">
         <div class="user-avatar">
-          {{ (current_user.username or current_user.email or 'A')[:1] | upper }}
+          {{ (current_user.username[0] if current_user.is_authenticated else 'U')|upper }}
         </div>
         <div class="user-info">
-          <div class="user-name">{{ current_user.username or current_user.email }}</div>
-          <div class="user-role">Admin</div>
+          <div class="user-name">
+            {% if current_user.is_authenticated %}
+            {{ current_user.username }}
+            {% else %}
+            Invitado
+            {% endif %}
+          </div>
+          <div class="user-role">
+            {% if current_user.is_authenticated %}
+            {{ current_user.role or 'ADMIN' }}
+            {% else %}
+            No autenticado
+            {% endif %}
+          </div>
         </div>
         <div class="user-actions">
-          {# Enlace temporal al dashboard hasta que se implemente auth.profile #}
-          <a href="{{ url_for('dashboard.index') }}" class="user-action" title="Dashboard">🏠</a>
-          <a href="{{ url_for('auth.logout') }}" class="user-action" title="Salir">⏻</a>
+          {% if current_user.is_authenticated %}
+          <a href="/auth/logout" class="user-action" title="Cerrar sesión">
+            ⏏
+          </a>
+          {% endif %}
         </div>
       </div>
     </aside>
     {% endif %}
 
+    {# MAIN CONTENT #}
     <div class="main-content">
+
+      {# HEADER SUPERIOR - Solo visible cuando está logueado #}
       {% if current_user.is_authenticated %}
       <header class="top-header">
         <div class="header-left">
-          <button class="mobile-menu-toggle" type="button" id="mobileMenuToggle">
+          <button id="mobileMenuToggle" class="mobile-menu-toggle" type="button">
             <span class="hamburger"></span>
             <span class="hamburger"></span>
             <span class="hamburger"></span>
           </button>
           <h1 class="page-title">
-            {% block page_title %}Backoffice{% endblock %}
+            {% block page_title %}Dashboard{% endblock %}
           </h1>
         </div>
         <div class="header-right">
           <div class="header-actions">
-            <button class="header-btn" type="button" title="Notificaciones">🔔</button>
+            <button class="header-btn" type="button" title="Notificaciones">
+              🔔
+            </button>
+            <button class="header-btn" type="button" title="Configuración rápida">
+              ⚙️
+            </button>
           </div>
-
-          <div class="user-menu" id="userMenu">
-            <button class="user-menu-trigger" type="button" id="userMenuTrigger">
+          <div class="user-menu">
+            <button class="user-menu-toggle user-menu-trigger" type="button">
               <div class="user-avatar-sm">
-                {{ (current_user.username or current_user.email or 'A')[:1] | upper }}
+                {{ current_user.username[0]|upper }}
               </div>
-              <span class="user-name-sm">{{ current_user.username or current_user.email }}</span>
+              <span class="user-name-sm">{{ current_user.username }}</span>
               <span class="dropdown-arrow">▾</span>
             </button>
-            <div class="user-menu-dropdown" id="userMenuDropdown">
+            <div id="userMenuDropdown" class="user-menu-dropdown">
               <div class="user-menu-header">
                 <div class="user-avatar-sm">
-                  {{ (current_user.username or current_user.email or 'A')[:1] | upper }}
+                  {{ current_user.username[0]|upper }}
                 </div>
                 <div class="user-details">
-                  <div class="user-name-sm">{{ current_user.username or current_user.email }}</div>
-                  <div class="user-email">{{ current_user.email }}</div>
+                  <div class="user-name-sm">{{ current_user.username }}</div>
+                  <div class="user-email">{{ current_user.email or current_user.username + '@onfire.ai' }}</div>
                 </div>
               </div>
-              <div class="user-menu-actions">
-                {# Enlace temporal al dashboard hasta que se implemente auth.profile #}
-                <a href="{{ url_for('dashboard.index') }}" class="user-menu-item">
-                  <span>🏠</span>
-                  <span>Dashboard</span>
-                </a>
-                {# Comentado temporalmente hasta que se implementen #}
-                {#
-                <a href="{{ url_for('auth.setup_mfa') }}" class="user-menu-item">
-                  <span>🔐</span>
+              <div class="user-menu-items">
+                <a href="/auth/setup-mfa" class="user-menu-item">
+                  <span class="menu-icon">🛡️</span>
                   <span>Configurar MFA</span>
                 </a>
-                #}
-                <a href="{{ url_for('auth.logout') }}" class="user-menu-item logout">
-                  <span>⏻</span>
-                  <span>Cerrar sesión</span>
+                <a href="/profile" class="user-menu-item">
+                  <span class="menu-icon">👤</span>
+                  <span>Mi Perfil</span>
+                </a>
+                <hr class="menu-divider">
+                <a href="/auth/logout" class="user-menu-item logout">
+                  <span class="menu-icon">⏏</span>
+                  <span>Cerrar Sesión</span>
                 </a>
               </div>
             </div>
           </div>
         </div>
       </header>
-
-      <div class="mobile-overlay" id="mobileOverlay"></div>
       {% endif %}
 
+      {# FLASH MESSAGES GLOBALES #}
       <div class="flash-messages">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-        {% for category, message in messages %}
+        {% for category, msg in messages %}
         <div class="flash flash-{{ category }}">
-          <div class="flash-icon">
-            {% if category == 'error' %}❌
-            {% elif category == 'warning' %}⚠️
-            {% elif category == 'success' %}✅
-            {% else %}ℹ️{% endif %}
-          </div>
-          <div class="flash-content">
-            {{ message }}
-          </div>
-          <button class="flash-close" type="button" onclick="this.parentElement.remove()">✕</button>
+          <div class="flash-content">{{ msg }}</div>
+          <button class="flash-close" onclick="this.parentElement.remove()">×</button>
         </div>
         {% endfor %}
         {% endif %}
         {% endwith %}
       </div>
 
+      {# CONTENIDO DE LA PÁGINA #}
       <main class="page-content">
-        {% block content %}{% endblock %}
+        {% block content %}
+        {# Contenido por defecto si no hay contenido específico #}
+        <div class="default-content">
+          <h2>Bienvenido al BackOffice de Onfire AI</h2>
+          <p>Selecciona una opción del menú lateral para comenzar.</p>
+
+          {% if current_user.is_authenticated %}
+          <div style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.1); border-radius: 8px;">
+            <h3>Enlaces rápidos:</h3>
+            <ul>
+              <li><a href="/dashboard">📊 Dashboard</a></li>
+              <li><a href="/users">👥 Usuarios</a></li>
+              <li><a href="/access_tokens">🎫 Tokens de Acceso</a></li>
+              <li><a href="/memory-cards">🧠 Memory Cards</a></li>
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+        {% endblock %}
       </main>
     </div>
   </div>
 
+  {# OVERLAY móvil #}
+  <div id="mobileOverlay" class="mobile-overlay"></div>
+
+  {# JS global backoffice #}
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const sidebar = document.getElementById('sidebar');
+    window.API_BASE_URL = "http://localhost:3001";
+
+    // Funcionalidad básica del sidebar
+    document.addEventListener('DOMContentLoaded', function () {
+      // Toggle sidebar
       const sidebarToggle = document.getElementById('sidebarToggle');
-      const mobileToggle = document.getElementById('mobileMenuToggle');
-      const mobileOverlay = document.getElementById('mobileOverlay');
-      const userMenu = document.getElementById('userMenu');
-      const userMenuTrigger = document.getElementById('userMenuTrigger');
+      const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', function () {
+          sidebar.classList.toggle('collapsed');
+        });
+      }
+
+      if (mobileMenuToggle) {
+        mobileMenuToggle.addEventListener('click', function () {
+          sidebar.classList.toggle('mobile-open');
+          overlay.classList.toggle('active');
+        });
+      }
+
+      if (overlay) {
+        overlay.addEventListener('click', function () {
+          sidebar.classList.remove('mobile-open');
+          overlay.classList.remove('active');
+        });
+      }
+
+      // User menu dropdown
+      const userMenuTrigger = document.querySelector('.user-menu-trigger');
       const userMenuDropdown = document.getElementById('userMenuDropdown');
 
-      if (sidebar && sidebarToggle) {
-        sidebarToggle.addEventListener('click', () => {
-          sidebar.classList.toggle('collapsed');
-          document.body.classList.toggle('sidebar-collapsed');
-        });
-      }
-
-      if (sidebar && mobileToggle && mobileOverlay) {
-        const closeMobileMenu = () => {
-          sidebar.classList.remove('mobile-open');
-          mobileOverlay.classList.remove('active');
-        };
-
-        mobileToggle.addEventListener('click', () => {
-          sidebar.classList.toggle('mobile-open');
-          mobileOverlay.classList.toggle('active');
-        });
-
-        mobileOverlay.addEventListener('click', closeMobileMenu);
-      }
-
-      if (userMenu && userMenuTrigger && userMenuDropdown) {
-        const toggleMenu = () => {
-          userMenu.classList.toggle('active');
-          userMenuDropdown.classList.toggle('show');
-        };
-
-        userMenuTrigger.addEventListener('click', (e) => {
+      if (userMenuTrigger && userMenuDropdown) {
+        userMenuTrigger.addEventListener('click', function (e) {
           e.stopPropagation();
-          toggleMenu();
+          userMenuDropdown.classList.toggle('active');
         });
 
-        document.addEventListener('click', (e) => {
-          if (!userMenu.contains(e.target)) {
-            userMenu.classList.remove('active');
-            userMenuDropdown.classList.remove('show');
-          }
+        // Cerrar dropdown al hacer click fuera
+        document.addEventListener('click', function () {
+          userMenuDropdown.classList.remove('active');
         });
       }
+
+      // Auto-cerrar flash messages después de 5 segundos
+      const flashMessages = document.querySelectorAll('.flash');
+      flashMessages.forEach(function (flash) {
+        if (!flash.classList.contains('flash-error')) { // No auto-cerrar errores
+          setTimeout(function () {
+            flash.style.opacity = '0';
+            setTimeout(function () {
+              flash.remove();
+            }, 300);
+          }, 5000);
+        }
+      });
     });
   </script>
+  <script src="{{ url_for('static', filename='js/backoffice.js') }}"></script>
+
+  {# JS específico de cada página (login, MFA, dashboard, etc.) #}
+  {% block scripts %}{% endblock %}
 </body>
 
 </html>

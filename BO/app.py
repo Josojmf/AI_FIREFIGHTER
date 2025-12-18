@@ -20,7 +20,7 @@ if __name__ == '__main__':
     print("🚀 Firefighter Backoffice iniciando con Waitress...")
     print("🌐 Panel de administración: http://localhost:8080")
     
-    api_url = app.config.get('API_BASE_URL', 'http://firefighter_backend:5000')
+    api_url = 'http://localhost:5000'
     print(f"🔗 Conectado a API: {api_url}")
     print("✅ Servidor iniciado correctamente!")
     

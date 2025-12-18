@@ -37,7 +37,7 @@ class Config:
     SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN", None)
 
     PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas
-    SESSION_PROTECTION = "strong"
+    SESSION_PROTECTION = "basic"
     SESSION_REFRESH_EACH_REQUEST = True
 
     # =========================================================

@@ -60,8 +60,8 @@ async function loadDashboard() {
     const stats = await apiFetch('/api/dashboard/stats');
     updateStats(stats);
 
-    const system = await apiFetch('/api/dashboard/system-info');
-    updateSystem(system);
+    // Usa los system_stats que ya vienen en stats (ver get_default_stats y fetch_real_data)
+    updateSystem(stats.system_stats || {});
 
     const health = await apiFetch('/api/dashboard/health');
     updateHealth(health);
@@ -71,6 +71,7 @@ async function loadDashboard() {
   }
 }
 
+
 function updateStats(data) {
   setText('totalUsers', data.total_users);
   setText('activeUsers', data.active_users);
@@ -78,12 +79,12 @@ function updateStats(data) {
 }
 
 function updateSystem(data) {
-  setText('dbUsersCount', data.db_users_count);
-  setText(
-    'dbStatus',
-    data.db_status === 'connected' ? 'Conectada' : 'Desconectada'
-  );
+  setText('dbStatus', data.database_status);
+  setText('storageUsage', data.storage_usage);
+  setText('memoryUsage', data.memory_usage);
+  setText('uptime', data.uptime);
 }
+
 
 function updateHealth(data) {
   setText('apiStatusText', data.ok ? 'Online' : 'Offline');

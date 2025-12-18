@@ -498,13 +498,3 @@ async def get_current_user(user_data: Dict[str, Any] = Depends(require_user)):
         print(f"❌ Error en /me: {e}")
         raise HTTPException(status_code=500, detail="Error interno")
 
-
-@router.get("/health")
-async def auth_health():
-    """Health check para el router de auth"""
-    return {
-        "ok": True,
-        "service": "auth",
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat()
-    }
