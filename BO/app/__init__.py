@@ -1,5 +1,3 @@
-# app/__init__.py - BACKOFFICE CON FLASK-SESSION Y FALLBACKS COMPLETOS
-
 from flask import Flask, request, session, redirect
 from flask_login import LoginManager, current_user
 from datetime import datetime
@@ -140,88 +138,46 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id: str):
-        """Reconstruir usuario desde session['user_data'] o crear uno con datos mínimos."""
-        print(f"🔍 user_loader: cookie user_id = {user_id}")
-        print(f"📋 Sesión actual en user_loader: keys={list(session.keys())}")  # 🔥 DEBUG
+        """Cargar usuario desde sesión Flask-Login - VERSIÓN CORREGIDA"""
+        print(f"🔍 user_loader: cargando usuario ID={user_id}")
         
-        # INTENTO 1: Cargar desde session['user_data']
-        user_data = session.get("user_data")
+        # 🔥 CRÍTICO: Si no hay sesión activa o el ID no coincide, RETORNAR None
+        # Esto hará que Flask-Login redirija automáticamente a login
+        session_user_id = session.get('_user_id')
+        
+        if not session or not session_user_id:
+            print(f"❌ user_loader: No hay sesión activa (_user_id no encontrado)")
+            return None
+        
+        if session_user_id != user_id:
+            print(f"⚠️  user_loader: Mismatch de IDs - cookie={user_id}, session={session_user_id}")
+            return None
+        
+        # PRIMERO: Buscar user_data en sesión Flask
+        user_data = session.get('user_data')
+        
         if user_data:
-            print(f"📦 user_loader: user_data encontrado (tipo: {type(user_data)})")
-            
-            # Normalizar ID
-            session_id = str(user_data.get("id", ""))
-            cookie_id = str(user_id)
-            
-            if session_id == cookie_id or not session_id or session_id == "None":
-                user = BackofficeUser.from_dict(user_data)
-                if user:
-                    print(f"✅ user_loader: Usuario cargado = {user.username}")
-                    return user
-                else:
-                    print("❌ user_loader: from_dict devolvió None")
-            else:
-                print(f"⚠️ user_loader: ID mismatch - session={session_id}, cookie={cookie_id}")
+            print(f"✅ user_loader: Usuario encontrado en sesión")
+            return BackofficeUser.from_dict(user_data)
         else:
-            print("⚠️ user_loader: No hay user_data en sesión")
+            # INTENTAR OBTENER DESDE LA API usando el token de sesión
+            api_token = session.get('api_token')
+            if api_token:
+                try:
+                    print(f"🔄 user_loader: Obteniendo usuario desde API con ID={user_id}")
+                    user = BackofficeUser.get(user_id, api_token)
+                    if user:
+                        # Guardar en sesión para próximas solicitudes
+                        session['user_data'] = user.to_dict()
+                        session.modified = True
+                        print(f"✅ user_loader: Usuario obtenido de API y guardado en sesión")
+                        return user
+                except Exception as e:
+                    print(f"⚠️  user_loader: Error obteniendo desde API: {e}")
             
-            # DEBUG: Ver qué hay realmente en la sesión
-            if session:
-                print(f"🔍 Contenido de sesión:")
-                for key in session:
-                    value = session[key]
-                    if key == 'api_token' and value:
-                        print(f"  - {key}: {value[:30]}...")
-                    else:
-                        print(f"  - {key}: {value}")
-        
-        # INTENTO 2: Cargar desde session['api_token'] y otros campos individuales
-        api_token = session.get('api_token')
-        if api_token:
-            print(f"🔑 user_loader: api_token encontrado, creando usuario desde token")
-            
-            # Intentar obtener username de diferentes fuentes
-            username = (
-                session.get('username') or 
-                session.get('pending_username') or 
-                'admin'
-            )
-            
-            # Intentar obtener user_id real de diferentes fuentes
-            real_user_id = (
-                session.get('user_id') or
-                session.get('pending_user_id') or
-                user_id  # Usar el de la cookie como último recurso
-            )
-            
-            print(f"🆔 user_loader: Construyendo usuario con ID={real_user_id}, username={username}")
-            
-            user = BackofficeUser(
-                id=str(real_user_id),
-                username=username,
-                email="",
-                role="admin",
-                mfa_enabled=False,
-                token=api_token
-            )
-            
-            print(f"✅ user_loader: Usuario creado desde token = {user.username}")
-            return user
-        
-        # INTENTO 3: Usuario mínimo de emergencia
-        print(f"🆘 user_loader: Creando usuario mínimo de emergencia para ID={user_id}")
-        
-        minimal_user = BackofficeUser(
-            id=str(user_id),
-            username="admin",
-            email="",
-            role="admin",
-            mfa_enabled=False,
-            token=None
-        )
-        
-        print(f"⚠️ user_loader: Usuario mínimo creado (sesión probablemente perdida)")
-        return minimal_user
+            # 🔥 CAMBIO CRÍTICO: NO crear usuario mínimo de emergencia
+            print(f"❌ user_loader: No se pudo cargar usuario, sesión inválida")
+            return None  # Esto hará que Flask-Login redirija a login automáticamente
 
     # Blueprints
     from app.routes.auth import bp as auth_bp
@@ -331,7 +287,7 @@ def create_app():
             
             # Verificar si hay token pero no user_data
             api_token = session.get('api_token')
-            user_id = session.get('user_id')
+            user_id = session.get('user_id') or session.get('_user_id')
             
             if api_token and user_id:
                 print(f"🔍 Token encontrado para user_id: {user_id}")

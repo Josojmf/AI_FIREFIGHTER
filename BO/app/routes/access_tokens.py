@@ -581,7 +581,7 @@ def public_debug():
 def public_test_api():
     """Endpoint público para testear API (sin autenticación)"""
     try:
-        test_url = f"{Config.API_BASE_URL}/health"
+        test_url = "http://backend:5000/api/health"
         response = requests.get(test_url, timeout=5)
         
         result = {
