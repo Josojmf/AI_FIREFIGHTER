@@ -20,6 +20,48 @@ except:
     docker_client = None
     print("⚠️  Docker no disponible en este sistema")
 
+@router.get("/docker/logs")
+async def get_all_docker_logs(user_data: Dict = Depends(require_user)):
+    """
+    Endpoint de compatibilidad para el frontoffice.
+    Devuelve logs resumidos de todos los contenedores o un stub si no hay Docker.
+    """
+    if not DOCKER_AVAILABLE:
+        return {
+            "ok": False,
+            "error": "Docker no disponible en este sistema",
+            "logs": []
+        }
+
+    try:
+        containers = docker_client.containers.list(all=True)
+        result: List[Dict[str, Any]] = []
+
+        for c in containers:
+            try:
+                logs = c.logs(tail=50).decode("utf-8")
+            except Exception:
+                logs = ""
+
+            result.append({
+                "id": c.short_id,
+                "name": c.name,
+                "status": c.status,
+                "image": c.image.tags[0] if c.image.tags else "unknown",
+                "created": c.attrs.get("Created", ""),
+                "logs": logs,
+            })
+
+        return {
+            "ok": True,
+            "containers": result,
+            "count": len(result),
+        }
+
+    except Exception as e:
+        print(f"❌ Error en /docker/logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {e}")
+
 
 @router.get("/docker/containers")
 async def list_docker_containers(user_data: Dict = Depends(require_user)):

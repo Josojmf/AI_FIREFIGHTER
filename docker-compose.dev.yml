@@ -1,70 +1,74 @@
 version: '3.8'
 
 services:
-  # =========================
-  # 🔥 BACKEND (API) - CONSTRUIDO LOCALMENTE
-  # =========================
+  # 🔥 BACKEND (API) - DEV
   backend:
-    build: ./API
+    build:
+      context: ./API
+      dockerfile: Dockerfile
     container_name: backend-dev
+    # Dev: Uvicorn escucha en 5000 dentro, exponemos 5000->5000
     ports:
       - "5000:5000"
     env_file:
       - .env
     environment:
       FLASK_ENV: development
-      REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
       DEBUG: "true"
+      REDIS_URL: redis://redis:6379/0
+      PUBLIC_API_URL: http://backend:5000
+      DOCKER_ENV: "true"
+    command: python main.py
     depends_on:
       redis:
         condition: service_healthy
-    command: python main.py
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
+      # Chequea el puerto 5000 interno, no 8000
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     networks:
       - firefighter
-    restart: unless-stopped
+    restart: always
 
-  # =========================
-  # 🌐 FRONTEND - CONSTRUIDO LOCALMENTE
-  # =========================
+  # 🌐 FRONTEND - DEV
   frontend:
     build:
       context: ./FO
       dockerfile: Dockerfile
     container_name: frontend-dev
+    # En dev: 8080 del host -> 8000 del contenedor
     ports:
       - "8080:8000"
     env_file:
       - .env
     environment:
       FLASK_ENV: development
-      API_BASE_URL: http://backend:5000/api
+      ENVIRONMENT: development
+      DEBUG: "true"
+      API_BASE_URL: http://backend:5000
       REDIS_URL: redis://redis:6379/0
       PUBLIC_FRONTEND_URL: http://localhost:8080
+      DOCKER_ENV: "true"
     depends_on:
       backend:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
       - firefighter
-    restart: unless-stopped
+    restart: always
 
-  # =========================
-  # 🏢 BACKOFFICE (DEV REAL)
-  # =========================
+  # 🏢 BACKOFFICE - DEV
   backoffice:
     build:
       context: ./BO
@@ -76,30 +80,30 @@ services:
       - .env
     environment:
       FLASK_ENV: development
+      ENVIRONMENT: development
+      DEBUG: "true"
       API_BASE_URL: http://backend:5000
       REDIS_URL: redis://redis:6379/0
       PORT: 3001
+      DOCKER_ENV: "true"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
       - firefighter
-    restart: unless-stopped
+    restart: always
 
-  # =========================
-  # 🔴 REDIS (solo dentro de la red Docker, sin exponer puerto host)
-  # =========================
+  # 🔴 REDIS (solo red Docker)
   redis:
     image: redis:7-alpine
     container_name: firefighter-redis-dev
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
-    # <- sin sección "ports" para evitar conflicto con otros Redis / Windows
     volumes:
       - redis-data:/data
       - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -111,7 +115,7 @@ services:
       start_period: 10s
     networks:
       - firefighter
-    restart: unless-stopped
+    restart: always
 
 networks:
   firefighter:
