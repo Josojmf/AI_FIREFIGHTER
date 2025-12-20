@@ -7,11 +7,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any, List
 from datetime import datetime
 
-from dependencies.auth import require_admin
-
+from dependencies.auth import require_user, require_admin
 
 router = APIRouter(tags=["docker"])
-
 
 try:
     import docker
@@ -24,33 +22,37 @@ except:
 
 
 @router.get("/docker/containers")
-async def list_docker_containers(admin_data: Dict = Depends(require_admin)):
-    """Listar contenedores Docker (solo admin)"""
+async def list_docker_containers(user_data: Dict = Depends(require_user)):
+    """Listar contenedores Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible en este sistema"
+            "error": "Docker no disponible en este sistema",
         }
-    
+
     try:
         containers = docker_client.containers.list(all=True)
-        
+
         result = []
         for container in containers:
-            result.append({
-                "id": container.short_id,
-                "name": container.name,
-                "status": container.status,
-                "image": container.image.tags[0] if container.image.tags else "unknown",
-                "created": container.attrs.get("Created", ""),
-            })
-        
+            result.append(
+                {
+                    "id": container.short_id,
+                    "name": container.name,
+                    "status": container.status,
+                    "image": container.image.tags[0]
+                    if container.image.tags
+                    else "unknown",
+                    "created": container.attrs.get("Created", ""),
+                }
+            )
+
         return {
             "ok": True,
             "containers": result,
-            "count": len(result)
+            "count": len(result),
         }
-        
+
     except Exception as e:
         print(f"❌ Error listando containers: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
@@ -58,25 +60,24 @@ async def list_docker_containers(admin_data: Dict = Depends(require_admin)):
 
 @router.post("/docker/containers/{container_id}/start")
 async def start_docker_container(
-    container_id: str,
-    admin_data: Dict = Depends(require_admin)
+    container_id: str, user_data: Dict = Depends(require_user)
 ):
-    """Iniciar contenedor Docker (solo admin)"""
+    """Iniciar contenedor Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible"
+            "error": "Docker no disponible",
         }
-    
+
     try:
         container = docker_client.containers.get(container_id)
         container.start()
-        
+
         return {
             "ok": True,
-            "detail": f"Container {container.name} iniciado"
+            "detail": f"Container {container.name} iniciado",
         }
-        
+
     except Exception as e:
         print(f"❌ Error iniciando container: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
@@ -84,25 +85,24 @@ async def start_docker_container(
 
 @router.post("/docker/containers/{container_id}/stop")
 async def stop_docker_container(
-    container_id: str,
-    admin_data: Dict = Depends(require_admin)
+    container_id: str, user_data: Dict = Depends(require_user)
 ):
-    """Detener contenedor Docker (solo admin)"""
+    """Detener contenedor Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible"
+            "error": "Docker no disponible",
         }
-    
+
     try:
         container = docker_client.containers.get(container_id)
         container.stop()
-        
+
         return {
             "ok": True,
-            "detail": f"Container {container.name} detenido"
+            "detail": f"Container {container.name} detenido",
         }
-        
+
     except Exception as e:
         print(f"❌ Error deteniendo container: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
@@ -110,25 +110,24 @@ async def stop_docker_container(
 
 @router.post("/docker/containers/{container_id}/restart")
 async def restart_docker_container(
-    container_id: str,
-    admin_data: Dict = Depends(require_admin)
+    container_id: str, user_data: Dict = Depends(require_user)
 ):
-    """Reiniciar contenedor Docker (solo admin)"""
+    """Reiniciar contenedor Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible"
+            "error": "Docker no disponible",
         }
-    
+
     try:
         container = docker_client.containers.get(container_id)
         container.restart()
-        
+
         return {
             "ok": True,
-            "detail": f"Container {container.name} reiniciado"
+            "detail": f"Container {container.name} reiniciado",
         }
-        
+
     except Exception as e:
         print(f"❌ Error reiniciando container: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
@@ -136,25 +135,24 @@ async def restart_docker_container(
 
 @router.delete("/docker/containers/{container_id}")
 async def delete_docker_container(
-    container_id: str,
-    admin_data: Dict = Depends(require_admin)
+    container_id: str, user_data: Dict = Depends(require_user)
 ):
-    """Eliminar contenedor Docker (solo admin)"""
+    """Eliminar contenedor Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible"
+            "error": "Docker no disponible",
         }
-    
+
     try:
         container = docker_client.containers.get(container_id)
         container.remove(force=True)
-        
+
         return {
             "ok": True,
-            "detail": f"Container eliminado"
+            "detail": "Container eliminado",
         }
-        
+
     except Exception as e:
         print(f"❌ Error eliminando container: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
@@ -162,27 +160,25 @@ async def delete_docker_container(
 
 @router.get("/docker/containers/{container_id}/logs")
 async def get_docker_container_logs(
-    container_id: str,
-    lines: int = 100,
-    admin_data: Dict = Depends(require_admin)
+    container_id: str, lines: int = 100, user_data: Dict = Depends(require_user)
 ):
-    """Obtener logs de contenedor Docker (solo admin)"""
+    """Obtener logs de contenedor Docker (cualquier usuario autenticado)"""
     if not DOCKER_AVAILABLE:
         return {
             "ok": False,
-            "error": "Docker no disponible"
+            "error": "Docker no disponible",
         }
-    
+
     try:
         container = docker_client.containers.get(container_id)
-        logs = container.logs(tail=lines).decode('utf-8')
-        
+        logs = container.logs(tail=lines).decode("utf-8")
+
         return {
             "ok": True,
             "logs": logs,
-            "container": container.name
+            "container": container.name,
         }
-        
+
     except Exception as e:
         print(f"❌ Error obteniendo logs: {e}")
         raise HTTPException(status_code=500, detail=f"Error: {e}")

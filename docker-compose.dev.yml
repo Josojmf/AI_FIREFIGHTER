@@ -1,28 +1,25 @@
 version: '3.8'
 
-
 services:
-
-
   # =========================
   # 🔥 BACKEND (API) - CONSTRUIDO LOCALMENTE
   # =========================
   backend:
-    build: ./API  # ¡CONSTRUYE LOCALMENTE!
+    build: ./API
     container_name: backend-dev
     ports:
       - "5000:5000"
     env_file:
-      - _env
+      - .env
     environment:
       FLASK_ENV: development
       REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development  # Asegura modo desarrollo
-      DEBUG: "true"  # Activa debug
+      ENVIRONMENT: development
+      DEBUG: "true"
     depends_on:
       redis:
         condition: service_healthy
-    command: python main.py  # ¡FORZAR python main.py!
+    command: python main.py
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/ || exit 1"]
       interval: 20s
@@ -32,8 +29,6 @@ services:
     networks:
       - firefighter
     restart: unless-stopped
-
-
 
   # =========================
   # 🌐 FRONTEND - CONSTRUIDO LOCALMENTE
@@ -46,7 +41,7 @@ services:
     ports:
       - "8080:8000"
     env_file:
-      - _env
+      - .env
     environment:
       FLASK_ENV: development
       API_BASE_URL: http://backend:5000/api
@@ -67,8 +62,6 @@ services:
       - firefighter
     restart: unless-stopped
 
-
-
   # =========================
   # 🏢 BACKOFFICE (DEV REAL)
   # =========================
@@ -78,14 +71,14 @@ services:
       dockerfile: Dockerfile
     container_name: backoffice-dev
     ports:
-      - "3001:3001"  # Cambiado: externo:8080, interno:3001
+      - "3001:3001"
     env_file:
-      - _env
+      - .env
     environment:
       FLASK_ENV: development
       API_BASE_URL: http://backend:5000
       REDIS_URL: redis://redis:6379/0
-      PORT: 3001  # Asegurar puerto interno
+      PORT: 3001
     depends_on:
       backend:
         condition: service_healthy
@@ -98,15 +91,15 @@ services:
     networks:
       - firefighter
     restart: unless-stopped
+
   # =========================
-  # 🔴 REDIS
+  # 🔴 REDIS (solo dentro de la red Docker, sin exponer puerto host)
   # =========================
   redis:
     image: redis:7-alpine
     container_name: firefighter-redis-dev
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
-    ports:
-      - "6379:6379"
+    # <- sin sección "ports" para evitar conflicto con otros Redis / Windows
     volumes:
       - redis-data:/data
       - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -120,13 +113,9 @@ services:
       - firefighter
     restart: unless-stopped
 
-
-
 networks:
   firefighter:
     driver: bridge
-
-
 
 volumes:
   redis-data:

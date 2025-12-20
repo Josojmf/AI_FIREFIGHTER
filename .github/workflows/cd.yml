@@ -10,7 +10,7 @@ on:
       - "BO/**"
       - "docker-compose.prod.yml"
       - "docker-compose.swarm.yml"
-      - "docker-compose.monitoring.yml"
+      - "docker-compose-monitoring.yml"
       - "scripts/**"
       - "Dockerfile"
       - "**.yml"
@@ -31,6 +31,7 @@ permissions:
 
 env:
   DEPLOYMENT_MODE: ${{ github.event.inputs.deployment_mode || 'swarm' }}
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   # ===================================================================
@@ -39,6 +40,7 @@ jobs:
   build-and-push:
     name: 🏗️ Build & Push All Images
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,7 +64,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest
-            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ github.sha }}
+            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ env.IMAGE_TAG }}
           build-args: |
             ENVIRONMENT=production
           no-cache: true
@@ -77,7 +79,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest
-            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ github.sha }}
+            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ env.IMAGE_TAG }}
           build-args: |
             ENVIRONMENT=production
           no-cache: true
@@ -92,7 +94,7 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest
-            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ github.sha }}
+            ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ env.IMAGE_TAG }}
           build-args: |
             ENVIRONMENT=production
           no-cache: true
@@ -102,9 +104,9 @@ jobs:
       - name: Verify images pushed
         run: |
           echo "✅ All images built and pushed successfully:"
-          echo " - Frontend: ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:latest"
-          echo " - Backend: ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:latest"
-          echo " - BackOffice: ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:latest"
+          echo " - Frontend: ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-frontend:${{ env.IMAGE_TAG }}"
+          echo " - Backend:  ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backend:${{ env.IMAGE_TAG }}"
+          echo " - BackOffice: ghcr.io/${{ steps.lc.outputs.owner_lc }}/ai-firefighter-backoffice:${{ env.IMAGE_TAG }}"
 
   # ===================================================================
   # 2) DEPLOY - SCRIPT CONSOLIDADO + HEALTHCHECKS
@@ -114,6 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: production
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -125,7 +128,7 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           source: "scripts/prod.sh,scripts/backup.sh,docker-compose.swarm.yml,docker-compose.monitoring.yml,env/production.env"
-          target: "/opt/emergency/" 
+          target: "/opt/emergency/"
 
       - name: Setup deployment scripts
         uses: appleboy/ssh-action@v0.1.10
@@ -154,17 +157,14 @@ jobs:
             df -h / | grep -E "(Filesystem|/dev/vda1|/dev/sd)"
             free -h | grep '^Mem:'
             cd /opt/emergency
-
             echo "📦 Creando backup con script..."
             ./scripts/backup.sh || echo "⚠️ Backup falló, continuando..."
-
             echo "🛑 Parando servicios..."
             if docker info | grep -q "Swarm: active"; then
               docker stack rm firefighter 2>/dev/null || true
               docker stack rm monitoring 2>/dev/null || true
               sleep 10
             fi
-
             docker container prune -f
             docker image prune -f
 
@@ -175,12 +175,14 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           command_timeout: 900s
-          envs: GHCR_USER,GHCR_PAT
+          envs: GHCR_USER,GHCR_PAT,IMAGE_TAG,DEPLOYMENT_MODE
           script: |
             set -e
             cd /opt/emergency
             export GHCR_USER="${{ secrets.GHCR_USER }}"
             export GHCR_PAT="${{ secrets.GHCR_PAT }}"
+            export IMAGE_TAG="${{ env.IMAGE_TAG }}"
+            export DEPLOYMENT_MODE="${{ env.DEPLOYMENT_MODE }}"
             ./scripts/prod.sh deploy
 
       - name: 🔍 Verify services health
@@ -205,6 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy]
     if: always()
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -228,7 +231,6 @@ jobs:
           }
           EOF
           )
-
           echo "$DEPLOYMENT_DATA" > deployment-metrics.json
           echo "## 🚀 CD Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Mode**: ${{ env.DEPLOYMENT_MODE }}" >> $GITHUB_STEP_SUMMARY

@@ -166,7 +166,7 @@ async def generate_mfa_secret(user_id: str, user_data: Dict = Depends(require_us
         "qrcode": qrcode_b64,    
         "manual_entry_key": secret
     }
-    
+
 @router.post("/users/{user_id}/mfa/verify-setup", response_model=Dict[str, Any])
 async def verify_mfa_setup(user_id: str, body: Dict[str, Any], user_data: Dict = Depends(require_user_local)):
     """
@@ -288,10 +288,10 @@ async def disable_mfa(user_id: str, user_data: Dict = Depends(require_user_local
 # ============================================================================
 
 @router.get("/users", response_model=Dict[str, Any])
-async def list_users(admin_data: Dict = Depends(require_admin_local)):
-    """Listar todos los usuarios (solo admin)"""
+async def list_users(user_data: Dict = Depends(require_user_local)):
+    """Listar todos los usuarios (cualquier usuario autenticado)"""
     try:
-        print(f"🔍 GET /api/users - Admin: {admin_data['username']}")
+        print(f"🔍 GET /api/users - User: {user_data['username']}")
         cursor = Database.users.find(
             {},
             {
@@ -304,23 +304,23 @@ async def list_users(admin_data: Dict = Depends(require_admin_local)):
 
         processed_users = []
         for user in users_list:
-            user_data = serialize_doc(user)
-            user_data.setdefault("email_verified", False)
-            user_data.setdefault("mfa_enabled", False)
-            user_data.setdefault("has_leitner_progress", False)
-            user_data.setdefault("has_backoffice_cards", False)
-            user_data.setdefault("metadata", {})
-            user_data.setdefault("status", "active")
-            user_data.setdefault("role", "user")
+            user_data_item = serialize_doc(user)
+            user_data_item.setdefault("email_verified", False)
+            user_data_item.setdefault("mfa_enabled", False)
+            user_data_item.setdefault("has_leitner_progress", False)
+            user_data_item.setdefault("has_backoffice_cards", False)
+            user_data_item.setdefault("metadata", {})
+            user_data_item.setdefault("status", "active")
+            user_data_item.setdefault("role", "user")
 
             for date_field in ["created_at", "last_login"]:
                 if (
-                    date_field in user_data
-                    and isinstance(user_data[date_field], datetime)
+                    date_field in user_data_item
+                    and isinstance(user_data_item[date_field], datetime)
                 ):
-                    user_data[date_field] = user_data[date_field].isoformat()
+                    user_data_item[date_field] = user_data_item[date_field].isoformat()
 
-            processed_users.append(user_data)
+            processed_users.append(user_data_item)
 
         return {"ok": True, "users": processed_users}
     except Exception as e:
@@ -330,11 +330,9 @@ async def list_users(admin_data: Dict = Depends(require_admin_local)):
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @router.get("/users/{userid}", response_model=Dict[str, Any])
-async def get_user(userid: str, userdata: Dict = Depends(require_user_local)):
+async def get_user_by_any(userid: str, userdata: Dict = Depends(require_user_local)):
+    """Obtener un usuario por id/username (cualquier usuario autenticado)"""
     try:
-        if userdata.get("role") != "admin" and userdata.get("user_id") != userid:
-            raise HTTPException(status_code=403, detail="Acceso denegado")
-
         user = None
 
         # 1) Si es ObjectId válido
@@ -400,7 +398,7 @@ async def update_user(
     updates: Dict[str, Any],
     user_data: Dict = Depends(require_user_local),
 ):
-    """Actualizar usuario"""
+    """Actualizar usuario (propio o admin)"""
     try:
         if user_data.get("role") != "admin" and user_data.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
@@ -472,42 +470,12 @@ async def delete_user(user_id: str, admin_data: Dict = Depends(require_admin_loc
     except Exception as e:
         print(f"❌ Error eliminando usuario: {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-    
-@router.get("/users/{user_id}", response_model=Dict[str, Any])
-async def get_user(user_id: str, user_data: Dict = Depends(require_user_local)):
-    """
-    Obtener un usuario por ID (endpoint que llama el backoffice después de generar MFA).
-    """
-    try:
-        # Solo admin o el propio usuario
-        if user_data.get("role") != "admin" and user_data.get("user_id") != user_id:
-            raise HTTPException(status_code=403, detail="Acceso denegado")
-
-        # Reutilizar el helper que ya usan los endpoints de MFA
-        user = await _find_user_by_id_any_collection(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-        result_user_data = serialize_doc(user)
-        result_user_data.setdefault("email_verified", False)
-        result_user_data.setdefault("mfa_enabled", False)
-        result_user_data.setdefault("has_leitner_progress", False)
-        result_user_data.setdefault("has_backoffice_cards", False)
-        result_user_data.setdefault("metadata", {})
-
-        return {"ok": True, "user": result_user_data}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Error obteniendo usuario: {e}")
-        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
-
 
 @router.get("/users/{user_id}/progress", response_model=Dict[str, Any])
 async def get_user_progress(
     user_id: str, user_data: Dict = Depends(require_user_local)
 ):
-    """Obtener progreso Leitner del usuario"""
+    """Obtener progreso Leitner del usuario (propio o admin)"""
     try:
         if user_data.get("role") != "admin" and user_data.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="Acceso denegado")
@@ -552,14 +520,12 @@ async def users_health():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
     }
-# Al final del archivo users.py, antes del último bracket
 
 @router.get("/debug/mfa/{user_id}")
 async def debug_mfa_status(user_id: str):
     """Debug endpoint para verificar estado MFA en todas las colecciones"""
     print(f"🔍 DEBUG MFA STATUS para user_id={user_id}")
     
-    # Importar ObjectId aquí para evitar circular dependencies
     from bson import ObjectId
     
     results = {
@@ -598,8 +564,7 @@ async def debug_mfa_status(user_id: str):
         print(f"   - mfa_enabled: {user_in_admin.get('mfa_enabled')}")
         print(f"   - mfa_secret: {'SÍ' if user_in_admin.get('mfa_secret') else 'NO'}")
     
-    # Buscar en Adm_Users (nombre real según logs)
-    # Primero necesitamos verificar si existe esta colección
+    # Buscar en Adm_Users
     try:
         user_in_adm_users = await Database.adm_users.find_one({"_id": user_id})
         print(f"🔍 En colección 'Adm_Users': {user_in_adm_users is not None}")
@@ -636,7 +601,6 @@ async def debug_mfa_status(user_id: str):
         **results
     }
 
-# También agrega este endpoint para desactivar MFA manualmente
 @router.post("/debug/mfa/{user_id}/disable")
 async def debug_disable_mfa(user_id: str):
     """Desactivar MFA en todas las colecciones (debug)"""

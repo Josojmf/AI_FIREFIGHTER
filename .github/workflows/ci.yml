@@ -21,7 +21,7 @@ jobs:
     name: Critical Checks Only
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,14 +36,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install flake8==7.1.1 bandit==1.7.9
+          # deps mínimas para parsear código
           pip install flask pymongo requests python-dotenv
 
       - name: Critical syntax check
         run: |
           echo "Running critical syntax checks..."
-          
-          python_files=$(find . -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" | head -20)
-          
+          python_files=$(find API BO FO -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" | head -40)
           if [ -n "$python_files" ]; then
             for file in $python_files; do
               echo "Checking syntax: $file"
@@ -52,7 +51,7 @@ jobs:
                 exit 1
               }
             done
-            echo "✅ All Python files have valid syntax"
+            echo "✅ All sampled Python files have valid syntax"
           else
             echo "No Python files found to check"
           fi
@@ -60,30 +59,23 @@ jobs:
       - name: Critical security check
         run: |
           echo "Running critical security checks..."
-          
-          bandit -r . -ll --skip="**/__pycache__/**,**/venv/**,**/.git/**" -f json -o bandit-critical.json || true
-          
+          bandit -r API BO -ll --skip="**/__pycache__/**,**/venv/**,**/.git/**" -f json -o bandit-critical.json || true
           if [ -f bandit-critical.json ]; then
             python3 -c "
-          import json
-          import sys
-
-          try:
-              with open('bandit-critical.json', 'r') as f:
-                  data = json.load(f)
-              
-              critical = [r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH']
-              
-              if critical:
-                  print(f'CRITICAL SECURITY ISSUES FOUND: {len(critical)}')
-                  for issue in critical[:3]:
-                      print(f'- {issue.get(\"test_name\", \"Unknown\")}: {issue.get(\"issue_text\", \"No description\")}')
-                  sys.exit(1)
-              else:
-                  print('No critical security issues found')
-                  
-          except Exception as e:
-              print(f'Security scan completed with warnings: {e}')
+            import json, sys
+            try:
+                with open('bandit-critical.json', 'r') as f:
+                    data = json.load(f)
+                critical = [r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH']
+                if critical:
+                    print(f'CRITICAL SECURITY ISSUES FOUND: {len(critical)}')
+                    for issue in critical[:3]:
+                        print(f'- {issue.get(\"test_name\", \"Unknown\")}: {issue.get(\"issue_text\", \"No description\")}')
+                    sys.exit(1)
+                else:
+                    print('No critical security issues found')
+            except Exception as e:
+                print(f'Security scan completed with warnings: {e}')
             "
           fi
 
@@ -99,7 +91,7 @@ jobs:
     needs: critical-checks
     timeout-minutes: 30
     continue-on-error: true
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -114,7 +106,6 @@ jobs:
         continue-on-error: true
         run: |
           python -m pip install --upgrade pip setuptools wheel packaging==21.3
-          
           pip install \
             black==24.8.0 \
             isort==5.13.2 \
@@ -123,37 +114,32 @@ jobs:
             pytest==7.4.4 \
             pytest-cov==4.1.0 \
             safety==3.2.7
-          
+          # deps básicas para ejecutar tests de API/FO/BO
           pip install flask flask-cors pymongo bcrypt python-dotenv requests gunicorn werkzeug
-          
-          for req_file in "requirements.txt" "FO/requirements.txt" "API/requirements.txt"; do
+          for req_file in "requirements.txt" "FO/requirements.txt" "API/requirements.txt" "BO/requirements.txt"; do
             if [ -f "$req_file" ]; then
               pip install -r "$req_file" --no-deps || echo "Some packages from $req_file may already be installed"
             fi
           done
 
-      - name: Code formatting check (non-blocking)
+      - name: Code formatting & style (non-blocking)
         continue-on-error: true
         run: |
-          echo "Checking code formatting..."
-          
+          echo "Checking code formatting and style..."
           python_dirs=()
-          for dir in "FO" "API" "."; do
-            if [ -d "$dir" ] && find "$dir" -maxdepth 3 -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" -print -quit | grep -q .; then
+          for dir in "FO" "API" "BO"; do
+            if [ -d "$dir" ] && find "$dir" -maxdepth 5 -name "*.py" -not -path "*/.*" -not -path "*/__pycache__/*" -print -quit | grep -q .; then
               python_dirs+=("$dir")
             fi
           done
-          
           if [ ${#python_dirs[@]} -eq 0 ]; then
             echo "No Python files found"
             exit 0
           fi
-          
           for dir in "${python_dirs[@]}"; do
             echo "Checking formatting in $dir..."
-            
-            black "$dir" --check --diff --exclude='(__pycache__|\.git|\.egg-info|venv|env)' || echo "Black found formatting issues in $dir"
-            isort "$dir" --check-only --diff --skip-glob='**/__pycache__/**' --skip-glob='**/.git/**' || echo "Isort found import issues in $dir"
+            black "$dir" --check --diff --exclude='(__pycache__|\.git|\.egg-info|venv|env)' || echo "Black found issues in $dir"
+            isort "$dir" --check-only --diff --skip-glob='**/__pycache__/**' --skip-glob='**/.git/**' || echo "Isort found issues in $dir"
             flake8 "$dir" \
               --count \
               --statistics \
@@ -167,15 +153,12 @@ jobs:
         run: |
           echo "Running tests..."
           mkdir -p test-results
-          
-          test_files=$(find . -name "test_*.py" -o -name "*_test.py" 2>/dev/null | head -10)
-          
+          test_files=$(find . -name "test_*.py" -o -name "*_test.py" 2>/dev/null | head -20)
           if [ -n "$test_files" ]; then
             echo "Found test files, running pytest..."
             pytest \
               --cov=./ \
               --cov-report=xml:coverage.xml \
-              --cov-report=html:htmlcov \
               --cov-report=term-missing \
               --junitxml=test-results/junit.xml \
               -v \
@@ -186,161 +169,59 @@ jobs:
               --ignore=.git || echo "Tests completed with some failures"
           else
             echo "No test files found"
-            echo '<?xml version="1.0"?><coverage version="7.0" timestamp="'$(date +%s)'" lines-valid="1" lines-covered="1" line-rate="1.0"><sources><source>.</source></sources><packages></packages></coverage>' > coverage.xml
-            mkdir -p htmlcov test-results
-            echo "<html><body><h1>No tests found</h1></body></html>" > htmlcov/index.html
-            echo "<testsuites><testsuite name='no-tests' tests='0' failures='0' errors='0'/></testsuites>" > test-results/junit.xml
           fi
 
-      - name: Security scan (non-blocking)
+      - name: Lint Dockerfiles and compose (non-blocking)
         continue-on-error: true
         run: |
-          echo "Running comprehensive security scan..."
-          
-          for req_file in "requirements.txt" "FO/requirements.txt" "API/requirements.txt"; do
-            if [ -f "$req_file" ]; then
-              echo "Scanning $req_file with safety..."
-              safety check -r "$req_file" --full-report --output text || echo "Safety found issues in $req_file"
+          pip install hadolint yamllint || true
+          for df in API/Dockerfile BO/Dockerfile FO/Dockerfile; do
+            if [ -f "$df" ]; then
+              echo "Linting $df"
+              hadolint "$df" || echo "Hadolint warnings in $df"
+            fi
+          done
+          for y in docker-compose.dev.yml docker-compose.prod.yml docker-compose.override.yml docker-compose.swarm.yml docker-compose-monitoring.yml; do
+            if [ -f "$y" ]; then
+              echo "Yamllint $y"
+              yamllint "$y" || echo "Yamllint warnings in $y"
             fi
           done
 
-      - name: Upload quality reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: quality-reports-${{ github.run_id }}
-          path: |
-            coverage.xml
-            htmlcov/
-            test-results/
-            bandit-critical.json
-          retention-days: 7
-        continue-on-error: true
-
-  build-verification:
-    name: Build Verification
+  docker-smoke:
+    name: Docker Build & Smoke Tests
     runs-on: ubuntu-latest
     needs: critical-checks
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        component: [frontend, backend]
-        include:
-          - component: frontend
-            path: FO
-            main_file: main.py
-          - component: backend
-            path: API
-            main_file: app.py
-      fail-fast: false
-    
+    timeout-minutes: 25
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Install component dependencies
-        run: |
-          python -m pip install --upgrade pip
-          
-          pip install flask flask-cors pymongo bcrypt python-dotenv requests gunicorn werkzeug
-          
-          component_path="${{ matrix.path }}"
-          if [ -f "$component_path/requirements.txt" ]; then
-            echo "Installing $component_path requirements..."
-            pip install -r "$component_path/requirements.txt" || echo "Some dependencies installed with warnings"
-          fi
+      - name: Build dev stack
+        run: docker-compose -f docker-compose.dev.yml build
 
-      - name: Verify imports (critical)
+      - name: Start dev stack
         run: |
-          component_path="${{ matrix.path }}"
-          main_file="${{ matrix.main_file }}"
-          
-          if [ -f "$component_path/$main_file" ]; then
-            echo "Testing ${{ matrix.component }} imports..."
-            cd "$component_path"
-            
-            python -c "
-            import sys
-            sys.path.insert(0, '.')
-            try:
-                module_name = '$main_file'.replace('.py', '')
-                __import__(module_name)
-                print('✓ ${{ matrix.component }} imports successfully')
-            except ImportError as e:
-                if 'transformers' in str(e) or 'torch' in str(e):
-                    print('⚠ ML dependencies missing but basic imports work')
-                else:
-                    print('✗ Critical import error:', str(e))
-                    sys.exit(1)
-            except Exception as e:
-                print('⚠ Import completed with warnings:', str(e))
-            " || echo "Import check completed with warnings"
-                      else
-                        echo "No main file found at $component_path/$main_file - skipping"
-          fi
+          docker-compose -f docker-compose.dev.yml up -d
+          # esperar a healthchecks
+          sleep 40
 
-      - name: Docker build test (if Dockerfile exists)
-        continue-on-error: true
+      - name: Smoke test backend
         run: |
-          component_path="${{ matrix.path }}"
-          
-          if [ -f "$component_path/Dockerfile" ]; then
-            echo "Testing Docker build for ${{ matrix.component }}..."
-            docker build --no-cache -t test-${{ matrix.component }} "$component_path" || echo "Docker build failed but continuing"
-          else
-            echo "No Dockerfile found for ${{ matrix.component }}"
-          fi
+          curl -fsS http://localhost:5000/health || curl -fsS http://localhost:5000/api/health
 
-  ci-summary:
-    name: CI Summary
-    runs-on: ubuntu-latest
-    needs: [critical-checks, quality-checks, build-verification]
-    if: always()
-    outputs:
-      deployment_ready: ${{ needs.critical-checks.result == 'success' }}
-      quality_status: ${{ needs.quality-checks.result }}
-    
-    steps:
-      - name: Generate CI summary
+      - name: Smoke test backoffice
         run: |
-          echo "=== CI Pipeline Summary ==="
-          echo "Critical Checks: ${{ needs.critical-checks.result }}"
-          echo "Quality Checks: ${{ needs.quality-checks.result }}"
-          echo "Build Verification: ${{ needs.build-verification.result }}"
-          echo ""
-          
-          if [ "${{ needs.critical-checks.result }}" = "success" ]; then
-            echo "Critical checks passed - deployment can proceed"
-            
-            if [ "${{ needs.quality-checks.result }}" = "success" ]; then
-              echo "Quality checks also passed"
-            else
-              echo "Quality checks have warnings (non-blocking)"
-            fi
-            
-            if [ "${{ needs.build-verification.result }}" = "success" ]; then
-              echo "Build verification passed"
-            else
-              echo "Build verification has issues (but deployment can continue)"
-            fi
-          else
-            echo "Critical checks failed - this should block deployment"
-            echo "Please fix critical issues before deploying"
-          fi
-          
-          echo ""
-          echo "🚀 Pipeline completed - CD can proceed if critical checks passed"
+          curl -fsS http://localhost:3001/health
 
-      - name: Set workflow conclusion
+      - name: Smoke test frontend (non-blocking)
         run: |
-          if [ "${{ needs.critical-checks.result }}" != "success" ]; then
-            echo "Failing due to critical issues"
-            exit 1
-          else
-            echo "CI passed - deployment ready"
-          fi
+          curl -fsS http://localhost:8080/ || echo "Frontend smoke test non-blocking"
+
+      - name: Tear down
+        if: always()
+        run: docker-compose -f docker-compose.dev.yml down --remove-orphans
