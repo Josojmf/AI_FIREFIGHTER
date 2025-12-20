@@ -32,7 +32,7 @@ class Config:
     SESSION_COOKIE_NAME = "backoffice_session"
     SESSION_COOKIE_PATH = "/"
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SECURE = ENVIRONMENT == "production"  # True en producción
+    SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN", None)
 
