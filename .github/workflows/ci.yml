@@ -59,24 +59,33 @@ jobs:
       - name: Critical security check
         run: |
           echo "Running critical security checks..."
-          bandit -r API BO -ll --skip="**/__pycache__/**,**/venv/**,**/.git/**" -f json -o bandit-critical.json || true
+          bandit -r API BO -ll -f json -o bandit-critical.json || true
           if [ -f bandit-critical.json ]; then
-            python3 -c "
-            import json, sys
+            python3 << 'EOF'
+            import json
+            import sys
+
             try:
                 with open('bandit-critical.json', 'r') as f:
                     data = json.load(f)
-                critical = [r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH']
+
+                critical = [
+                    r for r in data.get('results', [])
+                    if r.get('issue_severity') == 'HIGH'
+                ]
+
                 if critical:
                     print(f'CRITICAL SECURITY ISSUES FOUND: {len(critical)}')
                     for issue in critical[:3]:
-                        print(f'- {issue.get(\"test_name\", \"Unknown\")}: {issue.get(\"issue_text\", \"No description\")}')
+                        name = issue.get('test_name', 'Unknown')
+                        text = issue.get('issue_text', 'No description')
+                        print(f'- {name}: {text}')
                     sys.exit(1)
                 else:
                     print('No critical security issues found')
             except Exception as e:
                 print(f'Security scan completed with warnings: {e}')
-            "
+            EOF
           fi
 
       - name: Set deployment readiness
