@@ -55,8 +55,8 @@ services:
       ]
     environment:
       - DISABLE_AI_MODEL=true
-      - API_BASE_URL=http://backend:5000/api
-      - FRONTEND_API_BASE_URL=http://backend:5000/api
+      - API_BASE_URL=http://backend:5000
+      - FRONTEND_API_BASE_URL=http://backend:5000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 15s

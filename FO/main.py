@@ -1,21 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, make_response
-# Cache en memoria para Frontend
 from simple_memory_cache import memory_cache, cache_result
-
 import requests
 import json
 import os
 from datetime import datetime
 from functools import wraps
 from dotenv import load_dotenv
-from leitner import get_cards_collection  # reutilizamos conexiÃ³n
-import re 
+from leitner import get_cards_collection
+import re
 import warnings
 import numpy as np
+from flask_login import logout_user
+
 warnings.filterwarnings("ignore", message=".*torch_dtype.*")
 warnings.filterwarnings("ignore", message=".*Truncation.*")
 warnings.filterwarnings("ignore", message=".*max_new_tokens.*")
-from flask_login import logout_user
 
 # --- Carga env ---
 load_dotenv()
@@ -31,14 +30,24 @@ app.secret_key = os.getenv("FRONTEND_SECRET_KEY", "firefighter-frontend-secret-2
 
 # 🔥 CONFIGURACIÓN DE COOKIES ESPECÍFICA PARA FRONTEND
 app.config.update(
-    SESSION_COOKIE_NAME='firefighter_session',  # Nombre diferente al BackOffice
+    SESSION_COOKIE_NAME='firefighter_session',
     SESSION_COOKIE_PATH='/',
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SECURE=False,  # True en producción HTTPS
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=86400,  # 24 horas
-    SESSION_COOKIE_DOMAIN=None  # Para localhost
+    PERMANENT_SESSION_LIFETIME=86400,
+    SESSION_COOKIE_DOMAIN=None
 )
+
+# API_BASE_URL siempre SIN /api en la env, y aquí se añade /api en las rutas
+API_BASE_URL = os.getenv("API_BASE_URL", "http://backend:5000")
+_safe_print(f"🛰️ API configurada en: {API_BASE_URL}")
+
+try:
+    r = requests.get(f"{API_BASE_URL}/api/health", timeout=5)
+    _safe_print(f"🩺 Health check {API_BASE_URL}/api/health -> {r.status_code}")
+except Exception as e:
+    _safe_print(f"⚠️ Error en health check API: {e}")
 
 print(f"🔥 FrontEnd configurado con:")
 print(f"   - Session cookie: {app.config['SESSION_COOKIE_NAME']}")
@@ -321,20 +330,16 @@ def chat_status():
 
 @app.route('/logout')
 def logout():
-    """Cerrar sesión - VERSIÓN CORREGIDA"""
+    """Cerrar sesión - versión corregida."""
     try:
-        # Limpiar la sesión manualmente
         session.pop('user_id', None)
         session.pop('username', None)
         session.pop('access_token', None)
         session.pop('user_data', None)
-        
         print("✅ Sesión cerrada correctamente")
         return redirect(url_for('login'))
-        
     except Exception as e:
         print(f"⚠️ Error en logout: {e}")
-        # Redirigir a login de todas formas
         return redirect(url_for('login'))
 
 
@@ -359,8 +364,6 @@ def api_leitner_decks():
     except Exception:
         return jsonify({"ok": True, "decks": []})
 
-# --- API externa (tu backend auth) ---
-API_BASE_URL = os.getenv("API_BASE_URL", "http://firefighter_backend:5000/api")
 
 # --- Preguntas para home ---
 try:
@@ -376,45 +379,42 @@ def register():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
-        email = request.form.get('email', '').strip()  # Cambio importante
+        email = request.form.get('email', '').strip()
         access_token = request.form.get('access_token', '').strip()
-        
+
         print(f"🔍 Frontend - Datos del formulario:")
-        print(f"   - Username: {username}")
-        print(f"   - Email: {email}")
-        print(f"   - Token: {access_token}")
-        print(f"   - Password length: {len(password)}")
-        
+        print(f" - Username: {username}")
+        print(f" - Email: {email}")
+        print(f" - Token: {access_token}")
+        print(f" - Password length: {len(password)}")
+
         if not access_token:
             flash('❌ Token de acceso requerido para el registro')
             return render_template('register.html')
-            
-        # Si no se proporciona email, usar uno por defecto basado en username
+
         if not email:
             email = f"{username}@firefighter.com"
             print(f"🔍 Email automático generado: {email}")
-            
+
         payload = {
-            'username': username, 
-            'password': password, 
+            'username': username,
+            'password': password,
             'email': email,
             'access_token': access_token
         }
 
         try:
-            _safe_print(f"📤 POST {API_BASE_URL}/register")
-            res = requests.post(f"{API_BASE_URL}/register", json=payload, timeout=10)
-            
+            _safe_print(f"📤 POST {API_BASE_URL}/api/register")
+            res = requests.post(f"{API_BASE_URL}/api/register", json=payload, timeout=10)
             print(f"🔍 Respuesta API - Status: {res.status_code}")
-            
-            # Manejar respuesta vacía
+
             if not res.content:
                 flash('❌ Error: Respuesta vacía del servidor')
                 return render_template('register.html')
-                
+
             data = res.json()
             print(f"🔍 Respuesta API - Data: {data}")
-            
+
             if res.status_code == 201:
                 flash('✅ Registro exitoso. Ahora puedes iniciar sesión.')
                 return redirect(url_for('login'))
@@ -426,7 +426,6 @@ def register():
                 flash(f'❌ {data.get("detail", "El usuario ya existe.")}')
             else:
                 flash(f'❌ Error {res.status_code}: {data.get("detail", "Error durante el registro.")}')
-                
         except requests.exceptions.ConnectionError:
             flash('⚠️ API no disponible. El registro con tokens no está disponible en modo local.')
         except requests.exceptions.Timeout:
@@ -438,62 +437,58 @@ def register():
             flash(f'❌ Error inesperado: {str(e)}')
             print(f"❌ Exception: {e}")
 
-    return render_template('register.html')
+        return render_template('register.html')
 
+    return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
-        
+
         try:
-            # 🔥 CONSTRUIR PAYLOAD SIN mfa_token VACÍO
             payload = {
                 "username": username,
                 "password": password
             }
-            
-            # Solo agregar mfa_token si realmente se proporcionó
             mfa_token = request.form.get('mfa_token', '').strip()
             if mfa_token:
                 payload['mfa_token'] = mfa_token
-            
+
             print(f"📤 Enviando login: {payload.keys()}")
-            
+
             res = requests.post(
-                f"{API_BASE_URL}/auth/login", 
+                f"{API_BASE_URL}/api/auth/login",
                 json=payload,
                 timeout=10
             )
-            
+
             print(f"🔍 Respuesta login - Status: {res.status_code}")
-            
+
             if not res.content:
                 flash('❌ Error: Respuesta vacía del servidor')
                 return render_template('login.html')
-            
+
             data = res.json()
             print(f"🔍 Respuesta login - Data: {data}")
-            
+
             if res.status_code == 200:
-                # MANEJAR RESPUESTA
                 user_data = data.get('user', {})
                 session['user'] = user_data.get('username', username)
                 session['user_id'] = user_data.get('id', '')
                 session['user_role'] = user_data.get('role', 'user')
-                
-                # Guardar token en sesión
+
                 if 'access_token' in data:
                     session['access_token'] = data['access_token']
-                    print(f"✅ Token guardado en sesión")
-                
+                    print("✅ Token guardado en sesión")
+
                 flash('✅ Sesión iniciada correctamente')
                 return redirect(url_for('home'))
             else:
                 error_msg = data.get("detail", "Credenciales incorrectas")
                 flash(f'❌ {error_msg}')
-                
+
         except requests.exceptions.ConnectionError:
             flash('⚠️ API no disponible. Usando autenticación local.')
             return login_local_fallback(username, password)
@@ -501,10 +496,8 @@ def login():
             flash(f'❌ Error de conexión: {str(e)}')
             print(f"❌ Exception en login: {e}")
             return login_local_fallback(username, password)
-    
+
     return render_template('login.html')
-
-
 
 # --- Rutas generales ---
 @app.route("/", endpoint="home")
