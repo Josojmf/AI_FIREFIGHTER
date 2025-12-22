@@ -1,7 +1,6 @@
 ﻿version: '3.8'
 
 services:
-  # 🔥 FRONTEND
   frontend:
     image: ghcr.io/josojmf/ai-firefighter-frontend:latest
     container_name: firefighter_frontend
@@ -10,50 +9,44 @@ services:
     env_file:
       - /root/firefighter.env
     environment:
-      # El frontend habla con el backend vía servicio interno
       - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
-      - DEBUG=false
       - DOCKER_ENV=true
+      - DEBUG=false
     networks:
       - firefighter_network
-    restart: always
+    restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-
-  # 🔥 BACKEND API
-  backend:
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
-    container_name: firefighter_backend
-    # Gunicorn escucha en 8000 dentro; exponemos 5000 fuera
-    ports:
-      - "5000:8000"
-    env_file:
-      - /root/firefighter.env
-    environment:
-      - PUBLIC_API_URL=http://backend:5000
-      - ENVIRONMENT=production
-      - DEBUG=false
-      - DOCKER_ENV=true
-    networks:
-      - firefighter_network
-    restart: always
-    healthcheck:
-      # Healthcheck minimalista y robusto
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
 
-  # 🔥 BACKOFFICE
+  backend:
+    image: ghcr.io/josojmf/ai-firefighter-backend:latest
+    container_name: firefighter_backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - /root/firefighter.env
+    environment:
+      - ENVIRONMENT=production
+      - DOCKER_ENV=true
+      - DEBUG=false
+    networks:
+      - firefighter_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
   backoffice:
     image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
     container_name: firefighter_backoffice
@@ -64,21 +57,20 @@ services:
     environment:
       - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
-      - DEBUG=false
       - DOCKER_ENV=true
-      - MFA_ISSUER=FirefighterAI
+      - DEBUG=false
     networks:
       - firefighter_network
-    restart: always
+    restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3001/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 40s
+      start_period: 60s
 
 networks:
   firefighter_network:

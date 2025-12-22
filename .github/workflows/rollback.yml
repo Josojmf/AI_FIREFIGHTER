@@ -1,0 +1,505 @@
+name: 🔙 Rollback to Previous Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+      target_commit:
+        description: 'Target commit SHA (leave empty for previous version)'
+        required: false
+        type: string
+      skip_backup:
+        description: 'Skip backup before rollback'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/firefighter
+
+jobs:
+  # ============================================
+  # JOB 1: Rollback Approval & Validation
+  # ============================================
+  rollback-approval:
+    name: 📋 Rollback Approval
+    runs-on: ubuntu-latest
+    environment:
+      name: production-rollback
+    
+    outputs:
+      target_commit: ${{ steps.determine-target.outputs.commit }}
+      rollback_id: ${{ steps.generate-id.outputs.rollback_id }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for rollback
+
+      - name: 🆔 Generate rollback ID
+        id: generate-id
+        run: |
+          ROLLBACK_ID="rollback-$(date +%Y%m%d-%H%M%S)"
+          echo "rollback_id=$ROLLBACK_ID" >> $GITHUB_OUTPUT
+          echo "🆔 Rollback ID: $ROLLBACK_ID"
+
+      - name: 🎯 Determine target commit
+        id: determine-target
+        run: |
+          if [ -n "${{ github.event.inputs.target_commit }}" ]; then
+            TARGET_COMMIT="${{ github.event.inputs.target_commit }}"
+            echo "🎯 Using specified commit: $TARGET_COMMIT"
+          else
+            # Get the previous commit
+            TARGET_COMMIT=$(git rev-parse HEAD~1)
+            echo "🎯 Using previous commit: $TARGET_COMMIT"
+          fi
+          
+          # Validate commit exists
+          if ! git cat-file -e "$TARGET_COMMIT^{commit}" 2>/dev/null; then
+            echo "❌ Invalid commit: $TARGET_COMMIT"
+            exit 1
+          fi
+          
+          echo "commit=$TARGET_COMMIT" >> $GITHUB_OUTPUT
+          
+          # Show commit details
+          echo "📝 Target commit details:"
+          git show --no-patch --format="%h - %s (%an, %ar)" "$TARGET_COMMIT"
+
+      - name: 📊 Create rollback record
+        run: |
+          cat > rollback-info.json <<EOF
+          {
+            "rollback_id": "${{ steps.generate-id.outputs.rollback_id }}",
+            "reason": "${{ github.event.inputs.reason }}",
+            "current_commit": "${{ github.sha }}",
+            "target_commit": "${{ steps.determine-target.outputs.commit }}",
+            "initiated_by": "${{ github.actor }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "skip_backup": ${{ github.event.inputs.skip_backup }}
+          }
+          EOF
+          
+          echo "📋 Rollback record:"
+          cat rollback-info.json
+
+      - name: 📤 Upload rollback info
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-info
+          path: rollback-info.json
+          retention-days: 90
+
+      - name: ⚠️ Rollback warning
+        run: |
+          echo "# ⚠️ ROLLBACK INITIATED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Current version:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target version:** ${{ steps.determine-target.outputs.commit }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Initiated by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ This action will revert the production environment!" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================
+  # JOB 2: Pre-rollback Backup
+  # ============================================
+  pre-rollback-backup:
+    name: 💾 Pre-rollback Backup
+    runs-on: ubuntu-latest
+    needs: [rollback-approval]
+    if: github.event.inputs.skip_backup != 'true'
+    
+    steps:
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 💾 Backup current state before rollback
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "💾 Creating pre-rollback backup..."
+            
+            BACKUP_DIR="/root/backups/pre-rollback-$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "$BACKUP_DIR"
+            
+            # Backup all configuration files
+            cp /root/docker-compose*.yml "$BACKUP_DIR/" 2>/dev/null || true
+            cp /root/.env* "$BACKUP_DIR/" 2>/dev/null || true
+            
+            # Export current deployment state
+            docker ps --format "{{.Names}}: {{.Image}}" > "$BACKUP_DIR/current-deployment.txt"
+            docker service ls --format "{{.Name}}: {{.Replicas}}" > "$BACKUP_DIR/service-states.txt" 2>/dev/null || true
+            
+            # Backup container logs
+            docker-compose logs --tail=1000 > "$BACKUP_DIR/container-logs.txt"
+            
+            echo "✅ Pre-rollback backup completed: $BACKUP_DIR"
+            echo "$BACKUP_DIR" > /root/last-rollback-backup.txt
+          ENDSSH
+
+  # ============================================
+  # JOB 3: Verify Target Version Images
+  # ============================================
+  verify-target:
+    name: 🔍 Verify Target Version
+    runs-on: ubuntu-latest
+    needs: [rollback-approval]
+    
+    steps:
+      - name: 📥 Checkout target version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.rollback-approval.outputs.target_commit }}
+
+      - name: 🐳 Verify target Docker images exist
+        run: |
+          echo "🔍 Verifying Docker images for target version..."
+          
+          TARGET_SHA="${{ needs.rollback-approval.outputs.target_commit }}"
+          SERVICES=("frontend" "api" "backoffice")
+          
+          echo "🔐 Logging in to registry..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          MISSING_IMAGES=()
+          
+          for service in "${SERVICES[@]}"; do
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:main-${TARGET_SHA}"
+            echo "Checking: $IMAGE"
+            
+            if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              echo "✅ Image exists: $service"
+            else
+              echo "❌ Image not found: $service"
+              MISSING_IMAGES+=("$service")
+            fi
+          done
+          
+          if [ ${#MISSING_IMAGES[@]} -ne 0 ]; then
+            echo "❌ Missing images for services: ${MISSING_IMAGES[*]}"
+            echo "Cannot rollback - target images don't exist!"
+            exit 1
+          fi
+          
+          echo "✅ All target images verified"
+
+  # ============================================
+  # JOB 4: Execute Rollback
+  # ============================================
+  execute-rollback:
+    name: 🔄 Execute Rollback
+    runs-on: ubuntu-latest
+    needs: [rollback-approval, verify-target, pre-rollback-backup]
+    if: |
+      always() &&
+      needs.rollback-approval.result == 'success' &&
+      needs.verify-target.result == 'success' &&
+      (needs.pre-rollback-backup.result == 'success' || needs.pre-rollback-backup.result == 'skipped')
+    
+    steps:
+      - name: 📥 Checkout target version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.rollback-approval.outputs.target_commit }}
+
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📤 Copy rollback configuration
+        run: |
+          echo "📤 Copying configuration files for target version..."
+          
+          # Copy docker-compose files
+          scp docker-compose*.yml root@${{ secrets.DIGITALOCEAN_HOST }}:/root/
+          
+          echo "✅ Configuration files copied"
+
+      - name: 🔄 Update environment for rollback
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🔄 Updating environment for rollback..."
+            
+            # Update IMAGE_TAG in .env
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ needs.rollback-approval.outputs.target_commit }}/" /root/.env
+            
+            # Add rollback metadata
+            cat >> /root/.env <<EOF
+          
+          # Rollback Information
+          ROLLBACK_ID=${{ needs.rollback-approval.outputs.rollback_id }}
+          ROLLBACK_FROM=${{ github.sha }}
+          ROLLBACK_TO=${{ needs.rollback-approval.outputs.target_commit }}
+          ROLLBACK_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          ROLLBACK_BY=${{ github.actor }}
+          EOF
+          
+            echo "✅ Environment updated for rollback"
+          ENDSSH
+
+      - name: 🐳 Pull target version images
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🐳 Pulling target version images..."
+            
+            # Login to registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            TARGET_SHA="${{ needs.rollback-approval.outputs.target_commit }}"
+            
+            # Pull images
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:main-${TARGET_SHA}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api:main-${TARGET_SHA}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:main-${TARGET_SHA}
+            
+            echo "✅ Target images pulled"
+          ENDSSH
+
+      - name: 🔄 Rolling rollback
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🔄 Executing rolling rollback..."
+            
+            SERVICES=("api" "frontend" "backoffice")
+            
+            for service in "${SERVICES[@]}"; do
+              echo "⏮️ Rolling back $service..."
+              
+              # Stop current version
+              docker-compose stop $service
+              
+              # Update to target version
+              docker-compose up -d --no-deps $service
+              
+              # Wait for service to be ready
+              echo "⏳ Waiting for $service to be ready..."
+              sleep 15
+              
+              # Verify service health
+              case $service in
+                frontend)
+                  HEALTH_URL="http://localhost:8000/health"
+                  ;;
+                api)
+                  HEALTH_URL="http://localhost:5000/health"
+                  ;;
+                backoffice)
+                  HEALTH_URL="http://localhost:3001/health"
+                  ;;
+              esac
+              
+              # Health check with retries
+              for i in {1..20}; do
+                if curl -f -s "$HEALTH_URL" > /dev/null 2>&1; then
+                  echo "✅ $service is healthy"
+                  break
+                fi
+                
+                if [ $i -eq 20 ]; then
+                  echo "❌ $service failed health check"
+                  exit 1
+                fi
+                
+                echo "⏳ Retry $i/20..."
+                sleep 10
+              done
+            done
+            
+            echo "✅ Rollback completed successfully"
+          ENDSSH
+
+      - name: 🧹 Cleanup
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🧹 Cleaning up..."
+            
+            # Remove dangling images
+            docker image prune -f
+            
+            echo "✅ Cleanup completed"
+          ENDSSH
+
+  # ============================================
+  # JOB 5: Post-rollback Health Check
+  # ============================================
+  health-check-post-rollback:
+    name: 🏥 Post-rollback Health Check
+    runs-on: ubuntu-latest
+    needs: [execute-rollback]
+    
+    steps:
+      - name: ⏳ Wait for stabilization
+        run: |
+          echo "⏳ Waiting 30 seconds for services to stabilize..."
+          sleep 30
+
+      - name: 🏥 Verify rolled back services
+        run: |
+          echo "🏥 Verifying rolled back services..."
+          
+          MAX_RETRIES=10
+          ALL_HEALTHY=false
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Health check attempt $i/$MAX_RETRIES"
+            
+            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+            BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+            
+            echo "  Frontend: $FRONTEND_STATUS"
+            echo "  API: $API_STATUS"
+            echo "  BackOffice: $BO_STATUS"
+            
+            if [ "$FRONTEND_STATUS" = "200" ] && [ "$API_STATUS" = "200" ] && [ "$BO_STATUS" = "200" ]; then
+              echo "✅ All services are healthy after rollback!"
+              ALL_HEALTHY=true
+              break
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting 10s before retry..."
+              sleep 10
+            fi
+          done
+          
+          if [ "$ALL_HEALTHY" = false ]; then
+            echo "❌ Health check failed after rollback"
+            exit 1
+          fi
+
+      - name: 💨 Quick smoke tests
+        run: |
+          echo "💨 Running quick smoke tests..."
+          
+          python << 'PYTHON'
+          import requests
+          
+          HOST = "${{ secrets.DIGITALOCEAN_HOST }}"
+          
+          tests = [
+              ("Frontend", f"http://{HOST}:8000/", 200),
+              ("API", f"http://{HOST}:5000/health", 200),
+              ("BackOffice", f"http://{HOST}:3001/health", 200),
+          ]
+          
+          for name, url, expected in tests:
+              try:
+                  r = requests.get(url, timeout=10)
+                  status = "✅" if r.status_code == expected else "❌"
+                  print(f"{status} {name}: {r.status_code}")
+              except Exception as e:
+                  print(f"❌ {name}: Error - {e}")
+          PYTHON
+
+  # ============================================
+  # JOB 6: Rollback Success
+  # ============================================
+  rollback-success:
+    name: ✅ Rollback Success
+    runs-on: ubuntu-latest
+    needs: [rollback-approval, execute-rollback, health-check-post-rollback]
+    
+    steps:
+      - name: 📥 Download rollback info
+        uses: actions/download-artifact@v4
+        with:
+          name: rollback-info
+
+      - name: 📝 Update rollback record
+        run: |
+          jq '.status = "success" | .completed_at = "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"' \
+            rollback-info.json > rollback-info-final.json
+          
+          cat rollback-info-final.json
+
+      - name: 🎉 Success notification
+        run: |
+          echo "# ✅ Rollback Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback ID:** ${{ needs.rollback-approval.outputs.rollback_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Reverted to:** ${{ needs.rollback-approval.outputs.target_commit }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Executed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Completed at:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Services Status" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All services healthy" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ System restored to previous version" >> $GITHUB_STEP_SUMMARY
+
+      - name: 📢 Create rollback annotation
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `🔙 Rollback completed successfully\n\nRollback ID: ${{ needs.rollback-approval.outputs.rollback_id }}\nReason: ${{ github.event.inputs.reason }}\nRestored to: ${{ needs.rollback-approval.outputs.target_commit }}\nTime: ${new Date().toISOString()}`
+            });
+
+  # ============================================
+  # JOB 7: Rollback Failure Handler
+  # ============================================
+  rollback-failure:
+    name: ❌ Rollback Failure Handler
+    runs-on: ubuntu-latest
+    needs: [rollback-approval, execute-rollback, health-check-post-rollback]
+    if: failure()
+    
+    steps:
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📊 Collect failure information
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "📊 Collecting rollback failure information..."
+            
+            FAILURE_DIR="/root/rollback-failures/$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "$FAILURE_DIR"
+            
+            # Collect logs
+            docker-compose logs --tail=1000 > "$FAILURE_DIR/logs.txt"
+            docker ps -a > "$FAILURE_DIR/containers.txt"
+            
+            # Get last backup location
+            if [ -f /root/last-rollback-backup.txt ]; then
+              cat /root/last-rollback-backup.txt > "$FAILURE_DIR/backup-location.txt"
+            fi
+            
+            echo "✅ Failure information collected: $FAILURE_DIR"
+          ENDSSH
+
+      - name: 🚨 Critical failure notification
+        run: |
+          echo "# 🚨 ROLLBACK FAILED!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback ID:** ${{ needs.rollback-approval.outputs.rollback_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Failed at:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚠️ IMMEDIATE ACTION REQUIRED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check the server immediately" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review logs in rollback-failures directory" >> $GITHUB_STEP_SUMMARY
+          echo "3. Restore from backup if necessary" >> $GITHUB_STEP_SUMMARY
+          echo "4. Contact the team for assistance" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📞 This requires immediate manual intervention!" >> $GITHUB_STEP_SUMMARY

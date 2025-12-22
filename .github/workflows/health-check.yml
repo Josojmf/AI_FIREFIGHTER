@@ -1,0 +1,383 @@
+name: 🏥 Health Check & Monitoring
+
+on:
+  schedule:
+    # Every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      detailed:
+        description: 'Run detailed health check'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  ALERT_THRESHOLD_RESPONSE_TIME: 5000  # 5 seconds
+  ALERT_THRESHOLD_ERROR_RATE: 5        # 5% error rate
+
+jobs:
+  # ============================================
+  # JOB 1: Service Health Check
+  # ============================================
+  service-health:
+    name: 🏥 Service Health Check
+    runs-on: ubuntu-latest
+    
+    outputs:
+      overall_status: ${{ steps.health-check.outputs.status }}
+      alert_needed: ${{ steps.health-check.outputs.alert_needed }}
+    
+    steps:
+      - name: 🏥 Check all services
+        id: health-check
+        run: |
+          echo "🏥 Checking service health..."
+          
+          # Initialize status
+          OVERALL_STATUS="healthy"
+          ALERT_NEEDED="false"
+          
+          # Check Frontend
+          echo "🔍 Checking Frontend..."
+          FRONTEND_START=$(date +%s%3N)
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+          FRONTEND_END=$(date +%s%3N)
+          FRONTEND_TIME=$((FRONTEND_END - FRONTEND_START))
+          
+          echo "  Status: $FRONTEND_STATUS"
+          echo "  Response time: ${FRONTEND_TIME}ms"
+          
+          # Check API
+          echo "🔍 Checking API..."
+          API_START=$(date +%s%3N)
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+          API_END=$(date +%s%3N)
+          API_TIME=$((API_END - API_START))
+          
+          echo "  Status: $API_STATUS"
+          echo "  Response time: ${API_TIME}ms"
+          
+          # Check BackOffice
+          echo "🔍 Checking BackOffice..."
+          BO_START=$(date +%s%3N)
+          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+          BO_END=$(date +%s%3N)
+          BO_TIME=$((BO_END - BO_START))
+          
+          echo "  Status: $BO_STATUS"
+          echo "  Response time: ${BO_TIME}ms"
+          
+          # Determine overall status
+          if [ "$FRONTEND_STATUS" != "200" ] || [ "$API_STATUS" != "200" ] || [ "$BO_STATUS" != "200" ]; then
+            OVERALL_STATUS="unhealthy"
+            ALERT_NEEDED="true"
+            echo "❌ Some services are unhealthy!"
+          elif [ $FRONTEND_TIME -gt ${{ env.ALERT_THRESHOLD_RESPONSE_TIME }} ] || \
+               [ $API_TIME -gt ${{ env.ALERT_THRESHOLD_RESPONSE_TIME }} ] || \
+               [ $BO_TIME -gt ${{ env.ALERT_THRESHOLD_RESPONSE_TIME }} ]; then
+            OVERALL_STATUS="degraded"
+            ALERT_NEEDED="true"
+            echo "⚠️ Services are slow!"
+          else
+            echo "✅ All services healthy"
+          fi
+          
+          # Set outputs
+          echo "status=$OVERALL_STATUS" >> $GITHUB_OUTPUT
+          echo "alert_needed=$ALERT_NEEDED" >> $GITHUB_OUTPUT
+          
+          # Create report
+          cat > health-report.json <<EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "overall_status": "$OVERALL_STATUS",
+            "services": {
+              "frontend": {
+                "status": "$FRONTEND_STATUS",
+                "response_time_ms": $FRONTEND_TIME,
+                "healthy": $([ "$FRONTEND_STATUS" = "200" ] && echo "true" || echo "false")
+              },
+              "api": {
+                "status": "$API_STATUS",
+                "response_time_ms": $API_TIME,
+                "healthy": $([ "$API_STATUS" = "200" ] && echo "true" || echo "false")
+              },
+              "backoffice": {
+                "status": "$BO_STATUS",
+                "response_time_ms": $BO_TIME,
+                "healthy": $([ "$BO_STATUS" = "200" ] && echo "true" || echo "false")
+              }
+            }
+          }
+          EOF
+          
+          cat health-report.json
+
+      - name: 📤 Upload health report
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-report-${{ github.run_id }}
+          path: health-report.json
+          retention-days: 7
+
+  # ============================================
+  # JOB 2: Detailed System Check (Optional)
+  # ============================================
+  detailed-check:
+    name: 🔬 Detailed System Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.detailed == 'true' || needs.service-health.outputs.overall_status != 'healthy'
+    needs: [service-health]
+    
+    steps:
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🔬 Collect detailed metrics
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🔬 Collecting detailed system metrics..."
+            
+            echo "=== Docker Containers ==="
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            
+            echo ""
+            echo "=== Docker Services ==="
+            docker service ls 2>/dev/null || echo "Not using Swarm mode"
+            
+            echo ""
+            echo "=== System Resources ==="
+            echo "CPU Usage:"
+            top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}'
+            
+            echo ""
+            echo "Memory Usage:"
+            free -h
+            
+            echo ""
+            echo "Disk Usage:"
+            df -h /
+            
+            echo ""
+            echo "=== Container Logs (Last 50 lines) ==="
+            docker-compose logs --tail=50 || docker logs --tail=50
+            
+            echo ""
+            echo "=== Network Connectivity ==="
+            ping -c 3 8.8.8.8 || echo "Network issues detected"
+          ENDSSH
+
+      - name: 🔍 Check MongoDB connectivity
+        run: |
+          echo "🔍 Testing MongoDB connectivity..."
+          
+          # This is a basic connectivity test
+          # In production, you'd want to use mongosh or similar
+          if curl -s --max-time 5 http://${{ secrets.DIGITALOCEAN_HOST }}:5000/api/health/database > /dev/null; then
+            echo "✅ Database connectivity OK"
+          else
+            echo "❌ Database connectivity issues detected"
+          fi
+
+  # ============================================
+  # JOB 3: Alert on Issues
+  # ============================================
+  alert:
+    name: 🚨 Alert on Issues
+    runs-on: ubuntu-latest
+    needs: [service-health]
+    if: needs.service-health.outputs.alert_needed == 'true'
+    
+    steps:
+      - name: 📥 Download health report
+        uses: actions/download-artifact@v4
+        with:
+          name: health-report-${{ github.run_id }}
+
+      - name: 🚨 Create issue for unhealthy services
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('health-report.json', 'utf8'));
+            
+            const status = report.overall_status;
+            const services = report.services;
+            
+            let body = `# 🚨 System Health Alert\n\n`;
+            body += `**Status:** ${status}\n`;
+            body += `**Time:** ${report.timestamp}\n\n`;
+            body += `## Service Details\n\n`;
+            
+            for (const [name, details] of Object.entries(services)) {
+              const icon = details.healthy ? '✅' : '❌';
+              body += `${icon} **${name}**\n`;
+              body += `- Status Code: ${details.status}\n`;
+              body += `- Response Time: ${details.response_time_ms}ms\n\n`;
+            }
+            
+            body += `\n---\n`;
+            body += `*This alert was automatically generated by the health check workflow.*`;
+            
+            // Check if there's already an open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-alert'
+            });
+            
+            if (issues.data.length === 0) {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🚨 System Health Alert: ${status}`,
+                body: body,
+                labels: ['health-alert', 'bug', 'critical']
+              });
+            } else {
+              // Comment on existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: body
+              });
+            }
+
+      - name: 📊 Generate alert summary
+        run: |
+          echo "# 🚨 Health Alert Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status:** ${{ needs.service-health.outputs.overall_status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "An issue has been created to track this alert." >> $GITHUB_STEP_SUMMARY
+
+  # ============================================
+  # JOB 4: Auto-recovery Attempt (Optional)
+  # ============================================
+  auto-recovery:
+    name: 🔄 Auto-recovery Attempt
+    runs-on: ubuntu-latest
+    needs: [service-health, detailed-check]
+    if: |
+      needs.service-health.outputs.overall_status == 'unhealthy' &&
+      needs.detailed-check.result == 'success'
+    
+    steps:
+      - name: 🔧 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🔄 Attempt service restart
+        run: |
+          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+            echo "🔄 Attempting automatic service recovery..."
+            
+            # Restart unhealthy containers
+            docker-compose restart
+            
+            echo "⏳ Waiting for services to stabilize..."
+            sleep 30
+            
+            echo "✅ Restart completed"
+          ENDSSH
+
+      - name: 🏥 Verify recovery
+        run: |
+          echo "🏥 Verifying service recovery..."
+          
+          sleep 10  # Additional wait
+          
+          # Check services again
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+          
+          if [ "$FRONTEND_STATUS" = "200" ] && [ "$API_STATUS" = "200" ] && [ "$BO_STATUS" = "200" ]; then
+            echo "✅ Recovery successful!"
+            echo "recovery_success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Recovery failed"
+            echo "recovery_success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📢 Recovery notification
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const recoverySuccess = process.env.RECOVERY_SUCCESS === 'true';
+            
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'health-alert'
+            });
+            
+            if (issues.data.length > 0) {
+              const body = recoverySuccess
+                ? '✅ Auto-recovery successful! Services have been restarted and are now healthy.'
+                : '❌ Auto-recovery attempted but failed. Manual intervention required.';
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: body
+              });
+              
+              if (recoverySuccess) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issues.data[0].number,
+                  state: 'closed'
+                });
+              }
+            }
+
+  # ============================================
+  # JOB 5: Health Summary
+  # ============================================
+  health-summary:
+    name: 📊 Health Summary
+    runs-on: ubuntu-latest
+    needs: [service-health]
+    if: always()
+    
+    steps:
+      - name: 📊 Generate summary
+        run: |
+          STATUS="${{ needs.service-health.outputs.overall_status }}"
+          
+          if [ "$STATUS" = "healthy" ]; then
+            EMOJI="✅"
+            MESSAGE="All systems operational"
+          elif [ "$STATUS" = "degraded" ]; then
+            EMOJI="⚠️"
+            MESSAGE="System performance degraded"
+          else
+            EMOJI="❌"
+            MESSAGE="System experiencing issues"
+          fi
+          
+          echo "# $EMOJI Health Check: $STATUS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** $MESSAGE" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$STATUS" != "healthy" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🔍 Check the detailed logs for more information." >> $GITHUB_STEP_SUMMARY
+          fi
