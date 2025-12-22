@@ -9,7 +9,9 @@
     <!-- Floating particles background -->
     <div class="particles-background">
       {% for i in range(20) %}
-      <div class="particle" style="left: {{ range(0, 100) | random }}%; animation-delay: {{ range(0, 300) | random / 100 }}s; animation-duration: {{ range(300, 600) | random / 100 }}s;"></div>
+      <div class="particle"
+        style="left: {{ range(0, 100) | random }}%; animation-delay: {{ range(0, 300) | random / 100 }}s; animation-duration: {{ range(300, 600) | random / 100 }}s;">
+      </div>
       {% endfor %}
     </div>
 
@@ -577,12 +579,6 @@
       // Update active dot
       questionDots.forEach((dot, i) => {
         dot.classList.toggle('active', i === index);
-      });
-
-      // Scroll to top of question
-      document.getElementById('test-container').scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
       });
     }
 
