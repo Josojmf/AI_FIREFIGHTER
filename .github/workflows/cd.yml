@@ -225,12 +225,12 @@ jobs:
         run: |
           echo "🏥 Checking current production health..."
           
-          # Check frontend
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
+          # Check frontend (usar / en vez de /health)
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/ || echo "000")
           echo "Frontend health: $FRONTEND_STATUS"
           
-          # Check API
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
+          # Check API (usar /api/health en vez de /health)
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "000")
           echo "API health: $API_STATUS"
           
           # Check BackOffice
@@ -286,9 +286,6 @@ jobs:
           
           # Copy docker-compose files
           scp docker-compose*.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
-          
-          # Copy environment templates
-          scp .env.production root@${{ secrets.PRODUCTION_HOST }}:/root/.env.production
           
           echo "✅ Files copied successfully"
 
@@ -447,12 +444,12 @@ jobs:
           for i in $(seq 1 $MAX_RETRIES); do
             echo "🔄 Health check attempt $i/$MAX_RETRIES"
             
-            # Check frontend
-            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
+            # Check frontend (usar / en vez de /health)
+            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/ || echo "000")
             echo "  Frontend: $FRONTEND_STATUS"
             
-            # Check API
-            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
+            # Check API (usar /api/health en vez de /health)
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "000")
             echo "  API: $API_STATUS"
             
             # Check BackOffice
@@ -483,9 +480,9 @@ jobs:
       - name: 📊 Create health report
         if: always()
         run: |
-          # Get detailed service info
-          FRONTEND_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "{}")
-          API_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "{}")
+          # Get detailed service info (corregir URLs)
+          FRONTEND_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:8000/ || echo "{}")
+          API_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "{}")
           BO_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "{}")
           
           cat > health-report-post.json <<EOF
@@ -544,8 +541,8 @@ jobs:
           
           tests = [
               ("Frontend root", f"http://{HOST}:8000/", 200),
-              ("API health", f"http://{HOST}:5000/health", 200),
-              ("API docs", f"http://{HOST}:5000/api/docs", 200),
+              ("API health", f"http://{HOST}:5000/api/health", 200),
+              ("API root", f"http://{HOST}:5000/", 200),
               ("BackOffice health", f"http://{HOST}:3001/health", 200),
           ]
           
