@@ -80,78 +80,80 @@ jobs:
           
           echo "✅ All required secrets are configured"
 
-      - name: 🐳 Verify Docker images exist
+      - name: Verify Docker images exist
         run: |
           echo "🔍 Verifying Docker images..."
           echo "⏰ Will wait up to 10 minutes for images to be available..."
           
-          SERVICES=("frontend" "backend" "backoffice")
+          SERVICES="frontend backend backoffice"
+          # Cambia de SHA completo a SHA corto (7 caracteres)
           IMAGE_TAG="${{ github.sha }}"
-          MAX_RETRIES=60  # 10 minutes (60 retries * 10 seconds)
+          SHORT_SHA="${IMAGE_TAG:0:7}"
+          
+          MAX_RETRIES=60
           RETRY_DELAY=10
           
-          for service in "${SERVICES[@]}"; do
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:main-${IMAGE_TAG}"
+          for service in $SERVICES; do
+            # Usa la misma etiqueta que genera CI: main-<SHORT_SHA>
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:main-${SHORT_SHA}"
             echo "Checking: $IMAGE"
             
-            # Retry loop
             SUCCESS=false
             for attempt in $(seq 1 $MAX_RETRIES); do
-              if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              if docker manifest inspect $IMAGE > /dev/null 2>&1; then
                 echo "✅ Image exists: $service (attempt $attempt)"
                 SUCCESS=true
                 break
               fi
-              
               if [ $attempt -eq 1 ]; then
                 echo "⏳ Image not ready yet, waiting for CI to finish building..."
               fi
-              
               if [ $attempt -lt $MAX_RETRIES ]; then
                 sleep $RETRY_DELAY
               fi
             done
             
             if [ "$SUCCESS" != "true" ]; then
-              echo "❌ Image not found after ${MAX_RETRIES} retries: $IMAGE"
-              echo "💡 Check if CI workflow completed successfully"
+              echo "❌ Image not found after $MAX_RETRIES retries: $IMAGE"
+              echo "Check if CI workflow completed successfully"
               exit 1
             fi
           done
           
           echo "✅ All Docker images verified and ready"
 
-      - name: 📋 Get current production version
-        id: current-version
-        run: |
-          # This would typically query your server or deployment system
-          # For now, we'll use the previous commit
-          CURRENT_VERSION=$(git rev-parse HEAD~1)
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "📌 Current production version: $CURRENT_VERSION"
 
-      - name: 📊 Create deployment record
-        run: |
-          echo "📝 Creating deployment record..."
-          cat > deployment-info.json <<EOF
-          {
-            "deployment_id": "${{ steps.generate-id.outputs.deployment_id }}",
-            "commit_sha": "${{ github.sha }}",
-            "commit_message": "${{ github.event.head_commit.message }}",
-            "deployer": "${{ github.actor }}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "previous_version": "${{ steps.current-version.outputs.version }}",
-            "status": "initiated"
-          }
-          EOF
-          cat deployment-info.json
+            - name: 📋 Get current production version
+              id: current-version
+              run: |
+                # This would typically query your server or deployment system
+                # For now, we'll use the previous commit
+                CURRENT_VERSION=$(git rev-parse HEAD~1)
+                echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+                echo "📌 Current production version: $CURRENT_VERSION"
 
-      - name: 📤 Upload deployment info
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-info
-          path: deployment-info.json
-          retention-days: 90
+            - name: 📊 Create deployment record
+              run: |
+                echo "📝 Creating deployment record..."
+                cat > deployment-info.json <<EOF
+                {
+                  "deployment_id": "${{ steps.generate-id.outputs.deployment_id }}",
+                  "commit_sha": "${{ github.sha }}",
+                  "commit_message": "${{ github.event.head_commit.message }}",
+                  "deployer": "${{ github.actor }}",
+                  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                  "previous_version": "${{ steps.current-version.outputs.version }}",
+                  "status": "initiated"
+                }
+                EOF
+                cat deployment-info.json
+
+            - name: 📤 Upload deployment info
+              uses: actions/upload-artifact@v4
+              with:
+                name: deployment-info
+                path: deployment-info.json
+                retention-days: 90
 
   # ============================================
   # JOB 2: Backup Current State
@@ -334,89 +336,91 @@ jobs:
             echo "✅ Environment configured"
           ENDSSH
 
-      - name: 🐳 Pull new Docker images
+      - name: Pull new Docker images
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🐳 Pulling new Docker images..."
-            
-            # Login to GitHub Container Registry
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            
-            # Pull new images
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:main-${{ github.sha }}
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:main-${{ github.sha }}
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:main-${{ github.sha }}
-            
-            echo "✅ Images pulled successfully"
+          echo "📥 Pulling new Docker images..."
+          
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:main-${SHORT_SHA}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:main-${SHORT_SHA}
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:main-${SHORT_SHA}
+          
+          echo "✅ Images pulled successfully"
           ENDSSH
 
-      - name: 🔄 Rolling update deployment
-        run: |
-          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🔄 Starting rolling update..."
             
-            # Update services one by one with health checks
-            SERVICES=("backend" "frontend" "backoffice")
-            
-            for service in "${SERVICES[@]}"; do
-              echo "📦 Updating $service..."
-              
-              # Update the service using prod compose file
-              docker-compose -f docker-compose.prod.yml up -d --no-deps $service
-              
-              # Wait for service to be healthy
-              echo "⏳ Waiting for $service to be healthy..."
-              sleep 15
-              
-              # Check service health
-              case $service in
-                frontend)
-                  HEALTH_URL="http://localhost:8000/"
-                  ;;
-                backend)
-                  HEALTH_URL="http://localhost:5000/api/health"
-                  ;;
-                backoffice)
-                  HEALTH_URL="http://localhost:3001/health"
-                  ;;
-              esac
-              
-              # Retry health check up to 30 times (5 minutes)
-              for i in {1..30}; do
-                if curl -f -s "$HEALTH_URL" > /dev/null 2>&1; then
-                  echo "✅ $service is healthy"
-                  break
-                fi
-                
-                if [ $i -eq 30 ]; then
-                  echo "❌ $service failed health check after 5 minutes"
-                  exit 1
-                fi
-                
-                echo "⏳ Attempt $i/30: Waiting for $service..."
-                sleep 10
-              done
-            done
-            
-            echo "✅ All services updated successfully"
-          ENDSSH
+            - name: 🔄 Rolling update deployment
+              run: |
+                ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
+                  echo "🔄 Starting rolling update..."
+                  
+                  # Update services one by one with health checks
+                  SERVICES=("backend" "frontend" "backoffice")
+                  
+                  for service in "${SERVICES[@]}"; do
+                    echo "📦 Updating $service..."
+                    
+                    # Update the service using prod compose file
+                    docker-compose -f docker-compose.prod.yml up -d --no-deps $service
+                    
+                    # Wait for service to be healthy
+                    echo "⏳ Waiting for $service to be healthy..."
+                    sleep 15
+                    
+                    # Check service health
+                    case $service in
+                      frontend)
+                        HEALTH_URL="http://localhost:8000/"
+                        ;;
+                      backend)
+                        HEALTH_URL="http://localhost:5000/api/health"
+                        ;;
+                      backoffice)
+                        HEALTH_URL="http://localhost:3001/health"
+                        ;;
+                    esac
+                    
+                    # Retry health check up to 30 times (5 minutes)
+                    for i in {1..30}; do
+                      if curl -f -s "$HEALTH_URL" > /dev/null 2>&1; then
+                        echo "✅ $service is healthy"
+                        break
+                      fi
+                      
+                      if [ $i -eq 30 ]; then
+                        echo "❌ $service failed health check after 5 minutes"
+                        exit 1
+                      fi
+                      
+                      echo "⏳ Attempt $i/30: Waiting for $service..."
+                      sleep 10
+                      done
+                    done
+                    
+                    echo "✅ All services updated successfully"
+                  ENDSSH
 
-      - name: 🧹 Cleanup old images
-        run: |
-          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🧹 Cleaning up old Docker images..."
-            
-            # Remove dangling images
-            docker image prune -f
-            
-            # Remove old images (keep last 3 versions)
-            docker images --format "{{.Repository}}:{{.Tag}}" | \
-              grep "${{ env.IMAGE_PREFIX }}" | \
-              tail -n +4 | \
-              xargs -r docker rmi || true
-            
-            echo "✅ Cleanup completed"
-          ENDSSH
+              - name: 🧹 Cleanup old images
+                run: |
+                  ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
+                    echo "🧹 Cleaning up old Docker images..."
+                    
+                    # Remove dangling images
+                    docker image prune -f
+                    
+                    # Remove old images (keep last 3 versions)
+                    docker images --format "{{.Repository}}:{{.Tag}}" | \
+                      grep "${{ env.IMAGE_PREFIX }}" | \
+                      tail -n +4 | \
+                      xargs -r docker rmi || true
+                    
+                    echo "✅ Cleanup completed"
+                  ENDSSH
 
   # ============================================
   # JOB 5: Post-deployment Health Check
