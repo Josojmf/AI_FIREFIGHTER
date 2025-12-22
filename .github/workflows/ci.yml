@@ -299,13 +299,13 @@ jobs:
         service:
           - name: frontend
             dockerfile: Dockerfile
-            context: .
+            context: ./FO
           - name: api
             dockerfile: Dockerfile
-            context: .
+            context: ./API
           - name: backoffice
             dockerfile: Dockerfile
-            context: .
+            context: ./BO
 
     steps:
       - name: 📥 Checkout code
