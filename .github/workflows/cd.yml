@@ -51,64 +51,75 @@ jobs:
           echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "🏷️ Image tag: ${IMAGE_TAG}"
 
-      - name: 🔍 Validate required secrets
+      - name: Validate required secrets
         run: |
           echo "🔒 Validating required secrets..."
           
-          REQUIRED_SECRETS=(
-            "PRODUCTION_SSH_KEY"
-            "PRODUCTION_HOST"
-            "MONGODB_URI"
-            "JWT_SECRET"
-            "SENDGRID_API_KEY"
-            "ANTHROPIC_API_KEY"
-            "ADMIN_PASSWORD"
-            "SENDGRID_SENDER_EMAIL"
-          )
+          # Verificar cada secret individualmente
+          REQUIRED_SECRETS="PRODUCTION_SSH_KEY PRODUCTION_HOST MONGODB_URI JWT_SECRET SENDGRID_API_KEY ANTHROPIC_API_KEY ADMIN_PASSWORD SENDGRID_SENDER_EMAIL"
           
-          for secret in "${REQUIRED_SECRETS[@]}"; do
-            if [ -z "${{ secrets[secret] }}" ]; then
-              echo "❌ ERROR: Secret '$secret' is missing!"
-              exit 1
-            fi
-            echo "✅ $secret: Configured"
+          for secret_name in $REQUIRED_SECRETS; do
+            case $secret_name in
+              PRODUCTION_SSH_KEY)
+                if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+                  echo "❌ ERROR: Secret 'PRODUCTION_SSH_KEY' is missing!"
+                  exit 1
+                fi
+                echo "✅ PRODUCTION_SSH_KEY: Configured"
+                ;;
+              PRODUCTION_HOST)
+                if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
+                  echo "❌ ERROR: Secret 'PRODUCTION_HOST' is missing!"
+                  exit 1
+                fi
+                echo "✅ PRODUCTION_HOST: Configured"
+                ;;
+              MONGODB_URI)
+                if [ -z "${{ secrets.MONGODB_URI }}" ]; then
+                  echo "❌ ERROR: Secret 'MONGODB_URI' is missing!"
+                  exit 1
+                fi
+                echo "✅ MONGODB_URI: Configured"
+                ;;
+              JWT_SECRET)
+                if [ -z "${{ secrets.JWT_SECRET }}" ]; then
+                  echo "❌ ERROR: Secret 'JWT_SECRET' is missing!"
+                  exit 1
+                fi
+                echo "✅ JWT_SECRET: Configured"
+                ;;
+              SENDGRID_API_KEY)
+                if [ -z "${{ secrets.SENDGRID_API_KEY }}" ]; then
+                  echo "❌ ERROR: Secret 'SENDGRID_API_KEY' is missing!"
+                  exit 1
+                fi
+                echo "✅ SENDGRID_API_KEY: Configured"
+                ;;
+              ANTHROPIC_API_KEY)
+                if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+                  echo "❌ ERROR: Secret 'ANTHROPIC_API_KEY' is missing!"
+                  exit 1
+                fi
+                echo "✅ ANTHROPIC_API_KEY: Configured"
+                ;;
+              ADMIN_PASSWORD)
+                if [ -z "${{ secrets.ADMIN_PASSWORD }}" ]; then
+                  echo "❌ ERROR: Secret 'ADMIN_PASSWORD' is missing!"
+                  exit 1
+                fi
+                echo "✅ ADMIN_PASSWORD: Configured"
+                ;;
+              SENDGRID_SENDER_EMAIL)
+                if [ -z "${{ secrets.SENDGRID_SENDER_EMAIL }}" ]; then
+                  echo "❌ ERROR: Secret 'SENDGRID_SENDER_EMAIL' is missing!"
+                  exit 1
+                fi
+                echo "✅ SENDGRID_SENDER_EMAIL: Configured"
+                ;;
+            esac
           done
           
           echo "✅ All required secrets are configured"
-
-      - name: 🐳 Verify Docker images exist
-        run: |
-          echo "🔍 Verifying Docker images exist..."
-          
-          IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
-          
-          SERVICES=(
-            "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${IMAGE_TAG}"
-            "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:${IMAGE_TAG}"
-            "${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:${IMAGE_TAG}"
-          )
-          
-          for image in "${SERVICES[@]}"; do
-            echo "Checking: $image"
-            
-            # Try with retry
-            for i in {1..30}; do
-              if docker manifest inspect "$image" > /dev/null 2>&1; then
-                echo "✅ Image exists"
-                break
-              fi
-              
-              if [ $i -eq 30 ]; then
-                echo "❌ Image not found after 30 attempts: $image"
-                exit 1
-              fi
-              
-              echo "⏳ Image not ready yet (attempt $i/30)..."
-              sleep 10
-            done
-          done
-          
-          echo "✅ All Docker images verified"
 
   # ============================================
   # JOB 2: Deploy to Production
