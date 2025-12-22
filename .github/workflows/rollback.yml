@@ -17,6 +17,11 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository_owner }}/firefighter
@@ -169,7 +174,7 @@ jobs:
           SERVICES=("frontend" "backend" "backoffice")
           
           echo "🔐 Logging in to registry..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
           
           MISSING_IMAGES=()
           
@@ -256,7 +261,7 @@ jobs:
             echo "🐳 Pulling target version images..."
             
             # Login to registry
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             
             TARGET_SHA="${{ needs.rollback-approval.outputs.target_commit }}"
             

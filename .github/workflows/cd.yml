@@ -6,6 +6,11 @@ on:
     types: [completed]
     branches: [main]
 
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: josojmf/ai-firefighter
@@ -335,11 +340,11 @@ jobs:
             echo "🐳 Pulling new Docker images..."
             
             # Login to GitHub Container Registry
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             
             # Pull new images
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:main-${{ github.sha }}
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-api:main-${{ github.sha }}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:main-${{ github.sha }}
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:main-${{ github.sha }}
             
             echo "✅ Images pulled successfully"
