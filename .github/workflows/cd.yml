@@ -288,7 +288,7 @@ jobs:
           scp docker-compose*.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
           
           # Copy environment templates
-          scp production.env root@${{ secrets.PRODUCTION_HOST }}:/root/.env.production
+          scp .env.production root@${{ secrets.PRODUCTION_HOST }}:/root/.env.production
           
           echo "✅ Files copied successfully"
 
