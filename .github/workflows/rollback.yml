@@ -166,7 +166,7 @@ jobs:
           echo "🔍 Verifying Docker images for target version..."
           
           TARGET_SHA="${{ needs.rollback-approval.outputs.target_commit }}"
-          SERVICES=("frontend" "api" "backoffice")
+          SERVICES=("frontend" "backend" "backoffice")
           
           echo "🔐 Logging in to registry..."
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin

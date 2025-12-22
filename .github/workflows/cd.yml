@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: josojmf/firefighter
+  IMAGE_PREFIX: josojmf/ai-firefighter
   DEPLOYMENT_TIMEOUT: 600  # 10 minutes
 
 jobs:
@@ -80,7 +80,7 @@ jobs:
           echo "🔍 Verifying Docker images..."
           echo "⏰ Will wait up to 10 minutes for images to be available..."
           
-          SERVICES=("frontend" "api" "backoffice")
+          SERVICES=("frontend" "backend" "backoffice")
           IMAGE_TAG="${{ github.sha }}"
           MAX_RETRIES=60  # 10 minutes (60 retries * 10 seconds)
           RETRY_DELAY=10
@@ -238,7 +238,7 @@ jobs:
           {
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "frontend": "$FRONTEND_STATUS",
-            "api": "$API_STATUS",
+            "backend": "$API_STATUS",
             "backoffice": "$BO_STATUS",
             "overall": "checked"
           }
@@ -490,7 +490,7 @@ jobs:
             "status": "${{ steps.health-check.outputs.health_status }}",
             "services": {
               "frontend": $FRONTEND_RESPONSE,
-              "api": $API_RESPONSE,
+              "backend": $API_RESPONSE,
               "backoffice": $BO_RESPONSE
             }
           }

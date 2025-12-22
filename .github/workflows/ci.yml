@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: josojmf/firefighter
+  IMAGE_PREFIX: josojmf/ai-firefighter
 
 jobs:
   # ============================================
@@ -291,7 +291,7 @@ jobs:
           - name: frontend
             dockerfile: Dockerfile
             context: ./FO
-          - name: api
+          - name: backend
             dockerfile: Dockerfile
             context: ./API
           - name: backoffice
