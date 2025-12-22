@@ -218,7 +218,7 @@ jobs:
 
       - name: 🐳 Start services with Docker Compose
         run: |
-          docker-compose -f docker-compose.yml up -d
+          docker compose -f docker-compose.yml up -d
           sleep 30  # Wait for services to be ready
 
       - name: 🎭 Run E2E tests
@@ -230,7 +230,7 @@ jobs:
 
       - name: 🛑 Stop services
         if: always()
-        run: docker-compose down
+        run: docker compose down
 
       - name: 📊 Upload E2E test results
         uses: actions/upload-artifact@v4
