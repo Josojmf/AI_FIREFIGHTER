@@ -20,6 +20,9 @@ jobs:
   # ============================================
   # JOB 1: Pre-deployment Validation
   # ============================================
+# ============================================
+# JOB 1: Pre-deployment Validation
+# ============================================
   pre-deployment:
     name: 🔍 Pre-deployment Validation
     runs-on: ubuntu-latest
@@ -32,6 +35,8 @@ jobs:
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # ✅ Obtener los últimos 2 commits para acceder a HEAD~1
 
       - name: 🆔 Generate deployment ID
         id: generate-id
@@ -123,7 +128,8 @@ jobs:
       - name: 📋 Get current production version
         id: current-version
         run: |
-          CURRENT_VERSION=$(git rev-parse HEAD~1)
+          # ✅ Manejar el caso cuando no hay commit previo (primer deploy)
+          CURRENT_VERSION=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "📌 Current production version: $CURRENT_VERSION"
 
