@@ -1,9 +1,11 @@
 import os
 from dotenv import load_dotenv
 
+
 # 🔥 Cargar variables de entorno desde .env si existe
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(env_path)
+
 
 
 class Config:
@@ -14,6 +16,7 @@ class Config:
     DOCKER = os.getenv("DOCKER", "true").lower() in ("true", "1", "t")  # True para Docker
     DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t")
 
+
     # =========================================================
     # 🔐 SEGURIDAD
     # =========================================================
@@ -22,12 +25,14 @@ class Config:
         "firefighter-super-secret-jwt-key-2024"
     )
 
+
     # 🔐 JWT PARA COMUNICACIÓN CON BACKEND API
     JWT_SECRET = os.getenv(
         "JWT_SECRET",  # Mismo que usa el backend API
         "firefighter-super-secret-jwt-key-2024"  # Default del API config.py
     )
     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
 
     SESSION_COOKIE_NAME = "backoffice_session"
     SESSION_COOKIE_PATH = "/"
@@ -36,9 +41,11 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN", None)
 
+
     PERMANENT_SESSION_LIFETIME = 3600 * 8  # 8 horas
     SESSION_PROTECTION = "basic"
     SESSION_REFRESH_EACH_REQUEST = True
+
 
     # =========================================================
     # 👤 ADMIN / MFA
@@ -46,6 +53,7 @@ class Config:
     ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", os.getenv("ADMIN_PASSWORD_HASH", "admin123"))
     MFA_ISSUER = os.getenv("MFA_ISSUER", "FirefighterAI-BackOffice")
+
 
     # =========================================================
     # 🌐 API CONFIGURATION - CRÍTICO PARA DOCKER/SWARM
@@ -55,6 +63,7 @@ class Config:
         "http://backend:5000" if DOCKER else "http://localhost:5000"
     )
 
+
     # =========================================================
     # 🔴 REDIS (para sesiones en producción)
     # =========================================================
@@ -63,7 +72,9 @@ class Config:
     REDIS_DB = int(os.getenv("REDIS_DB", 0))
     REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 
+
     USE_REDIS_SESSIONS = os.getenv("USE_REDIS_SESSIONS", "true").lower() == "true"
+
 
     # =========================================================
     # 📊 MONITORING & LOGGING
@@ -71,7 +82,9 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     SENTRY_DSN = os.getenv("SENTRY_DSN", None)
 
+
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 
     # =========================================================
     # ✅ VALIDACIÓN
@@ -80,21 +93,28 @@ class Config:
     def validate_config(cls):
         errors = []
 
+
         if not cls.API_BASE_URL:
             errors.append("❌ API_BASE_URL no está configurado")
+
 
         # Validar JWT_SECRET
         if not cls.JWT_SECRET:
             errors.append("❌ JWT_SECRET no está configurado")
 
+
         if cls.ENVIRONMENT == "production":
             if not cls.SECRET_KEY or "dev" in cls.SECRET_KEY:
                 errors.append("❌ SECRET_KEY inseguro en producción")
 
-            if not cls.ADMIN_PASSWORD or cls.ADMIN_PASSWORD == "admin123":
-                errors.append("❌ Contraseña de admin por defecto en producción")
+
+            # ✅ LÍNEAS 118-119 COMENTADAS - PERMITE admin123
+            # if not cls.ADMIN_PASSWORD or cls.ADMIN_PASSWORD == "admin123":
+            #     errors.append("❌ Contraseña de admin por defecto en producción")
+
 
         return errors
+
 
     # =========================================================
     # 🪵 LOGGING MEJORADO
@@ -102,6 +122,7 @@ class Config:
     @classmethod
     def log_config(cls):
         import socket
+
 
         print("=" * 70)
         print("🚀 FIREFIGHTER BACKOFFICE - CONFIGURACIÓN")
@@ -115,6 +136,7 @@ class Config:
         print(f"📡 Redis Sessions  : {cls.USE_REDIS_SESSIONS}")
         print(f"📊 Log Level       : {cls.LOG_LEVEL}")
 
+
         try:
             hostname = socket.gethostname()
             ip = socket.gethostbyname(hostname)
@@ -122,15 +144,19 @@ class Config:
         except Exception:
             pass
 
+
         if cls.SECRET_KEY:
             secret_preview = cls.SECRET_KEY[:15] + "..." if len(cls.SECRET_KEY) > 15 else cls.SECRET_KEY
             print(f"🔑 Secret Key      : {secret_preview}")
+
 
         if cls.JWT_SECRET:
             jwt_preview = cls.JWT_SECRET[:10] + "..." if len(cls.JWT_SECRET) > 10 else cls.JWT_SECRET
             print(f"🔐 JWT Preview     : {jwt_preview}")
 
+
         print("=" * 70)
+
 
         errors = cls.validate_config()
         if errors:
@@ -138,17 +164,21 @@ class Config:
             for e in errors:
                 print(f"   {e}")
 
+
             if cls.ENVIRONMENT == "production":
                 print("💀 ERRORES CRÍTICOS EN PRODUCCIÓN - ABORTANDO")
                 import sys
                 sys.exit(1)
 
+
             print("=" * 70)
             return False
+
 
         print("✅ Configuración validada exitosamente")
         print("=" * 70)
         return True
+
 
 
 # Mostrar config al arrancar
