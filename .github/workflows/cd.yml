@@ -245,7 +245,6 @@ jobs:
     needs: [pre-deployment, backup-state, health-check-pre]
     environment:
       name: production
-      url: http://${{ secrets.DIGITALOCEAN_HOST }}
     
     steps:
       - name: 📥 Checkout code
