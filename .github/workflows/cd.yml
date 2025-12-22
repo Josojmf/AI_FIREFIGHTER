@@ -78,24 +78,43 @@ jobs:
       - name: 🐳 Verify Docker images exist
         run: |
           echo "🔍 Verifying Docker images..."
+          echo "⏰ Will wait up to 10 minutes for images to be available..."
           
           SERVICES=("frontend" "api" "backoffice")
           IMAGE_TAG="${{ github.sha }}"
+          MAX_RETRIES=60  # 10 minutes (60 retries * 10 seconds)
+          RETRY_DELAY=10
           
           for service in "${SERVICES[@]}"; do
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:main-${IMAGE_TAG}"
             echo "Checking: $IMAGE"
             
-            # Try to pull image metadata
-            if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-              echo "❌ Image not found: $IMAGE"
+            # Retry loop
+            SUCCESS=false
+            for attempt in $(seq 1 $MAX_RETRIES); do
+              if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+                echo "✅ Image exists: $service (attempt $attempt)"
+                SUCCESS=true
+                break
+              fi
+              
+              if [ $attempt -eq 1 ]; then
+                echo "⏳ Image not ready yet, waiting for CI to finish building..."
+              fi
+              
+              if [ $attempt -lt $MAX_RETRIES ]; then
+                sleep $RETRY_DELAY
+              fi
+            done
+            
+            if [ "$SUCCESS" != "true" ]; then
+              echo "❌ Image not found after ${MAX_RETRIES} retries: $IMAGE"
+              echo "💡 Check if CI workflow completed successfully"
               exit 1
             fi
-            
-            echo "✅ Image exists: $service"
           done
           
-          echo "✅ All Docker images verified"
+          echo "✅ All Docker images verified and ready"
 
       - name: 📋 Get current production version
         id: current-version
