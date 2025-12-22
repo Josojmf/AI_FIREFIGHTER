@@ -285,7 +285,7 @@ jobs:
             echo "🔄 Attempting automatic service recovery..."
             
             # Restart unhealthy containers
-            docker-compose restart
+            docker-compose -f docker-compose.prod.yml restart
             
             echo "⏳ Waiting for services to stabilize..."
             sleep 30

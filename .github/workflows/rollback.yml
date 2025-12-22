@@ -273,16 +273,16 @@ jobs:
           ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
             echo "🔄 Executing rolling rollback..."
             
-            SERVICES=("api" "frontend" "backoffice")
+            SERVICES=("backend" "frontend" "backoffice")
             
             for service in "${SERVICES[@]}"; do
               echo "⏮️ Rolling back $service..."
               
               # Stop current version
-              docker-compose stop $service
+              docker-compose -f docker-compose.prod.yml stop $service
               
               # Update to target version
-              docker-compose up -d --no-deps $service
+              docker-compose -f docker-compose.prod.yml up -d --no-deps $service
               
               # Wait for service to be ready
               echo "⏳ Waiting for $service to be ready..."
@@ -291,10 +291,10 @@ jobs:
               # Verify service health
               case $service in
                 frontend)
-                  HEALTH_URL="http://localhost:8000/health"
+                  HEALTH_URL="http://localhost:8000/"
                   ;;
-                api)
-                  HEALTH_URL="http://localhost:5000/health"
+                backend)
+                  HEALTH_URL="http://localhost:5000/api/health"
                   ;;
                 backoffice)
                   HEALTH_URL="http://localhost:3001/health"

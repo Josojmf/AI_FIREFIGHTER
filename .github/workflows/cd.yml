@@ -332,13 +332,13 @@ jobs:
             echo "🔄 Starting rolling update..."
             
             # Update services one by one with health checks
-            SERVICES=("api" "frontend" "backoffice")
+            SERVICES=("backend" "frontend" "backoffice")
             
             for service in "${SERVICES[@]}"; do
               echo "📦 Updating $service..."
               
-              # Update the service
-              docker-compose up -d --no-deps --build $service
+              # Update the service using prod compose file
+              docker-compose -f docker-compose.prod.yml up -d --no-deps $service
               
               # Wait for service to be healthy
               echo "⏳ Waiting for $service to be healthy..."
@@ -347,10 +347,10 @@ jobs:
               # Check service health
               case $service in
                 frontend)
-                  HEALTH_URL="http://localhost:8000/health"
+                  HEALTH_URL="http://localhost:8000/"
                   ;;
-                api)
-                  HEALTH_URL="http://localhost:5000/health"
+                backend)
+                  HEALTH_URL="http://localhost:5000/api/health"
                   ;;
                 backoffice)
                   HEALTH_URL="http://localhost:3001/health"
