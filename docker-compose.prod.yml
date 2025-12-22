@@ -56,6 +56,10 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - JWT_SECRET_KEY=${SECRET_KEY}
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      # 👇 Para que la cookie funcione en HTTP/IP
+      - SESSION_COOKIE_SECURE=false
+      - SESSION_COOKIE_HTTPONLY=true
+      - SESSION_COOKIE_SAMESITE=Lax
     depends_on:
       backend:
         condition: service_healthy
@@ -94,6 +98,10 @@ services:
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - MFA_ISSUER=FirefighterAI
+      # 👇 Igual que en frontend, para HTTP/IP
+      - SESSION_COOKIE_SECURE=false
+      - SESSION_COOKIE_HTTPONLY=true
+      - SESSION_COOKIE_SAMESITE=Lax
     depends_on:
       backend:
         condition: service_healthy
