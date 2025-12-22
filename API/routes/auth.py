@@ -106,23 +106,23 @@ async def login(request: LoginRequest):
     try:
         username = request.username.strip()
         password = request.password
-
+        
         if not username or not password:
             raise HTTPException(status_code=400, detail="Usuario y contraseña requeridos")
-
+        
         print(f"🔐 Login intento para: {username}")
-
-        # Buscar usuario en admin_users primero, luego en users
+        
+        # Buscar usuario
         query = {"$or": [{"username": username.lower()}, {"email": username.lower()}]}
         user_doc = await db.admin_users.find_one(query)
         if not user_doc:
             user_doc = await db.users.find_one(query)
-
+        
         if not user_doc:
             print(f"❌ Usuario no encontrado: {username}")
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
         
-        # Verificar contraseña (soporta ambos formatos)
+        # Verificar contraseña
         password_field = None
         for field in ["password_hash", "password"]:
             if field in user_doc:
@@ -132,48 +132,34 @@ async def login(request: LoginRequest):
         if not password_field or not verify_password(password, user_doc[password_field]):
             print(f"❌ Contraseña incorrecta para: {username}")
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-
+        
         # Verificar estado
         if user_doc.get("status") != "active":
             raise HTTPException(status_code=401, detail="Cuenta desactivada")
-
-        # 🔥🔥🔥 DEBUG CRÍTICO AQUÍ 🔥🔥🔥
-        print(f"=== DEBUG CRÍTICO ===")
-        print(f"Usuario ID: {user_doc.get('_id')}")
-        print(f"Usuario username: {user_doc.get('username')}")
-        print(f"mfa_enabled value: {user_doc.get('mfa_enabled')}")
-        print(f"Tipo de mfa_enabled: {type(user_doc.get('mfa_enabled'))}")
-        print(f"Todos los campos: {list(user_doc.keys())}")
-        print(f"=== FIN DEBUG ===")
         
-        # ✅✅✅ CORRECCIÓN CRÍTICA: Manejo de MFA
-        print(f"🔍 Estado MFA del usuario: {user_doc.get('mfa_enabled')}")
+        # 🔥 MANEJO DE MFA CORREGIDO
+        mfa_enabled = bool(user_doc.get('mfa_enabled'))
+        mfa_token_provided = request.mfa_token and request.mfa_token.strip()
         
-        # 🔥 PRUEBA: Forzar True para ver si funciona
-        print(f"🔍 mfa_enabled == True: {user_doc.get('mfa_enabled') == True}")
-        print(f"🔍 mfa_enabled is True: {user_doc.get('mfa_enabled') is True}")
-        print(f"🔍 bool(mfa_enabled): {bool(user_doc.get('mfa_enabled'))}")
+        print(f"🔍 MFA enabled: {mfa_enabled}, Token provided: {bool(mfa_token_provided)}")
         
-        # 🔥 TEMPORAL: Probar con valor forzado
-        mfa_enabled_forced = bool(user_doc.get('mfa_enabled'))
-        print(f"🔍 Forzando mfa_enabled a: {mfa_enabled_forced}")
-        
-        if mfa_enabled_forced:  # Usar el valor forzado
+        if mfa_enabled:
             print(f"🔐 Usuario requiere MFA: {username}")
             
-            # Si no se proporcionó token MFA, devolver que se requiere
-            if not request.mfa_token:
-                print(f"📱 MFA requerido para: {username}")
+            # Si NO se proporcionó token MFA
+            if not mfa_token_provided:
+                print(f"📱 MFA requerido (sin token) para: {username}")
                 return {
-                    "ok": True,  # Importante: ok:True para indicar que las credenciales son correctas
+                    "ok": True,
                     "requires_mfa": True,
                     "user_id": str(user_doc["_id"]),
                     "username": user_doc["username"],
                     "message": "Se requiere código MFA"
                 }
             
-            # Si se proporcionó token, verificar MFA
+            # Si SÍ se proporcionó token, verificarlo
             print(f"🔐 Verificando código MFA para: {username}")
+            
             if "mfa_secret" not in user_doc:
                 print(f"❌ Usuario tiene MFA habilitado pero no tiene secreto")
                 raise HTTPException(status_code=401, detail="Error de configuración MFA")
@@ -181,47 +167,14 @@ async def login(request: LoginRequest):
             # Verificar código MFA
             import pyotp
             totp = pyotp.TOTP(user_doc["mfa_secret"])
-            if not totp.verify(request.mfa_token, valid_window=2):
+            
+            if not totp.verify(mfa_token_provided, valid_window=2):
                 print(f"❌ Código MFA incorrecto para: {username}")
                 raise HTTPException(status_code=401, detail="Código MFA incorrecto")
             
             print(f"✅ Código MFA verificado para: {username}")
-        else:
-            print(f"🔓 Usuario NO requiere MFA según BD: {username}")
-            # 🔥 TEMPORAL: Si no requiere MFA, crear token directamente
-            token_payload = {
-                "user_id": str(user_doc["_id"]),
-                "username": user_doc["username"],
-                "role": user_doc.get("role", "user"),
-                "type": "access_token"
-            }
-            
-            token = make_jwt(token_payload)
-            print(f"✅ Login exitoso SIN MFA para: {username}")
-            
-            return {
-                "ok": True,
-                "access_token": token,
-                "token": token,
-                "user": {
-                    "id": str(user_doc["_id"]),
-                    "username": user_doc["username"],
-                    "email": user_doc.get("email", ""),
-                    "name": user_doc.get("name", ""),
-                    "role": user_doc.get("role", "user"),
-                    "mfa_enabled": user_doc.get("mfa_enabled", False),
-                    "status": user_doc.get("status", "active")
-                }
-            }
-
-        # Actualizar último login
-        update_op = {"$set": {"last_login": datetime.utcnow()}}
-        if "admin_users" in str(db.admin_users) and user_doc.get("_id"):
-            await db.admin_users.update_one({"_id": user_doc["_id"]}, update_op)
-        else:
-            await db.users.update_one({"_id": user_doc["_id"]}, update_op)
-
-        # Crear JWT - VERSIÓN COMPATIBLE
+        
+        # 🔥 LOGIN EXITOSO - Crear token JWT
         token_payload = {
             "user_id": str(user_doc["_id"]),
             "username": user_doc["username"],
@@ -230,10 +183,16 @@ async def login(request: LoginRequest):
         }
         
         token = make_jwt(token_payload)
-
-        print(f"✅ Login exitoso para: {username}")
-
-        # 🔥 RESPUESTA COMPATIBLE con Docker Swarm y Backoffice
+        
+        # Actualizar último login
+        update_op = {"$set": {"last_login": datetime.utcnow()}}
+        if "admin_users" in str(db.admin_users) and user_doc.get("_id"):
+            await db.admin_users.update_one({"_id": user_doc["_id"]}, update_op)
+        else:
+            await db.users.update_one({"_id": user_doc["_id"]}, update_op)
+        
+        print(f"✅ Login exitoso para: {username} (MFA: {mfa_enabled})")
+        
         return {
             "ok": True,
             "access_token": token,
@@ -248,14 +207,16 @@ async def login(request: LoginRequest):
                 "status": user_doc.get("status", "active")
             }
         }
-
+        
     except HTTPException:
         raise
     except Exception as e:
         print(f"❌ Error en login: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Error interno del servidor")  
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+
 
 @router.post("/register")
 async def register(request: RegisterRequest):

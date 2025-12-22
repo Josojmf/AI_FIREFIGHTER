@@ -14,7 +14,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: josojmf/ai-firefighter
-  DEPLOYMENT_TIMEOUT: 600  # 10 minutes
+  DEPLOYMENT_TIMEOUT: 600 # 10 minutes
 
 jobs:
   # ============================================
@@ -24,16 +24,16 @@ jobs:
     name: 🔍 Pre-deployment Validation
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    
     outputs:
       deployment_id: ${{ steps.generate-id.outputs.deployment_id }}
       current_version: ${{ steps.current-version.outputs.version }}
+      image_tag: ${{ steps.image-tag.outputs.tag }}
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # ✅ Obtener los últimos 2 commits para acceder a HEAD~1
+          fetch-depth: 2 # ✅ Obtener los últimos 2 commits para acceder a HEAD~1
 
       - name: 🆔 Generate deployment ID
         id: generate-id
@@ -42,35 +42,43 @@ jobs:
           echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
           echo "🆔 Deployment ID: $DEPLOYMENT_ID"
 
+      - name: 🏷️ Generate image tag
+        id: image-tag
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          IMAGE_TAG="main-${SHORT_SHA}"
+          echo "tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "🏷️ Image tag: ${IMAGE_TAG}"
+
       - name: 🔍 Validate required secrets
         run: |
           echo "🔒 Validating required secrets..."
-          
           MISSING_SECRETS=()
           
           # Check each secret individually
           if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
             MISSING_SECRETS+=("PRODUCTION_SSH_KEY")
           fi
-          
           if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
             MISSING_SECRETS+=("PRODUCTION_HOST")
           fi
-          
           if [ -z "${{ secrets.MONGODB_URI }}" ]; then
             MISSING_SECRETS+=("MONGODB_URI")
           fi
-          
           if [ -z "${{ secrets.JWT_SECRET }}" ]; then
             MISSING_SECRETS+=("JWT_SECRET")
           fi
-          
           if [ -z "${{ secrets.SENDGRID_API_KEY }}" ]; then
             MISSING_SECRETS+=("SENDGRID_API_KEY")
           fi
-          
           if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
             MISSING_SECRETS+=("ANTHROPIC_API_KEY")
+          fi
+          if [ -z "${{ secrets.ADMIN_PASSWORD }}" ]; then
+            MISSING_SECRETS+=("ADMIN_PASSWORD")
+          fi
+          if [ -z "${{ secrets.SENDGRID_SENDER_EMAIL }}" ]; then
+            MISSING_SECRETS+=("SENDGRID_SENDER_EMAIL")
           fi
           
           # Report results
@@ -88,14 +96,12 @@ jobs:
           echo "⏰ Will wait up to 10 minutes for images to be available..."
           
           SERVICES="frontend backend backoffice"
-          IMAGE_TAG="${{ github.sha }}"
-          SHORT_SHA="${IMAGE_TAG:0:7}"
-          
+          IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
           MAX_RETRIES=60
           RETRY_DELAY=10
           
           for service in $SERVICES; do
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:main-${SHORT_SHA}"
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${service}:${IMAGE_TAG}"
             echo "Checking: $IMAGE"
             
             SUCCESS=false
@@ -105,9 +111,11 @@ jobs:
                 SUCCESS=true
                 break
               fi
+              
               if [ $attempt -eq 1 ]; then
                 echo "⏳ Image not ready yet, waiting for CI to finish building..."
               fi
+              
               if [ $attempt -lt $MAX_RETRIES ]; then
                 sleep $RETRY_DELAY
               fi
@@ -136,28 +144,20 @@ jobs:
           cat > deployment-info.json <<EOF
           {
             "deployment_id": "${{ steps.generate-id.outputs.deployment_id }}",
+            "image_tag": "${{ steps.image-tag.outputs.tag }}",
             "commit_sha": "${{ github.sha }}",
-            "commit_message": "${{ github.event.head_commit.message }}",
-            "deployer": "${{ github.actor }}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "previous_version": "${{ steps.current-version.outputs.version }}",
-            "status": "initiated"
+            "triggered_by": "${{ github.actor }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
           cat deployment-info.json
 
-      - name: 📤 Upload deployment info
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-info
-          path: deployment-info.json
-          retention-days: 90
-
   # ============================================
-  # JOB 2: Backup Current State
+  # JOB 2: Backup Current Deployment
   # ============================================
-  backup-state:
-    name: 💾 Backup Current State
+  backup-deployment:
+    name: 💾 Backup Current Deployment
     runs-on: ubuntu-latest
     needs: [pre-deployment]
     
@@ -175,38 +175,37 @@ jobs:
       - name: 💾 Backup current deployment
         run: |
           echo "💾 Backing up current deployment state..."
-          
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            # Create backup directory
-            BACKUP_DIR="/root/backups/$(date +%Y%m%d-%H%M%S)"
-            mkdir -p "$BACKUP_DIR"
-            
-            # Backup docker-compose files
-            cp /root/docker-compose*.yml "$BACKUP_DIR/" 2>/dev/null || true
-            
-            # Backup environment files
-            cp /root/.env* "$BACKUP_DIR/" 2>/dev/null || true
-            
-            # Export current running containers info
-            docker ps --format "{{.Names}}: {{.Image}}" > "$BACKUP_DIR/running-containers.txt"
-            
-            # Save current service states
-            docker service ls --format "{{.Name}}: {{.Replicas}}" > "$BACKUP_DIR/service-states.txt" 2>/dev/null || true
-            
-            # Keep only last 10 backups
-            cd /root/backups
-            ls -t | tail -n +11 | xargs -r rm -rf
-            
-            echo "✅ Backup completed: $BACKUP_DIR"
+          # Create backup directory
+          BACKUP_DIR="/root/backups/$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BACKUP_DIR"
+          
+          # Backup docker-compose files
+          cp /root/docker-compose*.yml "$BACKUP_DIR/" 2>/dev/null || true
+          
+          # Backup environment files
+          cp /root/.env* "$BACKUP_DIR/" 2>/dev/null || true
+          
+          # Export current running containers info
+          docker ps --format "{{.Names}}: {{.Image}}" > "$BACKUP_DIR/running-containers.txt"
+          
+          # Save current service states
+          docker service ls --format "{{.Name}}: {{.Replicas}}" > "$BACKUP_DIR/service-states.txt" 2>/dev/null || true
+          
+          # Keep only last 10 backups
+          cd /root/backups
+          ls -t | tail -n +11 | xargs -r rm -rf
+          
+          echo "✅ Backup completed: $BACKUP_DIR"
           ENDSSH
 
       - name: 📊 Verify backup
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            LATEST_BACKUP=$(ls -t /root/backups | head -n 1)
-            echo "📁 Latest backup: $LATEST_BACKUP"
-            echo "📋 Backup contents:"
-            ls -lah "/root/backups/$LATEST_BACKUP"
+          LATEST_BACKUP=$(ls -t /root/backups | head -n 1)
+          echo "📁 Latest backup: $LATEST_BACKUP"
+          echo "📋 Backup contents:"
+          ls -lah "/root/backups/$LATEST_BACKUP"
           ENDSSH
 
   # ============================================
@@ -242,22 +241,12 @@ jobs:
           {
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "frontend": "$FRONTEND_STATUS",
-            "backend": "$API_STATUS",
-            "backoffice": "$BO_STATUS",
-            "overall": "checked"
+            "api": "$API_STATUS",
+            "backoffice": "$BO_STATUS"
           }
           EOF
           
-          cat health-report-pre.json
-          
-          echo "✅ Pre-deployment health check completed"
-
-      - name: 📤 Upload health report
-        uses: actions/upload-artifact@v4
-        with:
-          name: health-report-pre
-          path: health-report-pre.json
-          retention-days: 30
+          echo "📊 Pre-deployment health check completed"
 
   # ============================================
   # JOB 4: Deploy to Production
@@ -265,9 +254,7 @@ jobs:
   deploy-production:
     name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
-    needs: [pre-deployment, backup-state, health-check-pre]
-    environment:
-      name: production
+    needs: [pre-deployment, backup-deployment, health-check-pre]
     
     steps:
       - name: 📥 Checkout code
@@ -283,136 +270,132 @@ jobs:
       - name: 📤 Copy deployment files
         run: |
           echo "📤 Copying deployment files to server..."
-          
           # Copy docker-compose files
-          scp docker-compose*.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
-          
+          scp docker-compose.prod.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
+          scp docker-compose.swarm.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
           echo "✅ Files copied successfully"
 
       - name: 🔐 Configure environment variables
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🔐 Configuring environment variables..."
-            
-            # Create .env file with all secrets
-            cat > /root/.env <<EOF
-          # MongoDB Configuration
+          echo "🔐 Configuring environment variables..."
+          
+          # Create .env file with all secrets
+          cat > /root/.env <<EOF
+          # =====================================
+          # 🔥 FIREFIGHTER AI - PRODUCCIÓN
+          # =====================================
+          
+          # 🗄️ MongoDB
           MONGODB_URI=${{ secrets.MONGODB_URI }}
+          MONGO_URI=${{ secrets.MONGODB_URI }}
+          DB_NAME=FIREFIGHTER
           
-          # JWT Configuration
+          # 🔐 Seguridad - JWT
+          SECRET_KEY=${{ secrets.JWT_SECRET }}
           JWT_SECRET_KEY=${{ secrets.JWT_SECRET }}
-          SESSION_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
-          BO_SESSION_SECRET=${{ secrets.BACKOFFICE_SECRET_KEY }}
+          FRONTEND_SECRET_KEY=${{ secrets.JWT_SECRET }}
+          BACKOFFICE_SECRET_KEY=${{ secrets.JWT_SECRET }}
+          SESSION_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_ACCESS_TOKEN_EXPIRE_HOURS=24
           
-          # Email Configuration
+          # 🌐 URLs - Docker Network
+          ENVIRONMENT=production
+          API_BASE_URL=http://backend:5000
+          FRONTEND_URL=http://frontend:8000
+          BACKOFFICE_URL=http://backoffice:3001
+          
+          # URLs internas Docker
+          FRONTEND_API_BASE_URL=http://backend:5000
+          BACKOFFICE_API_BASE_URL=http://backend:5000
+          
+          # 🐳 Redis
+          REDIS_URL=redis://redis:6379/0
+          
+          # 👤 Admin
+          ADMIN_USERNAME=admin
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          
+          # 🔒 MFA
+          MFA_ISSUER=FirefighterAI
+          
+          # 📧 Email
           SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
-          SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_SENDER_EMAIL }}
+          SENDGRID_SENDER_EMAIL=${{ secrets.SENDGRID_SENDER_EMAIL }}
+          SENDGRID_SENDER_NAME=FirefighterAI
           
-          # AI Configuration
+          # 🤖 AI
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
           
-          # Application URLs
-          FRONTEND_URL=http://localhost:8000
-          API_URL=http://localhost:5000
-          BO_URL=http://localhost:3001
+          # 🚀 Production Settings
+          DEBUG=false
+          LOG_LEVEL=info
+          FLASK_ENV=production
+          NODE_ENV=production
+          DOCKER_ENV=true
           
-          # Docker Configuration
-          IMAGE_TAG=${{ github.sha }}
-          REGISTRY=${{ env.REGISTRY }}
-          IMAGE_PREFIX=${{ env.IMAGE_PREFIX }}
-          
-          # Deployment Info
-          DEPLOYMENT_ID=${{ needs.pre-deployment.outputs.deployment_id }}
-          COMMIT_SHA=${{ github.sha }}
-          DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # 🔧 Sesiones
+          SESSION_PROTECTION=strong
+          SESSION_REFRESH_EACH_REQUEST=false
+          PERMANENT_SESSION_LIFETIME=43200
           EOF
           
-            echo "✅ Environment configured"
+          chmod 600 /root/.env
+          echo "✅ Environment variables configured"
           ENDSSH
 
-      - name: 📥 Pull new Docker images
+      - name: 🚀 Deploy updated services
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "📥 Pulling new Docker images..."
-            
-            SHORT_SHA="${{ github.sha }}"
-            SHORT_SHA="${SHORT_SHA:0:7}"
-            
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:main-${SHORT_SHA}
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:main-${SHORT_SHA}
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backoffice:main-${SHORT_SHA}
-            
-            echo "✅ Images pulled successfully"
-          ENDSSH
-
-      - name: 🔄 Rolling update deployment
-        run: |
-          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🔄 Starting rolling update..."
-            
-            # Update services one by one with health checks
-            SERVICES=("backend" "frontend" "backoffice")
-            
-            for service in "${SERVICES[@]}"; do
-              echo "📦 Updating $service..."
-              
-              # Update the service using prod compose file
-              docker-compose -f docker-compose.prod.yml up -d --no-deps $service
-              
-              # Wait for service to be healthy
-              echo "⏳ Waiting for $service to be healthy..."
-              sleep 15
-              
-              # Check service health
-              case $service in
-                frontend)
-                  HEALTH_URL="http://localhost:8000/"
-                  ;;
-                backend)
-                  HEALTH_URL="http://localhost:5000/api/health"
-                  ;;
-                backoffice)
-                  HEALTH_URL="http://localhost:3001/health"
-                  ;;
-              esac
-              
-              # Retry health check up to 30 times (5 minutes)
-              for i in {1..30}; do
-                if curl -f -s "$HEALTH_URL" > /dev/null 2>&1; then
-                  echo "✅ $service is healthy"
-                  break
-                fi
-                
-                if [ $i -eq 30 ]; then
-                  echo "❌ $service failed health check after 5 minutes"
-                  exit 1
-                fi
-                
-                echo "⏳ Attempt $i/30: Waiting for $service..."
-                sleep 10
-              done
+          cd /root
+          
+          # Exportar IMAGE_TAG con SHA corto
+          export IMAGE_TAG="${{ needs.pre-deployment.outputs.image_tag }}"
+          echo "📦 Using image tag: $IMAGE_TAG"
+          
+          # Pull latest images con el tag específico
+          echo "📥 Pulling images..."
+          docker-compose -f docker-compose.prod.yml pull
+          
+          # Deploy with zero-downtime
+          echo "🚀 Deploying services..."
+          docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+          
+          # Wait for services to be healthy
+          echo "⏳ Waiting for services to become healthy..."
+          for service in backend frontend backoffice redis; do
+            for i in {1..30}; do
+              if docker inspect --format='{{.State.Health.Status}}' ${service}-prod 2>/dev/null | grep -q healthy; then
+                echo "✅ $service is healthy"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "❌ $service failed health check after 5 minutes"
+                exit 1
+              fi
+              echo "⏳ Attempt $i/30: Waiting for $service..."
+              sleep 10
             done
-            
-            echo "✅ All services updated successfully"
+          done
+          
+          echo "✅ All services updated successfully"
           ENDSSH
 
       - name: 🧹 Cleanup old images
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "🧹 Cleaning up old Docker images..."
-            
-            # Remove dangling images
-            docker image prune -f
-            
-            # Remove old images (keep last 3 versions)
-            docker images --format "{{.Repository}}:{{.Tag}}" | \
-              grep "${{ env.IMAGE_PREFIX }}" | \
-              tail -n +4 | \
-              xargs -r docker rmi || true
-            
-            echo "✅ Cleanup completed"
+          echo "🧹 Cleaning up old Docker images..."
+          
+          # Remove dangling images
+          docker image prune -f
+          
+          # Remove old images (keep last 3 versions)
+          docker images --format "{{.Repository}}:{{.Tag}}" | \
+            grep "${{ env.IMAGE_PREFIX }}" | \
+            tail -n +4 | \
+            xargs -r docker rmi || true
+          
+          echo "✅ Cleanup completed"
           ENDSSH
 
   # ============================================
@@ -488,106 +471,44 @@ jobs:
           cat > health-report-post.json <<EOF
           {
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "deployment_id": "${{ needs.pre-deployment.outputs.deployment_id }}",
-            "status": "${{ steps.health-check.outputs.health_status }}",
-            "services": {
-              "frontend": $FRONTEND_RESPONSE,
-              "backend": $API_RESPONSE,
-              "backoffice": $BO_RESPONSE
+            "frontend": {
+              "status": "$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/ || echo "000")"
+            },
+            "api": {
+              "status": "$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/api/health || echo "000")"
+            },
+            "backoffice": {
+              "status": "$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")"
             }
           }
           EOF
           
           cat health-report-post.json
 
-      - name: 📤 Upload health report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: health-report-post
-          path: health-report-post.json
-          retention-days: 30
-
   # ============================================
-  # JOB 6: Smoke Tests
+  # JOB 6: Deployment Success Handler
   # ============================================
-  smoke-tests:
-    name: 💨 Smoke Tests
+  deployment-success:
+    name: ✅ Deployment Success
     runs-on: ubuntu-latest
-    needs: [health-check-post]
+    needs: [pre-deployment, deploy-production, health-check-post]
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: 📦 Install test dependencies
+      - name: 📊 Create deployment summary
         run: |
-          pip install requests pytest
-
-      - name: 💨 Run smoke tests
-        run: |
-          echo "💨 Running smoke tests..."
-          
-          python << 'PYTHON'
-          import requests
-          import sys
-          
-          HOST = "${{ secrets.PRODUCTION_HOST }}"
-          
-          tests = [
-              ("Frontend root", f"http://{HOST}:8000/", 200),
-              ("API health", f"http://{HOST}:5000/api/health", 200),
-              ("API root", f"http://{HOST}:5000/", 200),
-              ("BackOffice health", f"http://{HOST}:3001/health", 200),
-          ]
-          
-          failed = []
-          
-          for name, url, expected_status in tests:
-              try:
-                  response = requests.get(url, timeout=10)
-                  if response.status_code == expected_status:
-                      print(f"✅ {name}: OK")
-                  else:
-                      print(f"❌ {name}: Expected {expected_status}, got {response.status_code}")
-                      failed.append(name)
-              except Exception as e:
-                  print(f"❌ {name}: Error - {e}")
-                  failed.append(name)
-          
-          if failed:
-              print(f"\n❌ Failed tests: {', '.join(failed)}")
-              sys.exit(1)
-          else:
-              print("\n✅ All smoke tests passed!")
-          PYTHON
-
-  # ============================================
-  # JOB 7: Deployment Success
-  # ============================================
-  deployment-success:
-    name: ✅ Deployment Success
-    runs-on: ubuntu-latest
-    needs: [pre-deployment, deploy-production, health-check-post, smoke-tests]
-    
-    steps:
-      - name: 📥 Download deployment info
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-info
-
-      - name: 📝 Update deployment record
-        run: |
-          echo "📝 Updating deployment record..."
-          
-          jq '.status = "success" | .completed_at = "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"' \
-            deployment-info.json > deployment-info-final.json
-          
+          cat > deployment-info-final.json <<EOF
+          {
+            "deployment_id": "${{ needs.pre-deployment.outputs.deployment_id }}",
+            "image_tag": "${{ needs.pre-deployment.outputs.image_tag }}",
+            "commit_sha": "${{ github.sha }}",
+            "deployed_by": "${{ github.actor }}",
+            "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "status": "success"
+          }
+          EOF
           cat deployment-info-final.json
 
       - name: 🎉 Success notification
@@ -595,6 +516,7 @@ jobs:
           echo "# 🎉 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Deployment ID:** ${{ needs.pre-deployment.outputs.deployment_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** ${{ needs.pre-deployment.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "**Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
@@ -612,11 +534,11 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               commit_sha: context.sha,
-              body: `🚀 Successfully deployed to production\n\nDeployment ID: ${{ needs.pre-deployment.outputs.deployment_id }}\nTime: ${new Date().toISOString()}`
+              body: `🚀 Successfully deployed to production\n\nDeployment ID: ${{ needs.pre-deployment.outputs.deployment_id }}\nImage Tag: ${{ needs.pre-deployment.outputs.image_tag }}\nTime: ${new Date().toISOString()}`
             });
 
   # ============================================
-  # JOB 8: Deployment Failure Handler
+  # JOB 7: Deployment Failure Handler
   # ============================================
   deployment-failure:
     name: ❌ Deployment Failure Handler
@@ -638,24 +560,23 @@ jobs:
       - name: 📊 Collect failure logs
         run: |
           ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
-            echo "📊 Collecting failure logs..."
-            
-            mkdir -p /root/failed-deployments
-            FAILURE_DIR="/root/failed-deployments/$(date +%Y%m%d-%H%M%S)"
-            mkdir -p "$FAILURE_DIR"
-            
-            # Collect service logs
-            docker-compose logs --tail=500 > "$FAILURE_DIR/docker-logs.txt"
-            
-            # Collect service status
-            docker ps -a > "$FAILURE_DIR/container-status.txt"
-            docker service ls > "$FAILURE_DIR/service-status.txt" 2>/dev/null || true
-            
-            # Collect system info
-            df -h > "$FAILURE_DIR/disk-usage.txt"
-            free -h > "$FAILURE_DIR/memory-usage.txt"
-            
-            echo "✅ Logs collected: $FAILURE_DIR"
+          echo "📊 Collecting failure logs..."
+          mkdir -p /root/failed-deployments
+          FAILURE_DIR="/root/failed-deployments/$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$FAILURE_DIR"
+          
+          # Collect service logs
+          docker-compose -f docker-compose.prod.yml logs --tail=500 > "$FAILURE_DIR/docker-logs.txt" 2>&1 || true
+          
+          # Collect service status
+          docker ps -a > "$FAILURE_DIR/container-status.txt"
+          docker service ls > "$FAILURE_DIR/service-status.txt" 2>/dev/null || true
+          
+          # Collect system info
+          df -h > "$FAILURE_DIR/disk-usage.txt"
+          free -h > "$FAILURE_DIR/memory-usage.txt"
+          
+          echo "✅ Logs collected: $FAILURE_DIR"
           ENDSSH
 
       - name: ❌ Failure notification

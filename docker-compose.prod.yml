@@ -1,45 +1,26 @@
 ﻿version: '3.8'
 
 services:
-  frontend:
-    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
-    container_name: firefighter_frontend
+  # 🔥 BACKEND (API) - PRODUCTION
+  backend:
+    image: ghcr.io/josojmf/ai-firefighter-backend:${IMAGE_TAG:-latest}
+    container_name: backend-prod
     ports:
-      - "8000:8000"
+      - "5000:5000"
     env_file:
-      - /root/firefighter.env
+      - /root/.env  # ✅ CORREGIDO: Coincide con CD workflow
     environment:
-      - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
       - DOCKER_ENV=true
       - DEBUG=false
+      - PUBLIC_API_URL=http://backend:5000
+      - REDIS_URL=redis://redis:6379/0  # ✅ AÑADIDO
     networks:
       - firefighter_network
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  backend:
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
-    container_name: firefighter_backend
-    ports:
-      - "5000:5000"
-    env_file:
-      - /root/firefighter.env
-    environment:
-      - ENVIRONMENT=production
-      - DOCKER_ENV=true
-      - DEBUG=false
-    networks:
-      - firefighter_network
-    restart: unless-stopped
+      redis:
+        condition: service_healthy  # ✅ AÑADIDO
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
       interval: 30s
@@ -47,18 +28,50 @@ services:
       retries: 5
       start_period: 60s
 
-  backoffice:
-    image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
-    container_name: firefighter_backoffice
+  # 🌐 FRONTEND - PRODUCTION
+  frontend:
+    image: ghcr.io/josojmf/ai-firefighter-frontend:${IMAGE_TAG:-latest}
+    container_name: frontend-prod
     ports:
-      - "3001:3001"
+      - "8000:8000"
     env_file:
-      - /root/firefighter.env
+      - /root/.env  # ✅ CORREGIDO
     environment:
       - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
       - DOCKER_ENV=true
       - DEBUG=false
+      - REDIS_URL=redis://redis:6379/0  # ✅ AÑADIDO
+    networks:
+      - firefighter_network
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy  # ✅ AÑADIDO
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # 🏢 BACKOFFICE - PRODUCTION
+  backoffice:
+    image: ghcr.io/josojmf/ai-firefighter-backoffice:${IMAGE_TAG:-latest}
+    container_name: backoffice-prod
+    ports:
+      - "3001:3001"
+    env_file:
+      - /root/.env  # ✅ CORREGIDO
+    environment:
+      - API_BASE_URL=http://backend:5000
+      - ENVIRONMENT=production
+      - DOCKER_ENV=true
+      - DEBUG=false
+      - MFA_ISSUER=FirefighterAI
+      - REDIS_URL=redis://redis:6379/0  # ✅ AÑADIDO
     networks:
       - firefighter_network
     restart: unless-stopped
@@ -72,11 +85,28 @@ services:
       retries: 5
       start_period: 60s
 
+  # 🔴 REDIS - PRODUCTION
+  redis:
+    image: redis:7-alpine
+    container_name: redis-prod
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data-prod:/data
+    networks:
+      - firefighter_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 networks:
   firefighter_network:
     driver: bridge
     name: firefighter_network
 
 volumes:
-  firefighter_data:
+  redis-data-prod:
     driver: local

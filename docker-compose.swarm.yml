@@ -1,74 +1,99 @@
 version: "3.8"
 
 services:
+  # 🔥 BACKEND (API) - SWARM
   backend:
-    image: ghcr.io/josojmf/ai-firefighter-backend:latest
+    image: ghcr.io/josojmf/ai-firefighter-backend:${IMAGE_TAG:-latest}
     ports:
-      - "5000:5000"
-    env_file:
-      - ./env/production.env
+      - target: 5000
+        published: 5000
+        mode: host
     environment:
       - PUBLIC_API_URL=http://backend:5000
       - ENVIRONMENT=production
       - DEBUG=false
       - DOCKER_ENV=true
+      - REDIS_URL=redis://redis:6379/0
+      - MONGODB_URI=${MONGODB_URI}
+      - SECRET_KEY=${SECRET_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     deploy:
+      replicas: 2
       labels:
         app: firefighter
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
     networks:
       - firefighter_network
 
+  # 🌐 FRONTEND - SWARM
   frontend:
-    image: ghcr.io/josojmf/ai-firefighter-frontend:latest
+    image: ghcr.io/josojmf/ai-firefighter-frontend:${IMAGE_TAG:-latest}
     ports:
-      - "8000:8000"
-    env_file:
-      - ./env/production.env
+      - target: 8000
+        published: 8000
+        mode: host
     environment:
       - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
       - DEBUG=false
       - DOCKER_ENV=true
-    depends_on:
-      - backend
+      - REDIS_URL=redis://redis:6379/0
     deploy:
+      replicas: 2
       labels:
         app: firefighter
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
     networks:
       - firefighter_network
 
+  # 🏢 BACKOFFICE - SWARM
   backoffice:
-    image: ghcr.io/josojmf/ai-firefighter-backoffice:latest
+    image: ghcr.io/josojmf/ai-firefighter-backoffice:${IMAGE_TAG:-latest}
     ports:
-      - "3001:3001"
-    env_file:
-      - ./env/production.env
+      - target: 3001
+        published: 3001
+        mode: host
     environment:
       - API_BASE_URL=http://backend:5000
       - ENVIRONMENT=production
       - DEBUG=false
       - DOCKER_ENV=true
       - MFA_ISSUER=FirefighterAI
-    depends_on:
-      - backend
+      - REDIS_URL=redis://redis:6379/0
     deploy:
+      replicas: 1
       labels:
         app: firefighter
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 3
     networks:
       - firefighter_network
 
+  # 🔴 REDIS - SWARM
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data-prod:/data
     deploy:
+      replicas: 1
       labels:
         app: firefighter
       restart_policy:
@@ -79,6 +104,7 @@ services:
 networks:
   firefighter_network:
     driver: overlay
+    attachable: true
 
 volumes:
   redis-data-prod:

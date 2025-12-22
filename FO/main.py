@@ -446,31 +446,47 @@ def login():
     if request.method == 'POST':
         username = request.form['username'].strip()
         password = request.form['password']
-
+        
         try:
-            _safe_print(f"📤 POST {API_BASE_URL}/login")
-            res = requests.post(f"{API_BASE_URL}/auth/login", json={"username": username, "password": password}, timeout=10)
+            # 🔥 CONSTRUIR PAYLOAD SIN mfa_token VACÍO
+            payload = {
+                "username": username,
+                "password": password
+            }
+            
+            # Solo agregar mfa_token si realmente se proporcionó
+            mfa_token = request.form.get('mfa_token', '').strip()
+            if mfa_token:
+                payload['mfa_token'] = mfa_token
+            
+            print(f"📤 Enviando login: {payload.keys()}")
+            
+            res = requests.post(
+                f"{API_BASE_URL}/auth/login", 
+                json=payload,
+                timeout=10
+            )
             
             print(f"🔍 Respuesta login - Status: {res.status_code}")
             
             if not res.content:
                 flash('❌ Error: Respuesta vacía del servidor')
                 return render_template('login.html')
-                
+            
             data = res.json()
             print(f"🔍 Respuesta login - Data: {data}")
             
             if res.status_code == 200:
-                # CORREGIDO: Manejar correctamente la respuesta
+                # MANEJAR RESPUESTA
                 user_data = data.get('user', {})
-                
                 session['user'] = user_data.get('username', username)
-                session['user_id'] = user_data.get('id', '')  # Usar 'id' en lugar de 'user_id'
+                session['user_id'] = user_data.get('id', '')
                 session['user_role'] = user_data.get('role', 'user')
                 
-                # Guardar token en sesión si está disponible
+                # Guardar token en sesión
                 if 'access_token' in data:
                     session['access_token'] = data['access_token']
+                    print(f"✅ Token guardado en sesión")
                 
                 flash('✅ Sesión iniciada correctamente')
                 return redirect(url_for('home'))
@@ -481,17 +497,14 @@ def login():
         except requests.exceptions.ConnectionError:
             flash('⚠️ API no disponible. Usando autenticación local.')
             return login_local_fallback(username, password)
-        except requests.exceptions.Timeout:
-            flash('❌ Tiempo de espera agotado. Inténtalo nuevamente.')
-        except json.JSONDecodeError:
-            flash('❌ Error: Respuesta inválida del servidor')
-            print(f"❌ JSON decode error. Response text: {res.text}")
         except Exception as e:
             flash(f'❌ Error de conexión: {str(e)}')
             print(f"❌ Exception en login: {e}")
             return login_local_fallback(username, password)
-
+    
     return render_template('login.html')
+
+
 
 # --- Rutas generales ---
 @app.route("/", endpoint="home")
