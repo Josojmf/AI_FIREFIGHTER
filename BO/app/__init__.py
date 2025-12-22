@@ -258,18 +258,16 @@ def configure_login_manager(app):
     # User loader robusto
     @login_manager.user_loader
     def load_user(user_id):
-        """Cargar usuario con múltiples fallbacks"""
         try:
             from app.models.user import BackofficeUser
             from flask import session
-            
-            # Verificar sesión activa
+
             if not session:
                 print(f"❌ user_loader: No hay sesión (user_id: {user_id})")
                 return None
-            
+
             # 1. Buscar en cache de sesión
-            user_data = session.get('user_data')
+            user_data = session.get("user_data")
             if user_data:
                 try:
                     user = BackofficeUser.from_dict(user_data)
@@ -277,31 +275,28 @@ def configure_login_manager(app):
                     return user
                 except Exception as e:
                     print(f"⚠️  user_loader: Error deserializando: {e}")
-            
-            # 2. Buscar desde API
-            api_token = session.get('api_token')
+
+            # 2. Buscar desde API (opcional, si quieres mantenerlo)
+            api_token = session.get("api_token") or session.get("token")
             if api_token:
                 try:
                     user = BackofficeUser.get(user_id, api_token)
                     if user:
-                        # Cache en sesión
-                        session['user_data'] = user.to_dict()
+                        session["user_data"] = user.to_dict()
                         session.modified = True
                         print(f"✅ user_loader: Usuario desde API: {user.username}")
                         return user
                 except Exception as e:
                     print(f"⚠️  user_loader: Error API: {e}")
-            
-            # 3. Usuario mínimo de emergencia (solo lectura)
-            print(f"⚠️  user_loader: Creando usuario de emergencia para {user_id}")
-            return BackofficeUser.emergency_user(user_id)
-            
+
+            # 3. Si no hay nada, devolver None (sin usuario de emergencia)
+            print(f"⚠️  user_loader: No se pudo cargar usuario {user_id}")
+            return None
+
         except Exception as e:
             print(f"💀 user_loader ERROR: {e}")
             traceback.print_exc()
             return None
-    
-    return login_manager
 
 
 def register_context_processors(app):
