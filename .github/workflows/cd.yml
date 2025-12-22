@@ -20,9 +20,6 @@ jobs:
   # ============================================
   # JOB 1: Pre-deployment Validation
   # ============================================
-# ============================================
-# JOB 1: Pre-deployment Validation
-# ============================================
   pre-deployment:
     name: 🔍 Pre-deployment Validation
     runs-on: ubuntu-latest
@@ -201,7 +198,6 @@ jobs:
             ls -t | tail -n +11 | xargs -r rm -rf
             
             echo "✅ Backup completed: $BACKUP_DIR"
-            echo "BACKUP_PATH=$BACKUP_DIR" >> $GITHUB_ENV
           ENDSSH
 
       - name: 📊 Verify backup
