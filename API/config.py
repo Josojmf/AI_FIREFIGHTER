@@ -107,13 +107,16 @@ config_map = {
 }
 
 def get_config():
-    """Obtener configuración según el entorno"""
+    """Obtener configuración según el entorno.
+
+    PRIORIDAD: lo que ponga ENVIRONMENT.
+    - ENVIRONMENT=development -> DevelopmentConfig
+    - ENVIRONMENT=production  -> ProductionConfig
+    """
     env = os.getenv('ENVIRONMENT', 'development').lower()
-    
-    # Detectar automáticamente si estamos en Docker/producción
-    if os.path.exists('/.dockerenv') or os.getenv('DOCKER_ENV'):
-        env = 'production'
-    
+
+    print(f"💻 Usando configuración de: {env.upper()}")
+
     config_class = config_map.get(env, DevelopmentConfig)
     config_class.print_config()
     return config_class

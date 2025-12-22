@@ -2,7 +2,23 @@ from flask_login import UserMixin
 from config import Config
 import requests
 import jwt
+import os
 from datetime import datetime
+
+
+def get_api_base_url():
+    """
+    Resolver la URL base de la API de forma robusta:
+    1. Config.API_BASE_URL (preferido)
+    2. Variable de entorno API_BASE_URL
+    3. Valor por defecto orientado a Docker: http://backend:5000
+    """
+    base = getattr(Config, "API_BASE_URL", None) or os.getenv("API_BASE_URL")
+    if not base:
+        base = "http://backend:5000"
+    # Log para debug
+    print(f"🌐 API_BASE_URL efectivo en BackofficeUser: {base}")
+    return base
 
 
 class BackofficeUser(UserMixin):
@@ -23,7 +39,10 @@ class BackofficeUser(UserMixin):
     def authenticate(username, password, mfa_code=None):
         """Autenticar usuario, con MFA opcional para casos especiales"""
         try:
-            print(f"🔍 Intentando login en: {Config.API_BASE_URL}/api/auth/login")
+            api_base_url = get_api_base_url()
+            login_url = f"{api_base_url}/api/auth/login"
+
+            print(f"🔍 Intentando login en: {login_url}")
             print(f"🔍 MFA code proporcionado: {'Sí' if mfa_code else 'No'}")
 
             # Construir payload base
@@ -37,7 +56,7 @@ class BackofficeUser(UserMixin):
                 print("🔓 Login solo con usuario/contraseña (sin MFA)")
 
             response = requests.post(
-                f"{Config.API_BASE_URL}/api/auth/login",
+                login_url,
                 json=payload,
                 timeout=10
             )
@@ -47,14 +66,14 @@ class BackofficeUser(UserMixin):
             if response.status_code == 200:
                 data = response.json()
                 print(f"📋 Datos recibidos: {list(data.keys())}")
-                
+
                 # 🔥 NUEVO: Debug detallado de la respuesta
                 print(f"📊 Contenido de respuesta completa: {data}")
-                
+
                 # 🔥 VERIFICAR SI LA API REQUIERE MFA (ESTRUCTURA NUEVA)
                 requires_mfa = data.get("requires_mfa", False)
                 user_data = data.get("user", {})
-                
+
                 if requires_mfa and not mfa_code:
                     print(f"📱 MFA requerido para: {username}")
                     # Retornar objeto especial indicando que se requiere MFA
@@ -66,7 +85,7 @@ class BackofficeUser(UserMixin):
                         mfa_enabled=True,  # 🔥 IMPORTANTE: Esto activa el flujo MFA
                         token=None  # Sin token hasta completar MFA
                     )
-                
+
                 # ✅ LOGIN COMPLETO (con token)
                 if (data.get("ok") and not data.get("requires_mfa")) or "access_token" in data or "token" in data:
                     # 🔥 CORRECCIÓN: Obtener user_data correctamente
@@ -80,16 +99,16 @@ class BackofficeUser(UserMixin):
                             "role": data.get("role", "user"),
                             "mfa_enabled": data.get("mfa_enabled", False)
                         }
-                    
+
                     access_token = data.get("access_token") or data.get("token")
-                    
+
                     if not access_token:
                         print(f"❌ Login sin token recibido")
                         return None
-                    
+
                     print(f"✅ Login exitoso para {username}")
                     print(f"📊 User data recibido: {user_data}")
-                    
+
                     # 🔥 Extraer user_id REAL
                     user_id = user_data.get("id")
                     if not user_id and access_token:
@@ -145,10 +164,13 @@ class BackofficeUser(UserMixin):
             if token:
                 headers["Authorization"] = f"Bearer {token}"
 
-            print(f"🔍 Obteniendo datos para usuario ID: {user_id}")
+            api_base_url = get_api_base_url()
+            url = f"{api_base_url}/api/users/{user_id}"
+
+            print(f"🔍 Obteniendo datos para usuario ID: {user_id} en {url}")
 
             response = requests.get(
-                f"{Config.API_BASE_URL}/api/users/{user_id}",
+                url,
                 headers=headers,
                 timeout=5
             )
@@ -186,10 +208,12 @@ class BackofficeUser(UserMixin):
                 headers["Authorization"] = f"Bearer {token}"
                 headers["Content-Type"] = "application/json"
 
+            api_base_url = get_api_base_url()
+
             # Primero obtener información básica del usuario
             try:
                 user_response = requests.get(
-                    f"{Config.API_BASE_URL}/api/users/{user_id}",
+                    f"{api_base_url}/api/users/{user_id}",
                     headers=headers,
                     timeout=5
                 )
@@ -218,10 +242,10 @@ class BackofficeUser(UserMixin):
 
             # Intentar varios endpoints posibles de progreso
             endpoints = [
-                f"{Config.API_BASE_URL}/api/users/{user_id}/progress",
-                f"{Config.API_BASE_URL}/api/users/{user_id}/leitner-progress",
-                f"{Config.API_BASE_URL}/api/progress/{user_id}",
-                f"{Config.API_BASE_URL}/api/leitner/{user_id}/stats"
+                f"{api_base_url}/api/users/{user_id}/progress",
+                f"{api_base_url}/api/users/{user_id}/leitner-progress",
+                f"{api_base_url}/api/progress/{user_id}",
+                f"{api_base_url}/api/leitner/{user_id}/stats"
             ]
 
             for endpoint in endpoints:

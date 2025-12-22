@@ -16,7 +16,7 @@
   {% block styles %}{% endblock %}
 </head>
 
-<body class="{% block body_class %}{% endblock %}" data-api-base-url="http://localhost:3001">
+<body class="{% block body_class %}{% endblock %}" data-api-base-url="{{ api_base_url }}">
   <div class="layout {% block layout_class %}{% endblock %}">
 
     {# SIDEBAR - Solo visible cuando está logueado #}
@@ -243,7 +243,7 @@
 
   {# JS global backoffice #}
   <script>
-    window.API_BASE_URL = "http://localhost:3001";
+    window.API_BASE_URL = "{{ api_base_url }}";
 
     // Funcionalidad básica del sidebar
     document.addEventListener('DOMContentLoaded', function () {
