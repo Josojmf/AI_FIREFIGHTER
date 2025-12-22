@@ -441,35 +441,42 @@ async def update_user(
 
 @router.delete("/users/{user_id}", response_model=Dict[str, Any])
 async def delete_user(user_id: str, admin_data: Dict = Depends(require_admin_local)):
-    """Eliminar usuario (solo admin)"""
+    """Eliminar usuario de la base de datos (solo admin, borrado real)."""
     try:
+        # No permitir que el admin se borre a sí mismo
         if admin_data.get("user_id") == user_id:
             raise HTTPException(
                 status_code=400,
                 detail="No puedes eliminar tu propia cuenta",
             )
 
-        print(f"🔍 DELETE /api/users/{user_id}")
+        print(f"🔍 DELETE /api/users/{user_id} (borrado REAL)")
 
-        try:
-            oid = ObjectId(user_id)
-        except InvalidId:
-            raise HTTPException(status_code=400, detail="ID de usuario inválido")
-
-        result = await Database.users.update_one(
-            {"_id": oid},
-            {"$set": {"status": "inactive", "deleted_at": datetime.utcnow()}},
-        )
-
-        if result.modified_count == 0:
+        # 1) Buscar el usuario en cualquier colección
+        user = await _find_user_by_id_any_collection(user_id)
+        if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-        return {"ok": True, "message": "Usuario desactivado"}
+        _id = user["_id"]
+
+        # 2) Intentar borrar en `users`
+        result = await Database.users.delete_one({"_id": _id})
+
+        # 3) Si no estaba en `users`, intentar en `admin_users`
+        if result.deleted_count == 0:
+            result = await Database.admin_users.delete_one({"_id": _id})
+
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        return {"ok": True, "message": "Usuario eliminado de la base de datos"}
+
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error eliminando usuario: {e}")
+        print(f"❌ Error eliminando usuario (real): {e}")
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
 
 @router.get("/users/{user_id}/progress", response_model=Dict[str, Any])
 async def get_user_progress(

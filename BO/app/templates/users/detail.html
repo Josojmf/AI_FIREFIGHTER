@@ -55,6 +55,12 @@
         <a href="{{ url_for('users.user_progress', user_id=user.id) }}" class="btn-action primary">
           📊 Ver Progreso
         </a>
+        <form method="post" action="{{ url_for('users.delete_user', userid=user.id) }}"
+          onsubmit="return confirm('¿Seguro que quieres eliminar este usuario? Esta acción lo desactivará.');">
+          <button type="submit" class="btn btn-danger btn-sm">
+            Eliminar usuario
+          </button>
+        </form>
       </div>
     </div>
 

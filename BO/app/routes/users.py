@@ -243,6 +243,49 @@ def toggle_user_status(user_id):
         print(f"❌ Error de conexión: {e}")
         flash('Error de conexión', 'error')
         return redirect(url_for('users.user_list'))
+    
+@bp.route("/<userid>/delete", methods=["POST"])
+@login_required
+def delete_user(userid):
+    """Eliminar (desactivar) un usuario desde el Backoffice."""
+    try:
+        headers = get_auth_headers()
+        api_url = f"{Config.API_BASE_URL}/api/users/{userid}"
+
+        print(f"Eliminando usuario {userid} via {api_url}")
+        response = requests.delete(api_url, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                flash("Usuario eliminado correctamente.", "success")
+            else:
+                flash(f"Error en la API: {data.get('detail', 'Error desconocido')}", "error")
+
+        elif response.status_code == 400:
+            # Por ejemplo: “No puedes eliminar tu propia cuenta” o ID inválido
+            try:
+                data = response.json()
+                flash(data.get("detail", "Petición inválida."), "error")
+            except Exception:
+                flash("Petición inválida al eliminar usuario.", "error")
+
+        elif response.status_code == 401:
+            flash("Sesión expirada. Por favor inicia sesión nuevamente.", "error")
+            return redirect(url_for("auth.login"))
+
+        elif response.status_code == 404:
+            flash("Usuario no encontrado.", "error")
+
+        else:
+            flash(f"Error al eliminar usuario: {response.status_code}", "error")
+
+        return redirect(url_for("users.user_list"))
+
+    except requests.RequestException as e:
+        print("Error de conexión al eliminar usuario", e)
+        flash("Error de conexión con la API.", "error")
+        return redirect(url_for("users.user_list"))
 
 # Endpoint temporal para debug
 @bp.route('/debug-token')
