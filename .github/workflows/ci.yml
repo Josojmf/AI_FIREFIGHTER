@@ -216,21 +216,12 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           playwright install chromium
 
-      - name: 🐳 Start services with Docker Compose
-        run: |
-          docker compose -f docker-compose.yml up -d
-          sleep 30  # Wait for services to be ready
-
       - name: 🎭 Run E2E tests
         run: |
           pytest tests/e2e/ \
             --junitxml=junit-e2e.xml \
             --headed=false \
             -v || true
-
-      - name: 🛑 Stop services
-        if: always()
-        run: docker compose down
 
       - name: 📊 Upload E2E test results
         uses: actions/upload-artifact@v4
@@ -336,7 +327,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.dockerfile }}
+          file: ${{ matrix.service.context }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
