@@ -23,7 +23,7 @@ class Config:
     def get_mongo_uri(cls):
         if cls.MONGO_USER and cls.MONGO_PASS:
             return f"mongodb+srv://{cls.MONGO_USER}:{cls.MONGO_PASS}@{cls.MONGO_CLUSTER}/?retryWrites=true&w=majority&appName=FirefighterAPI"
-        return "mongodb://localhost:27017"
+        return "mongodb://localhost:27017" 
     
     # Seguridad JWT
     SECRET_KEY = os.getenv("SECRET_KEY", "firefighter-super-secret-jwt-key-2024")
