@@ -41,7 +41,7 @@ jobs:
           # Check Frontend
           echo "🔍 Checking Frontend..."
           FRONTEND_START=$(date +%s%3N)
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
           FRONTEND_END=$(date +%s%3N)
           FRONTEND_TIME=$((FRONTEND_END - FRONTEND_START))
           
@@ -51,7 +51,7 @@ jobs:
           # Check API
           echo "🔍 Checking API..."
           API_START=$(date +%s%3N)
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
           API_END=$(date +%s%3N)
           API_TIME=$((API_END - API_START))
           
@@ -61,7 +61,7 @@ jobs:
           # Check BackOffice
           echo "🔍 Checking BackOffice..."
           BO_START=$(date +%s%3N)
-          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")
           BO_END=$(date +%s%3N)
           BO_TIME=$((BO_END - BO_START))
           
@@ -134,13 +134,13 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔬 Collect detailed metrics
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔬 Collecting detailed system metrics..."
             
             echo "=== Docker Containers ==="
@@ -178,7 +178,7 @@ jobs:
           
           # This is a basic connectivity test
           # In production, you'd want to use mongosh or similar
-          if curl -s --max-time 5 http://${{ secrets.DIGITALOCEAN_HOST }}:5000/api/health/database > /dev/null; then
+          if curl -s --max-time 5 http://${{ secrets.PRODUCTION_HOST }}:5000/api/health/database > /dev/null; then
             echo "✅ Database connectivity OK"
           else
             echo "❌ Database connectivity issues detected"
@@ -275,13 +275,13 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🔄 Attempt service restart
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔄 Attempting automatic service recovery..."
             
             # Restart unhealthy containers
@@ -300,9 +300,9 @@ jobs:
           sleep 10  # Additional wait
           
           # Check services again
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
-          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
+          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")
           
           if [ "$FRONTEND_STATUS" = "200" ] && [ "$API_STATUS" = "200" ] && [ "$BO_STATUS" = "200" ]; then
             echo "✅ Recovery successful!"

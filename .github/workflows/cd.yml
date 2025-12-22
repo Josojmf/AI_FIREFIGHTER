@@ -42,20 +42,20 @@ jobs:
           MISSING_SECRETS=()
           
           # Check each secret individually
-          if [ -z "${{ secrets.DIGITALOCEAN_SSH_KEY }}" ]; then
-            MISSING_SECRETS+=("DIGITALOCEAN_SSH_KEY")
+          if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+            MISSING_SECRETS+=("PRODUCTION_SSH_KEY")
           fi
           
-          if [ -z "${{ secrets.DIGITALOCEAN_HOST }}" ]; then
-            MISSING_SECRETS+=("DIGITALOCEAN_HOST")
+          if [ -z "${{ secrets.PRODUCTION_HOST }}" ]; then
+            MISSING_SECRETS+=("PRODUCTION_HOST")
           fi
           
           if [ -z "${{ secrets.MONGODB_URI }}" ]; then
             MISSING_SECRETS+=("MONGODB_URI")
           fi
           
-          if [ -z "${{ secrets.JWT_SECRET_KEY }}" ]; then
-            MISSING_SECRETS+=("JWT_SECRET_KEY")
+          if [ -z "${{ secrets.JWT_SECRET }}" ]; then
+            MISSING_SECRETS+=("JWT_SECRET")
           fi
           
           if [ -z "${{ secrets.SENDGRID_API_KEY }}" ]; then
@@ -144,15 +144,15 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 💾 Backup current deployment
         run: |
           echo "💾 Backing up current deployment state..."
           
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             # Create backup directory
             BACKUP_DIR="/root/backups/$(date +%Y%m%d-%H%M%S)"
             mkdir -p "$BACKUP_DIR"
@@ -179,7 +179,7 @@ jobs:
 
       - name: 📊 Verify backup
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             LATEST_BACKUP=$(ls -t /root/backups | head -n 1)
             echo "📁 Latest backup: $LATEST_BACKUP"
             echo "📋 Backup contents:"
@@ -203,15 +203,15 @@ jobs:
           echo "🏥 Checking current production health..."
           
           # Check frontend
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
           echo "Frontend health: $FRONTEND_STATUS"
           
           # Check API
-          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
           echo "API health: $API_STATUS"
           
           # Check BackOffice
-          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+          BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")
           echo "BackOffice health: $BO_STATUS"
           
           # Create health report
@@ -253,25 +253,25 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 📤 Copy deployment files
         run: |
           echo "📤 Copying deployment files to server..."
           
           # Copy docker-compose files
-          scp docker-compose*.yml root@${{ secrets.DIGITALOCEAN_HOST }}:/root/
+          scp docker-compose*.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
           
           # Copy environment templates
-          scp production.env root@${{ secrets.DIGITALOCEAN_HOST }}:/root/.env.production
+          scp production.env root@${{ secrets.PRODUCTION_HOST }}:/root/.env.production
           
           echo "✅ Files copied successfully"
 
       - name: 🔐 Configure environment variables
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔐 Configuring environment variables..."
             
             # Create .env file with all secrets
@@ -280,13 +280,13 @@ jobs:
           MONGODB_URI=${{ secrets.MONGODB_URI }}
           
           # JWT Configuration
-          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-          SESSION_SECRET_KEY=${{ secrets.SESSION_SECRET_KEY }}
-          BO_SESSION_SECRET=${{ secrets.BO_SESSION_SECRET }}
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET }}
+          SESSION_SECRET_KEY=${{ secrets.FRONTEND_SECRET_KEY }}
+          BO_SESSION_SECRET=${{ secrets.BACKOFFICE_SECRET_KEY }}
           
           # Email Configuration
           SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
-          SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+          SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_SENDER_EMAIL }}
           
           # AI Configuration
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
@@ -312,7 +312,7 @@ jobs:
 
       - name: 🐳 Pull new Docker images
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🐳 Pulling new Docker images..."
             
             # Login to GitHub Container Registry
@@ -328,7 +328,7 @@ jobs:
 
       - name: 🔄 Rolling update deployment
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔄 Starting rolling update..."
             
             # Update services one by one with health checks
@@ -379,7 +379,7 @@ jobs:
 
       - name: 🧹 Cleanup old images
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🧹 Cleaning up old Docker images..."
             
             # Remove dangling images
@@ -424,15 +424,15 @@ jobs:
             echo "🔄 Health check attempt $i/$MAX_RETRIES"
             
             # Check frontend
-            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
+            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
             echo "  Frontend: $FRONTEND_STATUS"
             
             # Check API
-            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
             echo "  API: $API_STATUS"
             
             # Check BackOffice
-            BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+            BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")
             echo "  BackOffice: $BO_STATUS"
             
             # Check if all services are healthy
@@ -460,9 +460,9 @@ jobs:
         if: always()
         run: |
           # Get detailed service info
-          FRONTEND_RESPONSE=$(curl -s http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "{}")
-          API_RESPONSE=$(curl -s http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "{}")
-          BO_RESPONSE=$(curl -s http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "{}")
+          FRONTEND_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "{}")
+          API_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "{}")
+          BO_RESPONSE=$(curl -s http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "{}")
           
           cat > health-report-post.json <<EOF
           {
@@ -516,7 +516,7 @@ jobs:
           import requests
           import sys
           
-          HOST = "${{ secrets.DIGITALOCEAN_HOST }}"
+          HOST = "${{ secrets.PRODUCTION_HOST }}"
           
           tests = [
               ("Frontend root", f"http://{HOST}:8000/", 200),
@@ -579,9 +579,9 @@ jobs:
           echo "**Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Services Status" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Frontend: http://${{ secrets.DIGITALOCEAN_HOST }}:8000" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ API: http://${{ secrets.DIGITALOCEAN_HOST }}:5000" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ BackOffice: http://${{ secrets.DIGITALOCEAN_HOST }}:3001" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Frontend: http://${{ secrets.PRODUCTION_HOST }}:8000" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ API: http://${{ secrets.PRODUCTION_HOST }}:5000" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ BackOffice: http://${{ secrets.PRODUCTION_HOST }}:3001" >> $GITHUB_STEP_SUMMARY
 
       - name: 📢 Create deployment annotation
         uses: actions/github-script@v7
@@ -610,13 +610,13 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 📊 Collect failure logs
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "📊 Collecting failure logs..."
             
             mkdir -p /root/failed-deployments

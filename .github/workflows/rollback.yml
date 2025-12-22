@@ -120,13 +120,13 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 💾 Backup current state before rollback
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "💾 Creating pre-rollback backup..."
             
             BACKUP_DIR="/root/backups/pre-rollback-$(date +%Y%m%d-%H%M%S)"
@@ -215,22 +215,22 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 📤 Copy rollback configuration
         run: |
           echo "📤 Copying configuration files for target version..."
           
           # Copy docker-compose files
-          scp docker-compose*.yml root@${{ secrets.DIGITALOCEAN_HOST }}:/root/
+          scp docker-compose*.yml root@${{ secrets.PRODUCTION_HOST }}:/root/
           
           echo "✅ Configuration files copied"
 
       - name: 🔄 Update environment for rollback
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔄 Updating environment for rollback..."
             
             # Update IMAGE_TAG in .env
@@ -252,7 +252,7 @@ jobs:
 
       - name: 🐳 Pull target version images
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🐳 Pulling target version images..."
             
             # Login to registry
@@ -270,7 +270,7 @@ jobs:
 
       - name: 🔄 Rolling rollback
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🔄 Executing rolling rollback..."
             
             SERVICES=("backend" "frontend" "backoffice")
@@ -323,7 +323,7 @@ jobs:
 
       - name: 🧹 Cleanup
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "🧹 Cleaning up..."
             
             # Remove dangling images
@@ -356,9 +356,9 @@ jobs:
           for i in $(seq 1 $MAX_RETRIES); do
             echo "🔄 Health check attempt $i/$MAX_RETRIES"
             
-            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:8000/health || echo "000")
-            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:5000/health || echo "000")
-            BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.DIGITALOCEAN_HOST }}:3001/health || echo "000")
+            FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:8000/health || echo "000")
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:5000/health || echo "000")
+            BO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.PRODUCTION_HOST }}:3001/health || echo "000")
             
             echo "  Frontend: $FRONTEND_STATUS"
             echo "  API: $API_STATUS"
@@ -388,7 +388,7 @@ jobs:
           python << 'PYTHON'
           import requests
           
-          HOST = "${{ secrets.DIGITALOCEAN_HOST }}"
+          HOST = "${{ secrets.PRODUCTION_HOST }}"
           
           tests = [
               ("Frontend", f"http://{HOST}:8000/", 200),
@@ -464,13 +464,13 @@ jobs:
       - name: 🔧 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DIGITALOCEAN_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
 
       - name: 📊 Collect failure information
         run: |
-          ssh root@${{ secrets.DIGITALOCEAN_HOST }} << 'ENDSSH'
+          ssh root@${{ secrets.PRODUCTION_HOST }} << 'ENDSSH'
             echo "📊 Collecting rollback failure information..."
             
             FAILURE_DIR="/root/rollback-failures/$(date +%Y%m%d-%H%M%S)"
